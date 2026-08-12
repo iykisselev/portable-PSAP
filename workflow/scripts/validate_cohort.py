@@ -21,8 +21,8 @@ def main() -> None:
     validate_vcf_resource(snakemake.input.vcf, "Input VCF", errors, warnings)
     validate_fasta(snakemake.input.fasta, errors)
     validate_normalized_split_vcf(snakemake.input.vcf, snakemake.input.fasta, errors, warnings)
-    write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"n_ped_samples": len(metadata["all_sample_ids"]), "n_processed_samples": len(metadata["sample_ids"]), "n_excluded_phenotype_samples": len(metadata["excluded_phenotype_sample_ids"]), "n_vcf_samples": len(vcf_samples), "n_affected_samples": metadata["affected_count"], "n_male_samples": metadata["male_count"], "sex_counts": metadata["sex_counts"], "phenotype_counts": metadata["phenotype_counts"], "vcf_chromosomes": vcf_chromosomes}}, snakemake.output.report)
-    write_manifest(metadata["manifest"], snakemake.output.manifest)
+    write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"n_ped_samples": len(metadata["all_sample_ids"]), "n_processed_samples": len(metadata["sample_ids"]), "n_excluded_phenotype_samples": len(metadata["excluded_phenotype_sample_ids"]), "n_vcf_samples": len(vcf_samples), "n_affected_samples": metadata["affected_count"], "n_male_samples": metadata["male_count"], "sex_counts": metadata["sex_counts"], "phenotype_counts": metadata["phenotype_counts"], "vcf_chromosomes": vcf_chromosomes}}, snakemake.output.report, create_parents=False)
+    write_manifest(metadata["manifest"], snakemake.output.manifest, create_parents=False)
 
 
 if __name__ == "__main__":

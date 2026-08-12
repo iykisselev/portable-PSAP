@@ -35,7 +35,7 @@ def main() -> None:
     cadd_chromosomes = validate_cadd_resources(args.cadd_snv, args.cadd_indel, include_indels, errors, warnings)
     for filename, chromosomes in cadd_chromosomes.items():
         validate_cadd_chromosome_names(chromosomes, vcf_chromosomes, f"CADD resource {filename}", errors, warnings)
-    write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"include_indels": include_indels, "resource_vcf_chromosomes": vcf_chromosomes, "cadd_chromosomes": {filename: sorted(chromosomes) for filename, chromosomes in cadd_chromosomes.items()}}}, snakemake.output.report)
+    write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"include_indels": include_indels, "resource_vcf_chromosomes": vcf_chromosomes, "cadd_chromosomes": {filename: sorted(chromosomes) for filename, chromosomes in cadd_chromosomes.items()}}}, snakemake.output.report, create_parents=False)
 
 
 if __name__ == "__main__":

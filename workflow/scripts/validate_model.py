@@ -30,7 +30,7 @@ def main() -> None:
     }
     checked = validate_lookup_files(configured, settings, errors)
     overlap = validate_lookup_unit_overlap(snakemake.input.testing_unit_bed, configured, settings, errors)
-    write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"unit": args.unit, "assembly": args.assembly, "hemizygote_model": settings["hemizygote"], "include_indels": settings["include_indels"], "lookup_files_checked": checked, "lookup_testing_unit_overlap": overlap}}, snakemake.output.report)
+    write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"unit": args.unit, "assembly": args.assembly, "hemizygote_model": settings["hemizygote"], "include_indels": settings["include_indels"], "lookup_files_checked": checked, "lookup_testing_unit_overlap": overlap}}, snakemake.output.report, create_parents=False)
 
 
 if __name__ == "__main__":

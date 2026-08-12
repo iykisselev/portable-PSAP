@@ -192,15 +192,6 @@ def require_tabix_index(
         )
 
 
-def require_csi_index(
-    path: str | Path,
-    description: str,
-    errors: list[str],
-) -> None:
-    index_path = Path(f"{path}.csi")
-    require_file(index_path, f"{description} CSI index", errors)
-
-
 def is_bgzip_file(path: str | Path) -> bool:
     try:
         with Path(path).open("rb") as handle:
@@ -1698,9 +1689,15 @@ def validate_inputs(args: argparse.Namespace) -> dict:
     )
 
 
-def write_report(report: dict, path: str | Path) -> Path:
+def write_report(
+    report: dict,
+    path: str | Path,
+    *,
+    create_parents: bool = True,
+) -> Path:
     output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if create_parents:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -1708,9 +1705,15 @@ def write_report(report: dict, path: str | Path) -> Path:
     return output_path
 
 
-def write_manifest(rows: list[dict[str, str]], path: str | Path) -> Path:
+def write_manifest(
+    rows: list[dict[str, str]],
+    path: str | Path,
+    *,
+    create_parents: bool = True,
+) -> Path:
     output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if create_parents:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with output_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
