@@ -15,7 +15,9 @@ rule build_sample_candidates:
         testing_unit=TESTING_UNIT_PATTERN
     params:
         pid=lambda wc: wc.sample,
-        sex=affected_sample_sex
+        sex=affected_sample_sex,
+        candidate_id_separator=config["report"]["candidate_id"]["separator"],
+        candidate_id_ordinal_width=config["report"]["candidate_id"]["ordinal_width"]
     threads: 2
     resources:
         mem_mb=4096,

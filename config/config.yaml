@@ -32,3 +32,8 @@ reference:
 report:
   # Deduplicate controls only when every output evidence field is identical.
   deduplicate_controls: true
+  candidate_id:
+    # Delimiter between patient, disease-model tag, and ordinal in candidate IDs.
+    separator: ":"
+    # Decimal width of the per-model candidate ordinal, preserving zero padding.
+    ordinal_width: 3

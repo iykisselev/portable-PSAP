@@ -20,6 +20,12 @@ workflow_config <- function() {
         input = snakemake@input[["psap"]],
         pid = pid,
         sex_value = parse_sex(as.character(snakemake@params[["sex"]])),
+        candidate_id_separator = as.character(
+            snakemake@params[["candidate_id_separator"]]
+        ),
+        candidate_id_ordinal_width = as.integer(
+            snakemake@params[["candidate_id_ordinal_width"]]
+        ),
         output = snakemake@output[["candidates"]],
         threads = snakemake@threads
     )
@@ -86,7 +92,19 @@ empty_candidates <- function() {
 }
 
 
-build_candidates <- function(psap, pid, sex) {
+build_candidates <- function(
+    psap,
+    pid,
+    sex,
+    candidate_id_separator = ":",
+    candidate_id_ordinal_width = 3L
+) {
+    if (!nzchar(candidate_id_separator)) {
+        abort("Candidate ID separator must be non-empty")
+    }
+    if (is.na(candidate_id_ordinal_width) || candidate_id_ordinal_width < 1L) {
+        abort("Candidate ID ordinal width must be a positive integer")
+    }
     eligible <- psap[model %in% disease_model_names()]
 
     if (nrow(eligible) == 0L) {
@@ -100,8 +118,11 @@ build_candidates <- function(psap, pid, sex) {
         candidate_id := paste(
             pid,
             disease_model_tag(model),
-            sprintf("%03d", candidate_number),
-            sep = ":"
+            sprintf(
+                paste0("%0", candidate_id_ordinal_width, "d"),
+                candidate_number
+            ),
+            sep = candidate_id_separator
         )
     ]
 
@@ -132,7 +153,13 @@ run <- function(config) {
     setDTthreads(config$threads)
 
     psap <- read_psap(config$input)
-    candidates <- build_candidates(psap, config$pid, config$sex_value)
+    candidates <- build_candidates(
+        psap,
+        config$pid,
+        config$sex_value,
+        config$candidate_id_separator,
+        config$candidate_id_ordinal_width
+    )
 
     fwrite(
         candidates,

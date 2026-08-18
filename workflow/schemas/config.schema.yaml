@@ -74,8 +74,16 @@ properties:
   report:
     type: object
     additionalProperties: false
+    required: [deduplicate_controls, candidate_id]
     properties:
       deduplicate_controls: {type: boolean}
+      candidate_id:
+        type: object
+        additionalProperties: false
+        required: [separator, ordinal_width]
+        properties:
+          separator: {type: string, minLength: 1}
+          ordinal_width: {type: integer, minimum: 1}
   bindings:
     type: object
     additionalProperties: false
