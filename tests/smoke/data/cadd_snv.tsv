@@ -1,0 +1,4 @@
+Chrom	Pos	Ref	Alt	RawScore	PHRED
+chr1	10	A	G	1.0	20.0
+chrX	20	A	C	1.0	25.0
+chrY	30	A	G	1.0	30.0

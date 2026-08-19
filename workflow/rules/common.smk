@@ -14,6 +14,7 @@ LOG_DIR = OUTPUT_ROOT / "logs"
 REFERENCE_BINDINGS = config["bindings"]["reference"]
 INPUT_BINDINGS = config["inputs"]
 APPLY_SCRIPT_DIR = Path(workflow.basedir) / "scripts"
+APPLY_LIBRARY_DIR = APPLY_SCRIPT_DIR / "apply"
 R_LIB_DIR = Path(workflow.basedir) / "lib" / "r"
 CONDA_ENV_DIR = Path(workflow.basedir) / "envs"
 DEPLOYMENT_DIR = Path(workflow.basedir)

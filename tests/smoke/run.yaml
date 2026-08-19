@@ -1,0 +1,28 @@
+outdir: smoke-output
+
+run:
+  apply_prefix: smoke
+
+inputs:
+  vcf: {data: tests/smoke/data/cohort.vcf, index: null}
+  ped: null
+  samples: tests/smoke/data/samples.tsv
+
+bindings:
+  reference:
+    fasta:
+      data: tests/smoke/data/reference.fa
+      fai: tests/smoke/data/reference.fa.fai
+      gzi: null
+    coverage: {data: null, index: null}
+    testing_unit_bed: {data: tests/smoke/data/testing_units.bed, index: null}
+    exclusions:
+      - {data: tests/smoke/data/exclude_full_span.bed, index: null}
+      - {data: tests/smoke/data/par_regions.bed, index: null}
+    lookup_tables:
+      het: tests/smoke/data/lookup_het.tsv
+      hom: tests/smoke/data/lookup_hom.tsv
+      hem_chrX: tests/smoke/data/lookup_hem_chrX.tsv
+    cadd:
+      snv: {data: tests/smoke/data/cadd_snv.tsv, index: null}
+      indel: {data: tests/smoke/data/cadd_indel.tsv, index: null}
