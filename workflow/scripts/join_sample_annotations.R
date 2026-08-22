@@ -67,6 +67,11 @@ join_annotations <- function(genotypes, unit_table) {
         "Standardized genotype table"
     )
 
+    # Empty standardized tables infer logical columns; the producer contract uses
+    # character variant keys regardless of row count.
+    unit_table[, Key := as.character(Key)]
+    genotypes[, Key := as.character(Key)]
+
     joined <- merge(
         unit_table[, annotation_columns, with = FALSE],
         genotypes[, genotype_columns, with = FALSE],

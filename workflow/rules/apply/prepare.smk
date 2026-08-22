@@ -18,7 +18,7 @@ rule prepare_vcf_resource:
         runtime=180
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules: mod("bioinformatics")
+    envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "vcf_{resource}.log")
@@ -48,7 +48,7 @@ rule prepare_table_resource:
         runtime=table_resource_runtime_minutes
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules: mod("bioinformatics")
+    envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     benchmark:
         str(BENCHMARK_DIR / "prepare_{resource}.tsv")
@@ -78,7 +78,7 @@ rule combine_exclusions:
         runtime=180
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules: mod("validation")
+    envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "combine_exclusions.log")

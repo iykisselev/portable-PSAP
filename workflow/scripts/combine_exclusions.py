@@ -1,7 +1,5 @@
 """Project configured exclusions through injected Snakemake I/O."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from apply.combine_exclusions import collect_exclusions, write_projected_vcf

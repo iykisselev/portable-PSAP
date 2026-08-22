@@ -24,7 +24,7 @@ rule build_sample_candidates:
         runtime=60
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: mod("r")
+    envmodules: *mod("r")
     container: sif("r")
     log:
         str(
@@ -63,7 +63,7 @@ rule build_control_reference:
         runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 360, 20)
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: mod("r")
+    envmodules: *mod("r")
     container: sif("r")
     benchmark:
         str(BENCHMARK_DIR / "build_control_reference.tsv")
@@ -101,7 +101,7 @@ rule build_cohort_report:
         runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 360, 20)
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: mod("r")
+    envmodules: *mod("r")
     container: sif("r")
     benchmark:
         str(BENCHMARK_DIR / "build_cohort_report.tsv")

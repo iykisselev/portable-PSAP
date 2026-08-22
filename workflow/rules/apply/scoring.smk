@@ -31,7 +31,7 @@ rule apply_psap:
         runtime=360
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: mod("r")
+    envmodules: *mod("r")
     container: sif("r")
     benchmark:
         str(BENCHMARK_DIR / "apply_psap_{sample}_{testing_unit}.tsv")

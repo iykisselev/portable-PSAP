@@ -91,7 +91,7 @@ rule validate_cohort:
         runtime=30
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules: mod("validation")
+    envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "cohort.log")
@@ -122,7 +122,7 @@ rule validate_resources:
         runtime=30
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules: mod("validation")
+    envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "resources.log")
@@ -152,7 +152,7 @@ rule validate_model:
         runtime=10
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules: mod("validation")
+    envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "model.log")
@@ -174,7 +174,7 @@ rule merge_validation:
         runtime=5
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules: mod("validation")
+    envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "merge.log")
@@ -199,7 +199,7 @@ checkpoint require_valid_inputs:
         runtime=5
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules: mod("validation")
+    envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "require_valid_inputs.log")

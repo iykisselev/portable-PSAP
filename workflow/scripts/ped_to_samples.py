@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Convert the first six PED columns to the Stage 1 sample-sheet contract."""
 
-from __future__ import annotations
-
 import argparse
 import csv
 from pathlib import Path

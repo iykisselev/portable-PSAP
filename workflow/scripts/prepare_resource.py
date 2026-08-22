@@ -1,7 +1,5 @@
 """Stage one VCF or table resource through injected Snakemake I/O."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from apply.prepare_genomic_resource import prepare_table, prepare_vcf, vcf_chromosome_map

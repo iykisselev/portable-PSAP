@@ -24,7 +24,7 @@ rule filter_low_coverage:
         runtime=180
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules: mod("bioinformatics")
+    envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "variants" / "filter_low_coverage.log")
@@ -78,7 +78,7 @@ rule filter_excluded_records:
         runtime=180
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules: mod("bioinformatics")
+    envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "variants" / "filter_excluded_records.log")

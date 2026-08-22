@@ -1,7 +1,5 @@
 """Write annotation completeness QC using injected Snakemake inputs and outputs."""
 
-from __future__ import annotations
-
 import importlib.util
 import json
 from pathlib import Path

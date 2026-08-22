@@ -1,7 +1,5 @@
 """Validate model resources through injected Snakemake inputs and parameters."""
 
-from __future__ import annotations
-
 from types import SimpleNamespace
 
 from apply.validate_inputs import (

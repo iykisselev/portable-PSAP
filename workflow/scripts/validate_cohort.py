@@ -1,7 +1,5 @@
 """Validate cohort inputs and write the manifest via injected Snakemake I/O."""
 
-from __future__ import annotations
-
 from apply.validate_inputs import (
     parse_bool, read_ped, read_samples_tsv, read_vcf, validate_fasta,
     validate_hemizygote_chromosomes, validate_normalized_split_vcf,

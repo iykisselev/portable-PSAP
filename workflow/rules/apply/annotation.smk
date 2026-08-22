@@ -37,7 +37,7 @@ rule annotate_variants:
         runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 720, 30)
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules: mod("bioinformatics")
+    envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     benchmark:
         str(BENCHMARK_DIR / "annotate_variants.tsv")
@@ -64,7 +64,7 @@ rule summarize_annotations:
         runtime=30
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules: mod("validation")
+    envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(
@@ -91,7 +91,7 @@ rule require_valid_annotations:
         runtime=5
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules: mod("validation")
+    envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(
@@ -117,7 +117,7 @@ rule prepare_testing_units:
         runtime=180
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: mod("r")
+    envmodules: *mod("r")
     container: sif("r")
     log:
         str(

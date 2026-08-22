@@ -16,7 +16,7 @@ rule extract_gt:
         runtime=120
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules: mod("bioinformatics")
+    envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
         str(
@@ -51,7 +51,7 @@ rule standardize_gt:
         runtime=120
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: mod("r")
+    envmodules: *mod("r")
     container: sif("r")
     log:
         str(
@@ -83,7 +83,7 @@ rule apply_sex_model:
         runtime=120
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: mod("r")
+    envmodules: *mod("r")
     container: sif("r")
     log:
         str(
@@ -116,7 +116,7 @@ rule join_sample_annotations:
         runtime=180
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: mod("r")
+    envmodules: *mod("r")
     container: sif("r")
     log:
         str(

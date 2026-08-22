@@ -1,7 +1,5 @@
 """Annotate a filtered VCF with CADD and testing units via injected Snakemake I/O."""
 
-from __future__ import annotations
-
 import shlex
 import subprocess
 
