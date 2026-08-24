@@ -3,16 +3,12 @@
 
 from __future__ import annotations
 
-import argparse
 import csv
 import gzip
-import hashlib
 import json
 import os
 import shutil
 import subprocess
-import sys
-import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -57,44 +53,6 @@ def genomic_resource_kind(path: str | Path) -> str | None:
     return None
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Validate PSAP workflow inputs, resources, and sample IDs."
-    )
-
-    inputs = parser.add_argument_group("cohort inputs")
-    inputs.add_argument("--vcf", required=True)
-    inputs.add_argument("--ped", required=True)
-
-    references = parser.add_argument_group("reference resources")
-    references.add_argument("--coverage", default="")
-    references.add_argument("--variants-exclude", default="")
-    references.add_argument("--testing-unit-bed", required=True)
-    references.add_argument("--par-regions", default="")
-    references.add_argument("--fasta", required=True)
-    references.add_argument("--lookup-het", required=True)
-    references.add_argument("--lookup-hom", required=True)
-    references.add_argument("--lookup-hem-chrx", default="")
-    references.add_argument("--cadd-snv", required=True)
-    references.add_argument("--cadd-indel", default="")
-
-    model = parser.add_argument_group("model settings")
-    model.add_argument("--score-max", required=True)
-    model.add_argument("--assembly", required=True)
-    model.add_argument("--unit", required=True)
-    model.add_argument("--hemizygote-model", required=True)
-    model.add_argument("--include-indels", required=True)
-
-    parser.add_argument("--out-json", required=True)
-    parser.add_argument("--out-manifest", required=True)
-    parser.add_argument(
-        "--report-only",
-        action="store_true",
-        help="Write the validation report but return success even when errors are found.",
-    )
-    return parser
-
-
 def parse_bool(value: str, name: str, errors: list[str]) -> bool:
     normalized = value.strip().lower()
     if normalized in BOOLEAN_VALUES:
@@ -105,7 +63,7 @@ def parse_bool(value: str, name: str, errors: list[str]) -> bool:
 
 
 def parse_model_settings(
-    args: argparse.Namespace,
+    args: object,
     errors: list[str],
 ) -> dict[str, bool]:
     if args.unit not in VALID_UNITS:
@@ -178,18 +136,19 @@ def require_directory(
     return True
 
 
-def require_tabix_index(
-    path: str | Path,
+def validate_declared_index(
+    index_path: str | Path | None,
     description: str,
+    errors: list[str],
     warnings: list[str],
 ) -> None:
-    data_path = Path(path)
-    indexes = (Path(f"{data_path}.tbi"), Path(f"{data_path}.csi"))
-    if not any(index.is_file() for index in indexes):
+    if index_path is None or str(index_path).strip().lower() in MISSING_CONFIG_VALUES:
         warnings.append(
-            f"{description} is not indexed; the workflow will prepare an index "
-            f"under its output directory (source: {data_path})"
+            f"{description} has no configured index; the workflow will prepare "
+            "an index under its output directory"
         )
+        return
+    require_file(index_path, f"{description} index", errors)
 
 
 def is_bgzip_file(path: str | Path) -> bool:
@@ -275,6 +234,7 @@ def validate_indexed_table(
     description: str,
     errors: list[str],
     warnings: list[str],
+    index_path: str | Path | None = None,
 ) -> None:
     if has_data_row(path, description, errors):
         bgzip = is_bgzip_file(path)
@@ -288,7 +248,7 @@ def validate_indexed_table(
                 f"{description} has no BGZF EOF marker; the workflow will prepare "
                 f"a complete compressed copy under its output directory (source: {path})"
             )
-        require_tabix_index(path, description, warnings)
+        validate_declared_index(index_path, description, errors, warnings)
 
 
 def validate_bed_regions(
@@ -516,6 +476,7 @@ def validate_vcf_resource(
     description: str,
     errors: list[str],
     warnings: list[str],
+    index_path: str | Path | None = None,
 ) -> None:
     data_path = Path(path)
     name = str(data_path).lower()
@@ -541,7 +502,7 @@ def validate_vcf_resource(
             f"complete compressed copy under its output directory (source: {data_path})"
         )
 
-    require_tabix_index(data_path, description, warnings)
+    validate_declared_index(index_path, description, errors, warnings)
 
 
 def duplicate_values(values: list[str]) -> list[str]:
@@ -973,8 +934,8 @@ def read_all_vcf_contigs(path: str | Path, bcftools: str) -> set[str]:
         }
 
 
-def read_fasta_contigs(path: str | Path) -> set[str]:
-    index_path = Path(f"{path}.fai")
+def read_fasta_contigs(index_path: str | Path) -> set[str]:
+    index_path = Path(index_path)
     if not index_path.is_file():
         return set()
     with index_path.open("rt", encoding="utf-8", errors="replace") as handle:
@@ -985,164 +946,10 @@ def read_fasta_contigs(path: str | Path) -> set[str]:
         }
 
 
-def digest_selected_vcf(
-    bcftools: str,
-    vcf_path: str | Path,
-    targets_path: str | Path,
-) -> tuple[str | None, str]:
-    digest = hashlib.sha256()
-    with (
-        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as view_stderr,
-        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as query_stderr,
-    ):
-        try:
-            view = subprocess.Popen(
-                [
-                    bcftools,
-                    "view",
-                    "--targets-file",
-                    str(targets_path),
-                    "--output-type",
-                    "u",
-                    str(vcf_path),
-                ],
-                stdout=subprocess.PIPE,
-                stderr=view_stderr,
-            )
-            assert view.stdout is not None
-            query = subprocess.Popen(
-                [
-                    bcftools,
-                    "query",
-                    "--format",
-                    "%CHROM\t%POS\t%REF\t%ALT\n",
-                    "-",
-                ],
-                stdin=view.stdout,
-                stdout=subprocess.PIPE,
-                stderr=query_stderr,
-            )
-        except OSError as exc:
-            return None, str(exc)
-
-        view.stdout.close()
-        assert query.stdout is not None
-        for chunk in iter(lambda: query.stdout.read(1024 * 1024), b""):
-            digest.update(chunk)
-        query.stdout.close()
-        query_return_code = query.wait()
-        view_return_code = view.wait()
-
-        view_stderr.seek(0)
-        query_stderr.seek(0)
-        error_text = "\n".join(
-            text
-            for text in (
-                view_stderr.read().strip(),
-                query_stderr.read().strip(),
-            )
-            if text
-        )
-
-    if view_return_code != 0 or query_return_code != 0:
-        return None, error_text or "bcftools selected-record query failed"
-    return digest.hexdigest(), ""
-
-
-def digest_normalized_vcf(
-    bcftools: str,
-    vcf_path: str | Path,
-    fasta_path: str | Path,
-    targets_path: str | Path,
-) -> tuple[str | None, str]:
-    digest = hashlib.sha256()
-
-    with (
-        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as view_stderr,
-        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as norm_stderr,
-        tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as query_stderr,
-    ):
-        try:
-            view = subprocess.Popen(
-                [
-                    bcftools,
-                    "view",
-                    "--targets-file",
-                    str(targets_path),
-                    "--output-type",
-                    "u",
-                    str(vcf_path),
-                ],
-                stdout=subprocess.PIPE,
-                stderr=view_stderr,
-            )
-            assert view.stdout is not None
-            norm = subprocess.Popen(
-                [
-                    bcftools,
-                    "norm",
-                    "--fasta-ref",
-                    str(fasta_path),
-                    "--check-ref",
-                    "e",
-                    "-m",
-                    "-any",
-                    "--output-type",
-                    "u",
-                    "-",
-                ],
-                stdin=view.stdout,
-                stdout=subprocess.PIPE,
-                stderr=norm_stderr,
-            )
-            view.stdout.close()
-            assert norm.stdout is not None
-            query = subprocess.Popen(
-                [
-                    bcftools,
-                    "query",
-                    "--format",
-                    "%CHROM\t%POS\t%REF\t%ALT\n",
-                    "-",
-                ],
-                stdin=norm.stdout,
-                stdout=subprocess.PIPE,
-                stderr=query_stderr,
-            )
-        except OSError as exc:
-            return None, str(exc)
-
-        norm.stdout.close()
-        assert query.stdout is not None
-        for chunk in iter(lambda: query.stdout.read(1024 * 1024), b""):
-            digest.update(chunk)
-        query.stdout.close()
-
-        query_return_code = query.wait()
-        norm_return_code = norm.wait()
-        view_return_code = view.wait()
-
-        view_stderr.seek(0)
-        norm_stderr.seek(0)
-        query_stderr.seek(0)
-        error_text = "\n".join(
-            text
-            for text in (
-                view_stderr.read().strip(),
-                norm_stderr.read().strip(),
-                query_stderr.read().strip(),
-            )
-            if text
-        )
-
-    if view_return_code != 0 or norm_return_code != 0 or query_return_code != 0:
-        return None, error_text or "bcftools normalization check failed"
-    return digest.hexdigest(), ""
-
-
 def validate_normalized_split_vcf(
     vcf_path: str | Path,
     fasta_path: str | Path,
+    fasta_index_path: str | Path,
     errors: list[str],
     warnings: list[str],
 ) -> None:
@@ -1154,7 +961,7 @@ def validate_normalized_split_vcf(
         return
 
     vcf_contigs = read_all_vcf_contigs(vcf_path, bcftools)
-    fasta_contigs = read_fasta_contigs(fasta_path)
+    fasta_contigs = read_fasta_contigs(fasta_index_path)
     shared_contigs = sorted(vcf_contigs & fasta_contigs)
     unsupported_contigs = sorted(vcf_contigs - fasta_contigs)
     if unsupported_contigs:
@@ -1170,46 +977,6 @@ def validate_normalized_split_vcf(
         errors.append(
             "Input VCF and reference FASTA have no identically named contigs; "
             "check the assembly and chromosome naming convention"
-        )
-        return
-
-    with tempfile.NamedTemporaryFile(
-        mode="w+t",
-        encoding="utf-8",
-        suffix=".targets.tsv",
-    ) as targets:
-        targets.writelines(
-            f"{contig}\t1\t2147483647\n" for contig in shared_contigs
-        )
-        targets.flush()
-        original_digest, original_error = digest_selected_vcf(
-            bcftools,
-            vcf_path,
-            targets.name,
-        )
-        if original_digest is None:
-            errors.append(
-                "Could not inspect input VCF normalization: " + original_error
-            )
-            return
-
-        normalized_digest, normalized_error = digest_normalized_vcf(
-            bcftools,
-            vcf_path,
-            fasta_path,
-            targets.name,
-        )
-    if normalized_digest is None:
-        errors.append(
-            "Could not validate input VCF normalization and splitting: "
-            + normalized_error
-        )
-        return
-
-    if original_digest != normalized_digest:
-        errors.append(
-            "Input VCF must already be left-normalized and split into biallelic "
-            "records; normalize it with bcftools norm -f <reference> -m -any"
         )
 
 
@@ -1372,7 +1139,7 @@ def validate_lookup_unit_overlap(
 
 
 def validate_reference_tables(
-    args: argparse.Namespace,
+    args: object,
     errors: list[str],
     warnings: list[str],
 ) -> dict[str, set[str]]:
@@ -1389,12 +1156,20 @@ def validate_reference_tables(
             )
         else:
             validate_indexed_table(
-                args.coverage, "Coverage file", errors, warnings
+                args.coverage,
+                "Coverage file",
+                errors,
+                warnings,
+                getattr(args, "coverage_index", None),
             )
 
     unit_description = f"Configured {args.unit} testing-unit BED file"
     validate_indexed_table(
-        args.testing_unit_bed, unit_description, errors, warnings
+        args.testing_unit_bed,
+        unit_description,
+        errors,
+        warnings,
+        getattr(args, "testing_unit_index", None),
     )
     unit_chromosomes = validate_bed_regions(
         args.testing_unit_bed,
@@ -1412,8 +1187,17 @@ def validate_reference_tables(
             "provided; exclusion filtering will be skipped"
         )
 
+    exclusion_indexes = list(getattr(args, "variant_exclude_indexes", []))
+    par_indexes = list(getattr(args, "par_region_indexes", []))
+    configured_exclusions = exclusion_paths + par_paths
+    configured_indexes = exclusion_indexes + par_indexes
     exclusion_chromosomes: set[str] = set()
-    for position, path in enumerate(exclusion_paths + par_paths, start=1):
+    for position, path in enumerate(configured_exclusions, start=1):
+        index_path = (
+            configured_indexes[position - 1]
+            if position <= len(configured_indexes)
+            else None
+        )
         description = f"Exclusion file {position}"
         kind = genomic_resource_kind(path)
         if kind is None:
@@ -1422,10 +1206,10 @@ def validate_reference_tables(
             )
             continue
         if kind == "vcf":
-            validate_vcf_resource(path, description, errors, warnings)
+            validate_vcf_resource(path, description, errors, warnings, index_path)
             continue
 
-        validate_indexed_table(path, description, errors, warnings)
+        validate_indexed_table(path, description, errors, warnings, index_path)
         if kind == "bed":
             exclusion_chromosomes.update(
                 validate_bed_regions(path, description, errors)
@@ -1441,11 +1225,19 @@ def validate_reference_tables(
     }
 
 
-def validate_fasta(path: str | Path, errors: list[str]) -> None:
+def validate_fasta(
+    path: str | Path,
+    index_path: str | Path,
+    gzi_path: str | Path | None,
+    errors: list[str],
+) -> None:
     if require_file(path, "Reference FASTA", errors):
-        require_file(f"{path}.fai", "Reference FASTA index", errors)
+        require_file(index_path, "Reference FASTA index", errors)
         if str(path).endswith(".gz"):
-            require_file(f"{path}.gzi", "BGZF FASTA index", errors)
+            if gzi_path is None or str(gzi_path).strip().lower() in MISSING_CONFIG_VALUES:
+                errors.append("BGZF FASTA index binding is required for a compressed reference FASTA")
+            else:
+                require_file(gzi_path, "BGZF FASTA index", errors)
 
 
 def validate_cadd_resources(
@@ -1454,23 +1246,26 @@ def validate_cadd_resources(
     include_indels: bool,
     errors: list[str],
     warnings: list[str],
+    cadd_snv_index: str | Path | None = None,
+    cadd_indel_index: str | Path | None = None,
 ) -> dict[str, set[str]]:
-    resources = [("whole_genome_SNVs.tsv.gz", Path(cadd_snv))]
+    resources = [("whole_genome_SNVs.tsv.gz", Path(cadd_snv), cadd_snv_index)]
     if include_indels:
         if not cadd_indel or str(cadd_indel).strip().lower() in MISSING_CONFIG_VALUES:
             errors.append("CADD indel resource is required when include_indels is enabled")
             return {}
-        resources.append(("InDels.tsv.gz", Path(cadd_indel)))
+        resources.append(("InDels.tsv.gz", Path(cadd_indel), cadd_indel_index))
 
     chromosomes: dict[str, set[str]] = {}
-    for filename, path in resources:
+    for filename, path, index_path in resources:
         description = f"CADD resource {filename}"
-        validate_indexed_table(path, description, errors, warnings)
+        validate_indexed_table(path, description, errors, warnings, index_path)
         validate_cadd_columns(path, description, errors)
         chromosomes[filename] = read_indexed_table_chromosomes(
             path,
             description,
             errors,
+            index_path,
         )
 
     return chromosomes
@@ -1480,18 +1275,21 @@ def read_indexed_table_chromosomes(
     path: str | Path,
     description: str,
     errors: list[str],
+    index_path: str | Path | None = None,
     sample_rows: int = 10000,
 ) -> set[str]:
-    """Read contigs from a tabix index, falling back to a bounded data sample."""
+    """Read contigs from the bound index when tabix can consume it, else sample."""
     data_path = Path(path)
     if not data_path.is_file():
         return set()
 
     tabix = shutil.which("tabix")
-    has_index = any(
-        Path(f"{data_path}{suffix}").is_file() for suffix in (".tbi", ".csi")
+    configured_index = Path(index_path) if index_path else None
+    tabix_compatible_index = configured_index in (
+        Path(f"{data_path}.tbi"),
+        Path(f"{data_path}.csi"),
     )
-    if tabix is not None and has_index:
+    if tabix is not None and tabix_compatible_index:
         try:
             result = subprocess.run(
                 [tabix, "--list-chroms", str(data_path)],
@@ -1569,7 +1367,7 @@ def validate_cadd_columns(
 
 
 def build_report(
-    args: argparse.Namespace,
+    args: object,
     errors: list[str],
     warnings: list[str],
     settings: dict[str, bool],
@@ -1611,7 +1409,7 @@ def build_report(
     }
 
 
-def validate_inputs(args: argparse.Namespace) -> dict:
+def validate_inputs(args: object) -> dict:
     errors: list[str] = []
     warnings: list[str] = []
     settings = parse_model_settings(args, errors)
@@ -1639,8 +1437,15 @@ def validate_inputs(args: argparse.Namespace) -> dict:
     )
     validate_vcf_samples(vcf_samples, ped["sample_ids"], errors)
     validate_vcf_resource(args.vcf, "Input VCF", errors, warnings)
-    validate_fasta(args.fasta, errors)
-    validate_normalized_split_vcf(args.vcf, args.fasta, errors, warnings)
+    fasta_index = getattr(args, "fasta_index", "")
+    validate_fasta(args.fasta, fasta_index, getattr(args, "fasta_gzi", None), errors)
+    validate_normalized_split_vcf(
+        args.vcf,
+        args.fasta,
+        fasta_index,
+        errors,
+        warnings,
+    )
 
     configured_lookups = {
         "het": args.lookup_het,
@@ -1727,39 +1532,3 @@ def write_manifest(
 
     return output_path
 
-
-def print_result(report: dict, output_path: Path) -> None:
-    for warning in report["warnings"]:
-        print(f"WARNING: {warning}", file=sys.stderr)
-
-    if report["errors"]:
-        for error in report["errors"]:
-            print(f"ERROR: {error}", file=sys.stderr)
-        print(f"Validation report written to {output_path}", file=sys.stderr)
-        return
-
-    summary = report["summary"]
-    print(
-        "Validation passed for "
-        f"{summary['n_processed_samples']} processed PED sample(s) "
-        f"of {summary['n_ped_samples']} total, "
-        f"{summary['n_vcf_samples']} VCF sample(s), "
-        f"unit={summary['unit']}, assembly={summary['assembly']}."
-    )
-    print(f"Validation report written to {output_path}")
-
-
-def main() -> int:
-    args = build_parser().parse_args()
-    report = validate_inputs(args)
-    manifest_rows = report.pop("sample_manifest")
-    output_path = write_report(report, args.out_json)
-    write_manifest(manifest_rows, args.out_manifest)
-    print_result(report, output_path)
-    if args.report_only:
-        return 0
-    return 1 if report["errors"] else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

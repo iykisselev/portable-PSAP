@@ -7,18 +7,20 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 
-SCRIPT_DIR = Path(__file__).parents[1] / "workflow" / "scripts" / "apply"
+SCRIPT_DIR = Path(__file__).parents[1] / "workflow" / "lib" / "python"
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from validate_inputs import (  # noqa: E402
+from validation import (  # noqa: E402
     read_ped,
     read_samples_tsv,
     validate_cadd_chromosome_names,
+    validate_fasta,
     validate_hemizygote_chromosomes,
+    validate_indexed_table,
     validate_lookup_unit_overlap,
     validate_region_chromosomes,
 )
-import prepare_genomic_resource  # noqa: E402
+import resources  # noqa: E402
 
 
 class ValidationTests(unittest.TestCase):
@@ -216,6 +218,53 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(len(errors), 2)
             self.assertTrue(all("zero testing-unit ID overlap" in error for error in errors))
 
+    def test_fasta_uses_the_declared_index_binding(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            fasta = temp_path / "reference.fa"
+            declared_index = temp_path / "reference.index.fai"
+            fasta.write_text(">chr1\nA\n", encoding="utf-8")
+            declared_index.write_text("chr1\t1\t6\t1\t2\n", encoding="utf-8")
+            errors: list[str] = []
+
+            validate_fasta(fasta, declared_index, None, errors)
+
+            self.assertEqual(errors, [])
+            self.assertFalse((temp_path / "reference.fa.fai").exists())
+
+    def test_table_uses_the_declared_index_binding(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            table = temp_path / "resource.tsv"
+            declared_index = temp_path / "resource.index.tbi"
+            table.write_text("chr1\t10\t20\n", encoding="utf-8")
+            declared_index.write_text("index", encoding="utf-8")
+            errors: list[str] = []
+            warnings: list[str] = []
+
+            validate_indexed_table(
+                table,
+                "Test table",
+                errors,
+                warnings,
+                declared_index,
+            )
+
+            self.assertEqual(errors, [])
+            self.assertFalse(any("no configured index" in warning for warning in warnings))
+            self.assertFalse((temp_path / "resource.tsv.tbi").exists())
+
+    def test_staging_accepts_a_declared_nonconventional_index(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            declared_index = temp_path / "resource.index.tbi"
+            declared_index.write_text("index", encoding="utf-8")
+
+            self.assertTrue(resources.source_has_index(declared_index))
+            self.assertFalse(resources.is_conventional_source_index(
+                temp_path / "resource.tsv.gz", declared_index
+            ))
+
     def test_preparing_a_table_sorts_rows_before_bgzip(self) -> None:
         with TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -230,13 +279,13 @@ class ValidationTests(unittest.TestCase):
             )
 
             with patch.object(
-                prepare_genomic_resource,
+                resources,
                 "require_tool",
                 side_effect=lambda name: (
                     shutil.which("gzip") if name == "bgzip" else "/usr/bin/sort"
                 ),
             ):
-                prepare_genomic_resource.copy_as_bgzip(source, output)
+                resources.copy_as_bgzip(source, output)
 
             with gzip.open(output, "rt", encoding="utf-8") as prepared:
                 self.assertEqual(

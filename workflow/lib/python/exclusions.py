@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
 import bisect
 import gzip
 from collections import defaultdict
@@ -16,20 +15,6 @@ def chromosome_key(name: str) -> str:
         normalized = normalized[3:]
     normalized = normalized.upper()
     return "MT" if normalized == "M" else normalized
-
-
-def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("--cohort-vcf", required=True)
-    result.add_argument(
-        "--source",
-        action="append",
-        default=[],
-        metavar="KIND:PATH",
-        help="Input kind (bed, tsv, or vcf) and prepared path.",
-    )
-    result.add_argument("--output", required=True)
-    return result
 
 
 def open_text(path: Path):
@@ -237,18 +222,3 @@ def write_projected_vcf(
             if interval_match or variant_match:
                 output.write(line)
 
-
-def main() -> int:
-    args = parser().parse_args()
-    intervals, variants = collect_exclusions(args.source)
-    write_projected_vcf(
-        Path(args.cohort_vcf),
-        Path(args.output),
-        intervals,
-        variants,
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

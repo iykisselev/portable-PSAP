@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
 import gzip
 import shutil
 import subprocess
@@ -15,19 +14,6 @@ from pathlib import Path
 BGZF_EOF_BLOCK = bytes.fromhex(
     "1f8b08040000000000ff0600424302001b0003000000000000000000"
 )
-
-def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("--input", required=True)
-    result.add_argument("--output", required=True)
-    result.add_argument("--kind", choices=("vcf", "bed", "tsv"), required=True)
-    result.add_argument("--tsv-layout", choices=("auto", "position"), default="auto")
-    result.add_argument(
-        "--chromosome-map-vcf",
-        help="Rewrite table chromosome names to the conventions in this VCF.",
-    )
-    return result
-
 
 def is_gzip(path: Path) -> bool:
     with path.open("rb") as handle:
@@ -54,8 +40,12 @@ def is_bgzip(path: Path) -> bool:
     return False
 
 
-def source_has_index(path: Path) -> bool:
-    return Path(f"{path}.tbi").is_file() or Path(f"{path}.csi").is_file()
+def source_has_index(index_path: Path | None) -> bool:
+    return index_path is not None and index_path.is_file()
+
+
+def is_conventional_source_index(source: Path, index_path: Path) -> bool:
+    return index_path in (Path(f"{source}.tbi"), Path(f"{source}.csi"))
 
 
 def has_bgzf_eof(path: Path) -> bool:
@@ -302,6 +292,7 @@ def prepare_table(
     kind: str,
     tsv_layout: str,
     chromosome_map: dict[str, str] | None = None,
+    source_index: Path | None = None,
 ) -> None:
     tabix = require_tool("tabix")
     if kind == "bed":
@@ -328,10 +319,14 @@ def prepare_table(
         ]
 
     source_ready = (
-        is_bgzip(source) and has_bgzf_eof(source) and source_has_index(source)
+        is_bgzip(source) and has_bgzf_eof(source) and source_has_index(source_index)
     )
     if source_ready:
-        source_chromosomes = indexed_chromosome_names(source, tabix)
+        source_chromosomes = (
+            indexed_chromosome_names(source, tabix)
+            if source_index is not None and is_conventional_source_index(source, source_index)
+            else set()
+        )
         compatible = (
             chromosome_map is None
             or (
@@ -351,43 +346,3 @@ def prepare_table(
 
     run([tabix, "--force", *index_args, str(output)])
 
-
-def main() -> int:
-    args = parser().parse_args()
-    source = Path(args.input)
-    output = Path(args.output)
-    if not source.is_file():
-        raise FileNotFoundError(f"Input resource does not exist: {source}")
-
-    reasons = []
-    if not is_bgzip(source):
-        reasons.append("not BGZF-compressed")
-    elif not has_bgzf_eof(source):
-        reasons.append("BGZF EOF marker is absent")
-    if not source_has_index(source):
-        reasons.append("not indexed")
-    if args.chromosome_map_vcf:
-        reasons.append("chromosome names will be harmonized to the cohort VCF")
-    print(f"WARNING: preparing {source}: " + "; ".join(reasons), file=sys.stderr)
-
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if args.kind == "vcf":
-        prepare_vcf(source, output)
-    else:
-        chromosome_map = (
-            vcf_chromosome_map(Path(args.chromosome_map_vcf))
-            if args.chromosome_map_vcf
-            else None
-        )
-        prepare_table(
-            source,
-            output,
-            args.kind,
-            args.tsv_layout,
-            chromosome_map,
-        )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

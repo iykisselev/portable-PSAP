@@ -2,7 +2,6 @@ rule prepare_vcf_resource:
     """Stage either the cohort or projected exclusions at a stable VCF target."""
     input:
         source=vcf_resource_source,
-        source_index=vcf_resource_source_index,
         validated=vcf_resource_validation_marker
     output:
         data=ensure(str(PREPARED_DIR / "{resource}.vcf.gz"), non_empty=True),
@@ -64,7 +63,7 @@ rule combine_exclusions:
         cohort=WORKFLOW_INPUT_VCF,
         cohort_index=WORKFLOW_INPUT_VCF_INDEX,
         exclusions=WORKFLOW_EXCLUSIONS,
-        indexes=WORKFLOW_EXCLUSION_INDEXES
+        validated=validation_marker
     output:
         vcf=ensure(COMBINED_EXCLUSIONS_VCF, non_empty=True)
     params:

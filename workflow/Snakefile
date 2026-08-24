@@ -5,10 +5,9 @@ from snakemake.utils import min_version
 
 min_version("8.0")
 
-# Scientific settings are versioned separately from site/run bindings.  A caller may
-# overlay a different run manifest with --configfile without changing science.
+# Scientific settings are versioned separately from site/run bindings. Supply a
+# user-owned run manifest with --configfile; it must satisfy the merged schema.
 configfile: str(Path(workflow.basedir).parent / "config" / "config.yaml")
-configfile: str(Path(workflow.basedir).parent / "config" / "run.yaml")
 
 validate(
     config,
@@ -16,6 +15,8 @@ validate(
 )
 
 include: "rules/common.smk"
+include: "rules/resources.smk"
+include: "rules/validation_helpers.smk"
 
 # Control-plane checks are fast and inspect small reports; keeping them local avoids
 # scheduler latency without moving any computational work into the submission host.

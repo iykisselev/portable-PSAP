@@ -1,83 +1,12 @@
-from pathlib import Path
-
-
-VALIDATION_DIR = Path(APPLY_OUTDIR) / "validation"
-COHORT_VALIDATION = VALIDATION_DIR / "cohort.json"
-RESOURCE_VALIDATION = VALIDATION_DIR / "resources.json"
-MODEL_VALIDATION = VALIDATION_DIR / "model.json"
-VALIDATION_REPORT = Path(APPLY_OUTDIR) / "validation.json"
-VALIDATION_LIBRARY = APPLY_LIBRARY_DIR / "validate_inputs.py"
-
-VALIDATION_VCF = INPUT_VCF_SOURCE
-VALIDATION_VCF_INDEX = [INPUT_VCF_SOURCE_INDEX] if INPUT_VCF_SOURCE_INDEX else []
-VALIDATION_PED = optional_config_path(config["inputs"].get("ped"))
-VALIDATION_SAMPLES = optional_config_path(config["inputs"].get("samples"))
-VALIDATION_FASTA = configured_reference_path("fasta")
-VALIDATION_FASTA_INDEX = configured_path(REFERENCE_BINDINGS["fasta"]["fai"])
-VALIDATION_FASTA_GZI = [
-    configured_path(REFERENCE_BINDINGS["fasta"]["gzi"])
-] if REFERENCE_BINDINGS["fasta"]["gzi"] is not None else []
-
-VALIDATION_COVERAGE = optional_reference_path("coverage")
-VALIDATION_COVERAGE_INPUT = [VALIDATION_COVERAGE] if VALIDATION_COVERAGE else []
-VALIDATION_TESTING_UNIT_BED = configured_reference_path("testing_unit_bed")
-VALIDATION_VARIANT_EXCLUSIONS = [
-    binding_data(path)
-    for resource, path in zip(
-        config["reference"]["exclusions"], REFERENCE_BINDINGS["exclusions"]
-    )
-    if resource["role"] == "variants_exclude"
-]
-VALIDATION_PAR_REGIONS = [
-    binding_data(path)
-    for resource, path in zip(
-        config["reference"]["exclusions"], REFERENCE_BINDINGS["exclusions"]
-    )
-    if resource["role"] == "par_regions"
-]
-
-VALIDATION_CADD_SNV = binding_data(REFERENCE_BINDINGS["cadd"]["snv"])
-VALIDATION_CADD_INDEL_INPUT = (
-    [binding_data(REFERENCE_BINDINGS["cadd"]["indel"])]
-    if config["model"]["include_indels"]
-    else []
-)
-
-VALIDATION_LOOKUP_HET = configured_path(
-    REFERENCE_BINDINGS["lookup_tables"]["het"]
-)
-VALIDATION_LOOKUP_HOM = configured_path(
-    REFERENCE_BINDINGS["lookup_tables"]["hom"]
-)
-VALIDATION_LOOKUP_HEM_CHRX_INPUT = (
-    [configured_path(REFERENCE_BINDINGS["lookup_tables"]["hem_chrX"])]
-    if config["model"]["hemizygote"]
-    else []
-)
-
-VALIDATION_CONFIGURED_INDEXES = [
-    index
-    for index in [
-        INPUT_VCF_SOURCE_INDEX,
-        binding_index(REFERENCE_BINDINGS["coverage"]),
-        binding_index(REFERENCE_BINDINGS["testing_unit_bed"]),
-        *(binding_index(binding) for binding in REFERENCE_BINDINGS["exclusions"]),
-        binding_index(REFERENCE_BINDINGS["cadd"]["snv"]),
-        binding_index(REFERENCE_BINDINGS["cadd"]["indel"]),
-    ]
-    if index
-]
-
-
 rule validate_cohort:
     """Validate cohort VCF/metadata/FASTA inputs and write the sample manifest."""
     input:
         vcf=VALIDATION_VCF,
-        vcf_indexes=VALIDATION_VCF_INDEX,
+        vcf_index=VALIDATION_VCF_INDEX_INPUT,
         metadata=VALIDATION_SAMPLES or VALIDATION_PED,
         fasta=VALIDATION_FASTA,
         fasta_index=VALIDATION_FASTA_INDEX,
-        fasta_gzi=VALIDATION_FASTA_GZI,
+        fasta_gzi=VALIDATION_FASTA_GZI_INPUT,
         library=str(VALIDATION_LIBRARY)
     output:
         report=ensure(str(COHORT_VALIDATION), non_empty=True),
@@ -104,18 +33,29 @@ rule validate_resources:
     input:
         vcf=VALIDATION_VCF,
         coverage=VALIDATION_COVERAGE_INPUT,
+        coverage_index=VALIDATION_COVERAGE_INDEX_INPUT,
         variants_exclude=VALIDATION_VARIANT_EXCLUSIONS,
+        variant_exclude_indexes=[index for index in VALIDATION_VARIANT_EXCLUSION_INDEXES if index],
         testing_unit_bed=VALIDATION_TESTING_UNIT_BED,
+        testing_unit_index=VALIDATION_TESTING_UNIT_INDEX_INPUT,
         par_regions=VALIDATION_PAR_REGIONS,
+        par_region_indexes=[index for index in VALIDATION_PAR_REGION_INDEXES if index],
         cadd_snv=VALIDATION_CADD_SNV,
+        cadd_snv_index=VALIDATION_CADD_SNV_INDEX_INPUT,
         cadd_indel=VALIDATION_CADD_INDEL_INPUT,
-        indexes=VALIDATION_CONFIGURED_INDEXES,
+        cadd_indel_index=VALIDATION_CADD_INDEL_INDEX_INPUT,
         library=str(VALIDATION_LIBRARY)
     output:
         report=ensure(str(RESOURCE_VALIDATION), non_empty=True)
     params:
         unit=str(config["model"]["unit"]),
-        include_indels=str(config["model"]["include_indels"])
+        include_indels=str(config["model"]["include_indels"]),
+        coverage_index=VALIDATION_COVERAGE_INDEX,
+        variant_exclude_indexes=VALIDATION_VARIANT_EXCLUSION_INDEXES,
+        testing_unit_index=VALIDATION_TESTING_UNIT_INDEX,
+        par_region_indexes=VALIDATION_PAR_REGION_INDEXES,
+        cadd_snv_index=VALIDATION_CADD_SNV_INDEX,
+        cadd_indel_index=VALIDATION_CADD_INDEL_INDEX
     threads: 1
     resources:
         mem_mb=4096,

@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
-from apply.prepare_genomic_resource import prepare_table, prepare_vcf, vcf_chromosome_map
+from _library import add_library_path
+
+add_library_path(snakemake.scriptdir)
+
+from resources import prepare_table, prepare_vcf, vcf_chromosome_map
 
 
 def main() -> None:
@@ -13,7 +17,19 @@ def main() -> None:
         prepare_vcf(source, output)
         return
     chromosome_map = vcf_chromosome_map(Path(snakemake.input.cohort[0])) if snakemake.input.cohort else None
-    prepare_table(source, output, kind, str(snakemake.params.tsv_layout), chromosome_map)
+    source_index = (
+        Path(snakemake.input.source_index[0])
+        if snakemake.input.source_index
+        else None
+    )
+    prepare_table(
+        source,
+        output,
+        kind,
+        str(snakemake.params.tsv_layout),
+        chromosome_map,
+        source_index,
+    )
 
 
 if __name__ == "__main__":

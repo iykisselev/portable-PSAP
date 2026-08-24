@@ -7,6 +7,10 @@ results/
 logs/
 benchmarks/
 
+# User-owned run bindings; keep portable templates under version control.
+runs/*.yaml
+!runs/*.example.yaml
+
 # Smoke-test work directories (fixtures remain trackable)
 smoke-work/
 smoke-output/

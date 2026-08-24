@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
-from apply.combine_exclusions import collect_exclusions, write_projected_vcf
+from _library import add_library_path
+
+add_library_path(snakemake.scriptdir)
+
+from exclusions import collect_exclusions, write_projected_vcf
 
 
 def main() -> None:

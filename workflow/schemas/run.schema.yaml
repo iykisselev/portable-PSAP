@@ -1,0 +1,101 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Portable PSAP run-binding configuration
+description: >-
+  Physical data bindings and output naming for one invocation. This schema is
+  intentionally separate from scientific configuration and scheduler profiles.
+type: object
+required: [outdir, run, inputs, bindings]
+properties:
+  outdir: {type: string, minLength: 1}
+  run:
+    type: object
+    additionalProperties: false
+    required: [apply_prefix]
+    properties:
+      apply_prefix: {type: string, minLength: 1, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
+  inputs:
+    type: object
+    additionalProperties: false
+    required: [vcf, ped, samples]
+    properties:
+      vcf: {$ref: "#/$defs/indexed_genomic_binding"}
+      ped: {type: [string, "null"], minLength: 1}
+      samples: {type: [string, "null"], minLength: 1}
+    oneOf:
+      - properties: {ped: {type: string}, samples: {type: "null"}}
+      - properties: {ped: {type: "null"}, samples: {type: string}}
+  bindings:
+    type: object
+    additionalProperties: false
+    required: [reference]
+    properties:
+      reference:
+        type: object
+        additionalProperties: false
+        required: [fasta, coverage, testing_unit_bed, exclusions, lookup_tables, cadd]
+        properties:
+          fasta: {$ref: "#/$defs/fasta_binding"}
+          coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+          testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
+          exclusions:
+            type: array
+            items: {$ref: "#/$defs/indexed_genomic_binding"}
+          lookup_tables:
+            type: object
+            additionalProperties: false
+            required: [het, hom, hem_chrX]
+            properties:
+              het: {type: string, minLength: 1}
+              hom: {type: string, minLength: 1}
+              hem_chrX: {type: string, minLength: 1}
+          cadd:
+            type: object
+            additionalProperties: false
+            required: [snv, indel]
+            properties:
+              snv: {$ref: "#/$defs/indexed_genomic_binding"}
+              indel: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+allOf:
+  - if:
+      properties: {model: {properties: {include_indels: {const: true}}}}
+    then:
+      properties:
+        bindings:
+          properties:
+            reference:
+              properties:
+                cadd:
+                  properties: {indel: {$ref: "#/$defs/indexed_genomic_binding"}}
+  - if:
+      properties: {model: {properties: {hemizygote: {const: true}}}}
+    then:
+      properties:
+        bindings:
+          properties:
+            reference:
+              properties:
+                lookup_tables:
+                  properties: {hem_chrX: {type: string}}
+$defs:
+  indexed_genomic_binding:
+    type: object
+    additionalProperties: false
+    required: [data, index]
+    properties:
+      data: {type: string, minLength: 1}
+      index: {type: [string, "null"], minLength: 1}
+  optional_indexed_genomic_binding:
+    type: object
+    additionalProperties: false
+    required: [data, index]
+    properties:
+      data: {type: [string, "null"], minLength: 1}
+      index: {type: [string, "null"], minLength: 1}
+  fasta_binding:
+    type: object
+    additionalProperties: false
+    required: [data, fai, gzi]
+    properties:
+      data: {type: string, minLength: 1}
+      fai: {type: string, minLength: 1}
+      gzi: {type: [string, "null"], minLength: 1}

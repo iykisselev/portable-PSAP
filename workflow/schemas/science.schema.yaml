@@ -1,0 +1,78 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Portable PSAP scientific configuration
+description: >-
+  Biology and analysis decisions only. Physical file locations, output roots,
+  scheduler settings, and site-specific settings belong elsewhere.
+type: object
+required: [model, reference, report]
+properties:
+  model:
+    type: object
+    additionalProperties: false
+    required: [unit, hemizygote, score_max, include_indels]
+    properties:
+      unit: {enum: [gene, cadd_region, coding_cadd_region]}
+      hemizygote: {type: boolean}
+      score_max: {type: number, exclusiveMinimum: 0}
+      include_indels: {type: boolean}
+  reference:
+    type: object
+    additionalProperties: false
+    required: [assembly, fasta, coverage, testing_unit_bed, exclusions, lookup_tables, cadd]
+    properties:
+      assembly: {enum: [GRCh37, GRCh38]}
+      fasta: {$ref: "#/$defs/resource_identity"}
+      coverage:
+        allOf:
+          - {$ref: "#/$defs/resource_identity"}
+          - type: object
+            required: [optional, kind]
+            properties:
+              optional: {const: true}
+              kind: {enum: [bed, tsv]}
+      testing_unit_bed: {$ref: "#/$defs/resource_identity"}
+      exclusions:
+        type: array
+        items:
+          allOf:
+            - {$ref: "#/$defs/resource_identity"}
+            - type: object
+              required: [kind, role]
+              properties:
+                kind: {enum: [bed, tsv, vcf]}
+                role: {enum: [variants_exclude, par_regions]}
+      lookup_tables:
+        type: object
+        additionalProperties: false
+        required: [het, hom, hem_chrX]
+        properties:
+          het: {$ref: "#/$defs/resource_identity"}
+          hom: {$ref: "#/$defs/resource_identity"}
+          hem_chrX: {$ref: "#/$defs/resource_identity"}
+      cadd:
+        type: object
+        additionalProperties: false
+        required: [snv, indel]
+        properties:
+          snv: {$ref: "#/$defs/resource_identity"}
+          indel: {$ref: "#/$defs/resource_identity"}
+  report:
+    type: object
+    additionalProperties: false
+    required: [deduplicate_controls, candidate_id]
+    properties:
+      deduplicate_controls: {type: boolean}
+      candidate_id:
+        type: object
+        additionalProperties: false
+        required: [separator, ordinal_width]
+        properties:
+          separator: {type: string, minLength: 1}
+          ordinal_width: {type: integer, minimum: 1}
+$defs:
+  resource_identity:
+    type: object
+    required: [id]
+    properties:
+      id: {type: string, minLength: 1}
+      optional: {type: boolean}

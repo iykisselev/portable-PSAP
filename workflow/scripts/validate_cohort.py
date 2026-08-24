@@ -1,6 +1,10 @@
 """Validate cohort inputs and write the manifest via injected Snakemake I/O."""
 
-from apply.validate_inputs import (
+from _library import add_library_path
+
+add_library_path(snakemake.scriptdir)
+
+from validation import (
     parse_bool, read_ped, read_samples_tsv, read_vcf, validate_fasta,
     validate_hemizygote_chromosomes, validate_normalized_split_vcf,
     validate_vcf_resource, validate_vcf_samples, write_manifest, write_report,
@@ -16,9 +20,11 @@ def main() -> None:
     vcf_samples, vcf_chromosomes = read_vcf(snakemake.input.vcf, errors)
     validate_hemizygote_chromosomes(hemizygote, vcf_chromosomes, errors)
     validate_vcf_samples(vcf_samples, metadata["sample_ids"], errors, metadata_label="PED" if kind == "ped" else "Sample sheet")
-    validate_vcf_resource(snakemake.input.vcf, "Input VCF", errors, warnings)
-    validate_fasta(snakemake.input.fasta, errors)
-    validate_normalized_split_vcf(snakemake.input.vcf, snakemake.input.fasta, errors, warnings)
+    vcf_index = str(snakemake.input.vcf_index[0]) if snakemake.input.vcf_index else None
+    fasta_gzi = str(snakemake.input.fasta_gzi[0]) if snakemake.input.fasta_gzi else None
+    validate_vcf_resource(snakemake.input.vcf, "Input VCF", errors, warnings, vcf_index)
+    validate_fasta(snakemake.input.fasta, snakemake.input.fasta_index, fasta_gzi, errors)
+    validate_normalized_split_vcf(snakemake.input.vcf, snakemake.input.fasta, snakemake.input.fasta_index, errors, warnings)
     write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"n_ped_samples": len(metadata["all_sample_ids"]), "n_processed_samples": len(metadata["sample_ids"]), "n_excluded_phenotype_samples": len(metadata["excluded_phenotype_sample_ids"]), "n_vcf_samples": len(vcf_samples), "n_affected_samples": metadata["affected_count"], "n_male_samples": metadata["male_count"], "sex_counts": metadata["sex_counts"], "phenotype_counts": metadata["phenotype_counts"], "vcf_chromosomes": vcf_chromosomes}}, snakemake.output.report, create_parents=False)
     write_manifest(metadata["manifest"], snakemake.output.manifest, create_parents=False)
 

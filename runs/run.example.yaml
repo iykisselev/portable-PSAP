@@ -1,0 +1,46 @@
+# Copy this file to runs/<name>.yaml and replace every path with resources
+# available from the invocation directory.  It is deliberately operational:
+# it binds one cohort and one set of physical reference files to the immutable
+# scientific identities in config/config.yaml.
+outdir: results
+
+run:
+  apply_prefix: my_analysis
+
+inputs:
+  vcf:
+    data: data/cohort.vcf.gz
+    index: data/cohort.vcf.gz.tbi
+  # Choose exactly one metadata source.  `config/samples.tsv` is a template;
+  # populate it or point `samples` at a run-specific sample sheet.
+  ped: null
+  samples: config/samples.tsv
+
+bindings:
+  reference:
+    fasta:
+      data: resources/reference.fa.gz
+      fai: resources/reference.fa.gz.fai
+      gzi: resources/reference.fa.gz.gzi
+    coverage:
+      data: resources/coverage.bed.gz
+      index: resources/coverage.bed.gz.tbi
+    testing_unit_bed:
+      data: resources/testing_units.bed.gz
+      index: resources/testing_units.bed.gz.tbi
+    exclusions:
+      - data: resources/variant_exclusions.bed.gz
+        index: resources/variant_exclusions.bed.gz.tbi
+      - data: resources/par_regions.bed.gz
+        index: resources/par_regions.bed.gz.tbi
+    lookup_tables:
+      het: resources/lookup_het.tsv.gz
+      hom: resources/lookup_hom.tsv.gz
+      hem_chrX: resources/lookup_hem_chrX.tsv.gz
+    cadd:
+      snv:
+        data: resources/cadd_snv.tsv.gz
+        index: resources/cadd_snv.tsv.gz.tbi
+      indel:
+        data: resources/cadd_indel.tsv.gz
+        index: resources/cadd_indel.tsv.gz.tbi

@@ -2,7 +2,11 @@
 
 from types import SimpleNamespace
 
-from apply.validate_inputs import (
+from _library import add_library_path
+
+add_library_path(snakemake.scriptdir)
+
+from validation import (
     parse_model_settings,
     validate_lookup_files,
     validate_lookup_unit_overlap,

@@ -3,24 +3,14 @@
 
 from __future__ import annotations
 
-import argparse
 import csv
 import gzip
-import json
 import math
 from pathlib import Path
 
 
 REQUIRED_COLUMNS = ("CHROM", "POS", "REF", "ALT", "CADD_PHRED", "unit")
 MISSING_VALUES = {"", ".", "na", "nan", "none", "null", "-"}
-
-
-def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("--annotations", required=True)
-    result.add_argument("--include-indels", required=True, choices=("True", "False"))
-    result.add_argument("--output", required=True)
-    return result
 
 
 def is_snv(ref: str, alt: str) -> bool:
@@ -115,25 +105,3 @@ def summarize_annotations(path: str | Path, include_indels: bool) -> dict:
         "summary": counts,
     }
 
-
-def main() -> int:
-    args = parser().parse_args()
-    report = summarize_annotations(
-        args.annotations,
-        include_indels=args.include_indels == "True",
-    )
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    print(
-        f"Annotation summary wrote {output} with "
-        f"{len(report['errors'])} error(s)."
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -1,22 +1,17 @@
 """Write annotation completeness QC using injected Snakemake inputs and outputs."""
 
-import importlib.util
 import json
 from pathlib import Path
 
+from _library import add_library_path
 
-def _implementation():
-    path = Path(__file__).parent / "apply" / "summarize_annotations.py"
-    spec = importlib.util.spec_from_file_location("annotation_summary", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
-    spec.loader.exec_module(module)
-    return module
+add_library_path(snakemake.scriptdir)
+
+from annotation_qc import summarize_annotations
 
 
 def main() -> None:
-    implementation = _implementation()
-    report = implementation.summarize_annotations(
+    report = summarize_annotations(
         snakemake.input.annotations,
         include_indels=bool(snakemake.params.include_indels),
     )

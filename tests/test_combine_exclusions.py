@@ -4,10 +4,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 
-SCRIPT_DIR = Path(__file__).parents[1] / "workflow" / "scripts" / "apply"
+SCRIPT_DIR = Path(__file__).parents[1] / "workflow" / "lib" / "python"
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from combine_exclusions import (  # noqa: E402
+from exclusions import (  # noqa: E402
     interval_overlaps_variant,
     merged_interval_index,
     vcf_record_span,
