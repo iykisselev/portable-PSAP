@@ -1,0 +1,34 @@
+# Scientific model: testing units are gene identifiers shared with lookup tables.
+model:
+  unit: gene
+  # Enable X/Y hemizygote classification for known male samples.
+  hemizygote: true
+  # Maximum CADD-PHRED value represented in the lookup scoring grid.
+  score_max: 70
+  # Score indels with CADD; this does not remove indels from the input VCF.
+  include_indels: true
+
+reference:
+  # Genome assembly identity required by every cohort and annotation resource.
+  assembly: GRCh38
+  # Immutable resource identities; physical locations belong in config/run.yaml.
+  fasta: {id: GRCh38.p14, sha256: null}
+  coverage: {id: gnomad-genomes-r3-dp10, sha256: null, optional: true}
+  testing_unit_bed: {id: biomart-grch38-107-gene, sha256: null}
+  # Source order is scientific: exclusions are projected and combined in this order.
+  exclusions:
+    - {id: gnomad-r2-notpass, kind: bed, role: variants_exclude, sha256: null}
+    - {id: par-regions, kind: bed, role: par_regions, sha256: null}
+  lookup_tables:
+    # Lookup roles map genotype classes to model-specific frequency/CADD grids.
+    het: {id: gnomad-v3-cadd-1.6-gene-het, sha256: null}
+    hom: {id: gnomad-v3-cadd-1.6-gene-hom, sha256: null}
+    hem_chrX: {id: gnomad-v3-cadd-1.6-gene-hem-chrX, sha256: null}
+  cadd:
+    # Explicit CADD resources replace the implicit cadd_dir filename convention.
+    snv: {id: CADD-v1.6-SNV, sha256: null}
+    indel: {id: CADD-v1.6-InDels, sha256: null}
+
+report:
+  # Deduplicate controls only when every output evidence field is identical.
+  deduplicate_controls: true

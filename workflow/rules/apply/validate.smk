@@ -9,41 +9,47 @@ VALIDATION_REPORT = Path(APPLY_OUTDIR) / "validation.json"
 VALIDATION_LIBRARY = Path(APPLY_SCRIPT_DIR) / "validate_inputs.py"
 
 VALIDATION_VCF = configured_path(config["inputs"]["vcf"])
-VALIDATION_PED = configured_path(config["inputs"]["ped"])
-VALIDATION_FASTA = configured_path(config["reference"]["fasta"])
+VALIDATION_PED = optional_config_path(config["inputs"].get("ped"))
+VALIDATION_SAMPLES = optional_config_path(config["inputs"].get("samples"))
+VALIDATION_FASTA = configured_reference_path("fasta")
 VALIDATION_FASTA_INDEX = f"{VALIDATION_FASTA}.fai"
 VALIDATION_FASTA_GZI = (
     [f"{VALIDATION_FASTA}.gzi"] if VALIDATION_FASTA.endswith(".gz") else []
 )
 
-VALIDATION_COVERAGE = optional_config_path(config["reference"].get("coverage"))
+VALIDATION_COVERAGE = optional_reference_path("coverage")
 VALIDATION_COVERAGE_INPUT = [VALIDATION_COVERAGE] if VALIDATION_COVERAGE else []
-VALIDATION_TESTING_UNIT_BED = configured_path(
-    config["reference"]["testing_unit_bed"]
-)
-VALIDATION_VARIANT_EXCLUSIONS = comma_separated_config_paths(
-    config["reference"].get("variants_exclude")
-)
-VALIDATION_PAR_REGIONS = comma_separated_config_paths(
-    config["reference"].get("par_regions")
-)
+VALIDATION_TESTING_UNIT_BED = configured_reference_path("testing_unit_bed")
+VALIDATION_VARIANT_EXCLUSIONS = [
+    configured_path(path)
+    for resource, path in zip(
+        config["reference"]["exclusions"], REFERENCE_BINDINGS["exclusions"]
+    )
+    if resource["role"] == "variants_exclude"
+]
+VALIDATION_PAR_REGIONS = [
+    configured_path(path)
+    for resource, path in zip(
+        config["reference"]["exclusions"], REFERENCE_BINDINGS["exclusions"]
+    )
+    if resource["role"] == "par_regions"
+]
 
-VALIDATION_CADD_DIR = Path(configured_path(config["reference"]["cadd_dir"]))
-VALIDATION_CADD_SNV = str(VALIDATION_CADD_DIR / "whole_genome_SNVs.tsv.gz")
+VALIDATION_CADD_SNV = configured_path(REFERENCE_BINDINGS["cadd"]["snv"])
 VALIDATION_CADD_INDEL_INPUT = (
-    [str(VALIDATION_CADD_DIR / "InDels.tsv.gz")]
+    [configured_path(REFERENCE_BINDINGS["cadd"]["indel"])]
     if config["model"]["include_indels"]
     else []
 )
 
 VALIDATION_LOOKUP_HET = configured_path(
-    config["reference"]["lookup_tables"]["het"]
+    REFERENCE_BINDINGS["lookup_tables"]["het"]
 )
 VALIDATION_LOOKUP_HOM = configured_path(
-    config["reference"]["lookup_tables"]["hom"]
+    REFERENCE_BINDINGS["lookup_tables"]["hom"]
 )
 VALIDATION_LOOKUP_HEM_CHRX_INPUT = (
-    [configured_path(config["reference"]["lookup_tables"]["hem_chrX"])]
+    [configured_path(REFERENCE_BINDINGS["lookup_tables"]["hem_chrX"])]
     if config["model"]["hemizygote"]
     else []
 )
@@ -58,11 +64,11 @@ VALIDATION_INDEXED_RESOURCES = (
 
 
 rule validate_cohort:
-    """Validate cohort VCF/PED/FASTA inputs and write the sample manifest."""
+    """Validate cohort VCF/metadata/FASTA inputs and write the sample manifest."""
     input:
         vcf=VALIDATION_VCF,
         vcf_indexes=existing_genomic_indexes(VALIDATION_VCF),
-        ped=VALIDATION_PED,
+        metadata=VALIDATION_SAMPLES or VALIDATION_PED,
         fasta=VALIDATION_FASTA,
         fasta_index=VALIDATION_FASTA_INDEX,
         fasta_gzi=VALIDATION_FASTA_GZI,
@@ -72,7 +78,8 @@ rule validate_cohort:
         report=ensure(str(COHORT_VALIDATION), non_empty=True),
         manifest=protected(ensure(str(SAMPLE_MANIFEST_PATH), non_empty=True))
     params:
-        hemizygote_model=str(config["model"]["hemizygote"])
+        hemizygote_model=str(config["model"]["hemizygote"]),
+        metadata_kind="samples" if VALIDATION_SAMPLES else "ped"
     threads: 1
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
@@ -85,7 +92,8 @@ rule validate_cohort:
         """
         python {input.script:q} \
             --vcf {input.vcf:q} \
-            --ped {input.ped:q} \
+            --sample-metadata {input.metadata:q} \
+            --sample-metadata-kind {params.metadata_kind:q} \
             --fasta {input.fasta:q} \
             --hemizygote-model {params.hemizygote_model:q} \
             --out-json {output.report:q} \
@@ -123,7 +131,9 @@ rule validate_resources:
             if input.par_regions
             else "None"
         ),
-        cadd_path=lambda wc, input: str(Path(str(input.cadd_snv)).parent),
+        cadd_indel=lambda wc, input: (
+            str(input.cadd_indel[0]) if input.cadd_indel else "None"
+        ),
         unit=str(config["model"]["unit"]),
         include_indels=str(config["model"]["include_indels"])
     threads: 1
@@ -142,7 +152,8 @@ rule validate_resources:
             --variants-exclude {params.variants_exclude:q} \
             --testing-unit-bed {input.testing_unit_bed:q} \
             --par-regions {params.par_regions:q} \
-            --cadd-path {params.cadd_path:q} \
+            --cadd-snv {input.cadd_snv:q} \
+            --cadd-indel {params.cadd_indel:q} \
             --unit {params.unit:q} \
             --include-indels {params.include_indels:q} \
             --out-json {output.report:q} \

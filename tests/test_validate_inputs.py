@@ -12,6 +12,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from validate_inputs import (  # noqa: E402
     read_ped,
+    read_samples_tsv,
     validate_cadd_chromosome_names,
     validate_hemizygote_chromosomes,
     validate_lookup_unit_overlap,
@@ -21,6 +22,57 @@ import prepare_genomic_resource  # noqa: E402
 
 
 class ValidationTests(unittest.TestCase):
+    def test_sample_sheet_matches_ped_metadata_interpretation(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            samples = Path(temp_dir) / "samples.tsv"
+            samples.write_text(
+                "family_id\tpid\tsex\tphenotype\n"
+                "F1\taffected\t1\t2\n"
+                "F1\tunaffected\t2\t1\n"
+                "F1\tunknown\t1\t0\n",
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+            warnings: list[str] = []
+
+            result = read_samples_tsv(samples, errors, warnings)
+
+            self.assertEqual(errors, [])
+            self.assertEqual(result["sample_ids"], ["affected", "unaffected"])
+            self.assertEqual(result["excluded_phenotype_sample_ids"], ["unknown"])
+            self.assertEqual(
+                result["manifest"],
+                [
+                    {"family_id": "F1", "pid": "affected", "sex": "1", "phenotype": "affected"},
+                    {"family_id": "F1", "pid": "unaffected", "sex": "2", "phenotype": "unaffected"},
+                ],
+            )
+            self.assertEqual(len(warnings), 1)
+
+    def test_all_unknown_sample_sheet_phenotypes_fail_validation(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            samples = Path(temp_dir) / "samples.tsv"
+            samples.write_text(
+                "family_id\tpid\tsex\tphenotype\n"
+                "F1\tunknown1\t1\t0\n"
+                "F1\tunknown2\t2\t-9\n",
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+            warnings: list[str] = []
+
+            result = read_samples_tsv(samples, errors, warnings)
+
+            self.assertEqual(result["sample_ids"], [])
+            self.assertEqual(warnings, [])
+            self.assertEqual(
+                errors,
+                [
+                    "Sample sheet contains no samples with a known phenotype "
+                    "(1=unaffected or 2=affected)"
+                ],
+            )
+
     def test_samples_with_unknown_phenotype_are_excluded(self) -> None:
         with TemporaryDirectory() as temp_dir:
             ped = Path(temp_dir) / "cohort.ped"

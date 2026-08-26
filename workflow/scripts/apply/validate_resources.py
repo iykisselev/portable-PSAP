@@ -25,7 +25,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--variants-exclude", default="")
     result.add_argument("--testing-unit-bed", required=True)
     result.add_argument("--par-regions", default="")
-    result.add_argument("--cadd-path", required=True)
+    result.add_argument("--cadd-snv", required=True)
+    result.add_argument("--cadd-indel", default="")
     result.add_argument("--unit", required=True)
     result.add_argument("--include-indels", required=True)
     result.add_argument("--out-json", required=True)
@@ -55,7 +56,8 @@ def main() -> int:
         warnings,
     )
     cadd_chromosomes = validate_cadd_resources(
-        args.cadd_path,
+        args.cadd_snv,
+        args.cadd_indel,
         include_indels,
         errors,
         warnings,

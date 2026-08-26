@@ -1,0 +1,12 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+description: >-
+  Tab-delimited cohort metadata with one header row and the four required columns.
+  sex and phenotype retain PED coding: 1/2 are known values; every other phenotype
+  is retained in the sheet but excluded from processing with the existing warning.
+type: object
+required: [family_id, pid, sex, phenotype]
+properties:
+  family_id: {type: string, minLength: 1}
+  pid: {type: string, minLength: 1, pattern: "^[^/\\\\]+$"}
+  sex: {type: string, minLength: 1}
+  phenotype: {type: string, minLength: 1}

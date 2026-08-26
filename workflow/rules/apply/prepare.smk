@@ -17,7 +17,7 @@ WORKFLOW_INPUT_VCF_INDEX = (
     else f"{PREPARED_INPUT_VCF}.tbi"
 )
 
-COVERAGE_SOURCE = optional_config_path(config["reference"].get("coverage"))
+COVERAGE_SOURCE = optional_reference_path("coverage")
 COVERAGE_KIND = genomic_resource_kind(COVERAGE_SOURCE) if COVERAGE_SOURCE else ""
 PREPARED_COVERAGE = str(
     PREPARED_DIR / f"coverage.{COVERAGE_KIND or 'unknown'}.gz"
@@ -25,14 +25,13 @@ PREPARED_COVERAGE = str(
 WORKFLOW_COVERAGE = PREPARED_COVERAGE if COVERAGE_SOURCE else ""
 WORKFLOW_COVERAGE_INDEX = f"{PREPARED_COVERAGE}.tbi" if COVERAGE_SOURCE else ""
 
-TESTING_UNIT_SOURCE = configured_path(config["reference"]["testing_unit_bed"])
+TESTING_UNIT_SOURCE = configured_reference_path("testing_unit_bed")
 PREPARED_TESTING_UNIT = str(PREPARED_DIR / "testing_units.bed.gz")
 WORKFLOW_TESTING_UNIT = PREPARED_TESTING_UNIT
 WORKFLOW_TESTING_UNIT_INDEX = f"{PREPARED_TESTING_UNIT}.tbi"
 
-CADD_SOURCE_DIR = Path(configured_path(config["reference"]["cadd_dir"]))
-CADD_SNV_SOURCE = str(CADD_SOURCE_DIR / "whole_genome_SNVs.tsv.gz")
-CADD_INDEL_SOURCE = str(CADD_SOURCE_DIR / "InDels.tsv.gz")
+CADD_SNV_SOURCE = configured_path(REFERENCE_BINDINGS["cadd"]["snv"])
+CADD_INDEL_SOURCE = optional_config_path(REFERENCE_BINDINGS["cadd"]["indel"])
 PREPARED_CADD_SNV = str(PREPARED_DIR / "whole_genome_SNVs.tsv.gz")
 PREPARED_CADD_INDEL = str(PREPARED_DIR / "InDels.tsv.gz")
 # CADD is always staged because an otherwise valid/indexed source can still use
@@ -42,12 +41,11 @@ WORKFLOW_CADD_INDEL = PREPARED_CADD_INDEL
 WORKFLOW_CADD_SNV_INDEX = f"{PREPARED_CADD_SNV}.tbi"
 WORKFLOW_CADD_INDEL_INDEX = f"{PREPARED_CADD_INDEL}.tbi"
 
-# variants_exclude is the single preferred setting for mixed BED/TSV/VCF
-# exclusions. par_regions remains as an optional compatibility input and is
-# folded into exactly the same combined variant set.
-EXCLUSION_SOURCES = comma_separated_config_paths(
-    config["reference"].get("variants_exclude")
-) + comma_separated_config_paths(config["reference"].get("par_regions"))
+# Ordered list bindings replace comma-delimited exclusions.  The legacy PAR
+# resource retains its own role in metadata while sharing the same projection path.
+EXCLUSION_SOURCES = [
+    configured_path(path) for path in REFERENCE_BINDINGS["exclusions"]
+]
 EXCLUSION_IDS = [f"{position:03d}" for position in range(len(EXCLUSION_SOURCES))]
 EXCLUSION_SOURCE_BY_ID = dict(zip(EXCLUSION_IDS, EXCLUSION_SOURCES))
 EXCLUSION_KIND_BY_ID = {

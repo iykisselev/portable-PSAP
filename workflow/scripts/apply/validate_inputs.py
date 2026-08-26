@@ -75,7 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
     references.add_argument("--lookup-het", required=True)
     references.add_argument("--lookup-hom", required=True)
     references.add_argument("--lookup-hem-chrx", default="")
-    references.add_argument("--cadd-path", required=True)
+    references.add_argument("--cadd-snv", required=True)
+    references.add_argument("--cadd-indel", default="")
 
     model = parser.add_argument_group("model settings")
     model.add_argument("--score-max", required=True)
@@ -713,6 +714,135 @@ def read_ped(
     }
 
 
+def read_samples_tsv(
+    path: str | Path,
+    errors: list[str],
+    warnings: list[str],
+) -> dict:
+    """Read the schema-validated TSV alternative to PED without changing coding."""
+    if not require_file(path, "sample sheet", errors):
+        return empty_ped_summary()
+
+    all_sample_ids: list[str] = []
+    sample_ids: list[str] = []
+    excluded_phenotype_sample_ids: list[str] = []
+    manifest: list[dict[str, str]] = []
+    sex_values: list[str] = []
+    phenotype_values: list[str] = []
+    data_rows = 0
+    required_columns = ["family_id", "pid", "sex", "phenotype"]
+
+    try:
+        with Path(path).open("rt", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            headers = reader.fieldnames or []
+            missing = [name for name in required_columns if name not in headers]
+            if missing:
+                errors.append(
+                    "Sample sheet is missing required column(s): " + ", ".join(missing)
+                )
+                return empty_ped_summary()
+
+            for line_number, row in enumerate(reader, start=2):
+                if not row or not any((value or "").strip() for value in row.values()):
+                    continue
+                data_rows += 1
+                family_id = (row.get("family_id") or "").strip()
+                sample_id = (row.get("pid") or "").strip()
+                sex = (row.get("sex") or "").strip()
+                phenotype = (row.get("phenotype") or "").strip()
+
+                if not family_id:
+                    errors.append(f"Sample sheet line {line_number} has an empty family ID")
+                if not sample_id:
+                    errors.append(f"Sample sheet line {line_number} has an empty sample ID")
+                else:
+                    all_sample_ids.append(sample_id)
+                    if "/" in sample_id or "\\" in sample_id:
+                        errors.append(
+                            f"Sample sheet line {line_number} sample ID contains a path "
+                            f"separator: {sample_id!r}"
+                        )
+                    phenotype_label = {"1": "unaffected", "2": "affected"}.get(phenotype)
+                    if phenotype_label is None:
+                        excluded_phenotype_sample_ids.append(sample_id)
+                    else:
+                        sample_ids.append(sample_id)
+                        sex_values.append(sex)
+                        manifest.append(
+                            {
+                                "family_id": family_id or "NA",
+                                "pid": sample_id,
+                                "sex": sex if sex in {"1", "2"} else "NA",
+                                "phenotype": phenotype_label,
+                            }
+                        )
+                phenotype_values.append(phenotype)
+    except OSError as exc:
+        errors.append(f"Could not read sample sheet {path}: {exc}")
+
+    if data_rows == 0:
+        errors.append(f"No data rows found in sample sheet: {path}")
+
+    duplicated = duplicate_values(all_sample_ids)
+    if duplicated:
+        errors.append("Duplicate sample IDs found in sample sheet pid column: " + ", ".join(duplicated))
+
+    phenotype_counts = Counter(phenotype_values)
+    ignored_phenotypes = sorted(
+        value for value in phenotype_counts if value not in {"1", "2"}
+    )
+    if excluded_phenotype_sample_ids and sample_ids:
+        examples = ", ".join(excluded_phenotype_sample_ids[:10])
+        remainder = len(excluded_phenotype_sample_ids) - min(
+            len(excluded_phenotype_sample_ids), 10
+        )
+        suffix = f" (and {remainder} more)" if remainder else ""
+        warnings.append(
+            f"Excluded {len(excluded_phenotype_sample_ids)} sample-sheet sample(s) "
+            "with missing or unsupported phenotype values from all processing"
+            + (
+                "; observed values: " + ", ".join(ignored_phenotypes)
+                if ignored_phenotypes
+                else ""
+            )
+            + f"; sample IDs: {examples}{suffix}"
+        )
+
+    sex_counts = Counter(sex_values)
+    ignored_sex = sorted(value for value in sex_counts if value not in {"1", "2"})
+    if ignored_sex:
+        warnings.append(
+            "Sample-sheet sex values other than 1 and 2 will not receive sex-specific "
+            "chromosome-X recoding: " + ", ".join(ignored_sex)
+        )
+
+    if all_sample_ids and not sample_ids:
+        errors.append(
+            "Sample sheet contains no samples with a known phenotype "
+            "(1=unaffected or 2=affected)"
+        )
+    elif sample_ids:
+        if phenotype_counts.get("2", 0) == 0:
+            errors.append("Sample sheet contains no affected individuals (phenotype code 2)")
+        if phenotype_counts.get("1", 0) == 0:
+            warnings.append(
+                "Sample sheet contains no unaffected individuals (phenotype code 1); "
+                "the cohort report will use validation=no_controls"
+            )
+
+    return {
+        "manifest": manifest,
+        "sample_ids": sample_ids,
+        "all_sample_ids": all_sample_ids,
+        "excluded_phenotype_sample_ids": excluded_phenotype_sample_ids,
+        "sex_counts": dict(sorted(sex_counts.items())),
+        "phenotype_counts": dict(sorted(phenotype_counts.items())),
+        "affected_count": phenotype_counts.get("2", 0),
+        "male_count": sex_counts.get("1", 0),
+    }
+
+
 def canonical_chromosome_name(name: str) -> str | None:
     normalized = name.strip()
     if normalized.lower().startswith("chr"):
@@ -1094,8 +1224,9 @@ def validate_normalized_split_vcf(
 
 def validate_vcf_samples(
     vcf_samples: list[str],
-    ped_samples: list[str],
+    metadata_samples: list[str],
     errors: list[str],
+    metadata_label: str = "PED",
 ) -> None:
     if not vcf_samples:
         errors.append("No sample IDs were found in the input VCF")
@@ -1107,9 +1238,12 @@ def validate_vcf_samples(
             "Duplicate sample IDs found in VCF header: " + ", ".join(duplicated)
         )
 
-    missing = sorted(set(ped_samples) - set(vcf_samples))
+    missing = sorted(set(metadata_samples) - set(vcf_samples))
     if missing:
-        errors.append("PED sample IDs missing from the VCF header: " + ", ".join(missing))
+        errors.append(
+            f"{metadata_label} sample IDs missing from the VCF header: "
+            + ", ".join(missing)
+        )
 
 
 def validate_hemizygote_chromosomes(
@@ -1324,22 +1458,21 @@ def validate_fasta(path: str | Path, errors: list[str]) -> None:
 
 
 def validate_cadd_resources(
-    cadd_path: str | Path,
+    cadd_snv: str | Path,
+    cadd_indel: str | Path | None,
     include_indels: bool,
     errors: list[str],
     warnings: list[str],
 ) -> dict[str, set[str]]:
-    cadd_dir = Path(cadd_path)
-    if not require_directory(cadd_dir, "CADD version directory", errors):
-        return {}
-
-    filenames = ["whole_genome_SNVs.tsv.gz"]
+    resources = [("whole_genome_SNVs.tsv.gz", Path(cadd_snv))]
     if include_indels:
-        filenames.append("InDels.tsv.gz")
+        if not cadd_indel or str(cadd_indel).strip().lower() in MISSING_CONFIG_VALUES:
+            errors.append("CADD indel resource is required when include_indels is enabled")
+            return {}
+        resources.append(("InDels.tsv.gz", Path(cadd_indel)))
 
     chromosomes: dict[str, set[str]] = {}
-    for filename in filenames:
-        path = cadd_dir / filename
+    for filename, path in resources:
         description = f"CADD resource {filename}"
         validate_indexed_table(path, description, errors, warnings)
         validate_cadd_columns(path, description, errors)
@@ -1536,7 +1669,8 @@ def validate_inputs(args: argparse.Namespace) -> dict:
     )
 
     cadd_chromosomes = validate_cadd_resources(
-        args.cadd_path,
+        args.cadd_snv,
+        args.cadd_indel,
         settings["include_indels"],
         errors,
         warnings,

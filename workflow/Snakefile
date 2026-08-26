@@ -3,7 +3,10 @@ from pathlib import Path
 from snakemake.utils import validate
 
 
-configfile: str(Path(workflow.basedir).parent / "config" / "apply.yaml")
+# Scientific settings are versioned separately from site/run bindings.  A caller may
+# overlay a different run manifest with --configfile without changing science.
+configfile: str(Path(workflow.basedir).parent / "config" / "config.yaml")
+configfile: str(Path(workflow.basedir).parent / "config" / "run.yaml")
 
 validate(
     config,

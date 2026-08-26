@@ -11,6 +11,7 @@ BGZF_EOF_BLOCK = bytes.fromhex(
 OUTPUT_ROOT = Path(config["outdir"])
 APPLY_OUTDIR = OUTPUT_ROOT / "apply" / config["run"]["apply_prefix"]
 LOG_DIR = OUTPUT_ROOT / "logs"
+REFERENCE_BINDINGS = config["bindings"]["reference"]
 APPLY_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "apply"
 R_LIB_DIR = Path(workflow.basedir) / "lib" / "r"
 CONDA_ENV_DIR = Path(workflow.basedir) / "envs"
@@ -64,6 +65,16 @@ def optional_config_path(value):
     if path.lower() in {"", "na", "none", "null", ".", "-"}:
         return ""
     return str(Path(path).expanduser())
+
+
+def configured_reference_path(name):
+    """Return one required physical binding for a logical reference resource."""
+    return configured_path(REFERENCE_BINDINGS[name])
+
+
+def optional_reference_path(name):
+    """Return one optional physical binding, represented as YAML null when absent."""
+    return optional_config_path(REFERENCE_BINDINGS.get(name))
 
 
 def comma_separated_config_paths(value):

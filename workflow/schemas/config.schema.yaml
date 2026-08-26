@@ -1,76 +1,128 @@
 $schema: "https://json-schema.org/draft/2020-12/schema"
 type: object
 additionalProperties: false
-required: [outdir, run, inputs, model, reference]
+required: [outdir, run, inputs, model, reference, bindings]
 properties:
-  outdir:
-    type: string
-    minLength: 1
+  outdir: {type: string, minLength: 1}
   run:
     type: object
     additionalProperties: false
     required: [apply_prefix]
     properties:
-      apply_prefix:
-        type: string
-        minLength: 1
-        pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+      apply_prefix: {type: string, minLength: 1, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
   inputs:
     type: object
     additionalProperties: false
-    required: [vcf, ped]
+    required: [vcf, ped, samples]
     properties:
       vcf: {type: string, minLength: 1}
-      ped: {type: string, minLength: 1}
+      ped: {type: [string, "null"], minLength: 1}
+      samples: {type: [string, "null"], minLength: 1}
+    oneOf:
+      - properties: {ped: {type: string}, samples: {type: "null"}}
+      - properties: {ped: {type: "null"}, samples: {type: string}}
   model:
     type: object
     additionalProperties: false
     required: [unit, hemizygote, score_max, include_indels]
     properties:
-      unit:
-        enum: [gene, cadd_region, coding_cadd_region]
+      unit: {enum: [gene, cadd_region, coding_cadd_region]}
       hemizygote: {type: boolean}
       score_max: {type: number, exclusiveMinimum: 0}
       include_indels: {type: boolean}
   reference:
     type: object
     additionalProperties: false
-    required: [assembly, fasta, testing_unit_bed, lookup_tables, cadd_dir]
+    required: [assembly, fasta, coverage, testing_unit_bed, exclusions, lookup_tables, cadd]
     properties:
-      assembly:
-        enum: [GRCh37, GRCh38]
-      fasta: {type: string, minLength: 1}
-      coverage: {type: [string, "null"], minLength: 1}
-      testing_unit_bed:
-        type: string
-        minLength: 1
-      variants_exclude: {type: [string, "null"], minLength: 1}
+      assembly: {enum: [GRCh37, GRCh38]}
+      fasta: {$ref: "#/$defs/resource_identity"}
+      coverage:
+        allOf:
+          - {$ref: "#/$defs/resource_identity"}
+          - type: object
+            required: [optional]
+            properties: {optional: {const: true}}
+      testing_unit_bed: {$ref: "#/$defs/resource_identity"}
+      exclusions:
+        type: array
+        items:
+          allOf:
+            - {$ref: "#/$defs/resource_identity"}
+            - type: object
+              required: [kind, role]
+              properties:
+                kind: {enum: [bed, tsv, vcf]}
+                role: {enum: [variants_exclude, par_regions]}
       lookup_tables:
         type: object
         additionalProperties: false
-        required: [het, hom]
+        required: [het, hom, hem_chrX]
         properties:
-          het: {type: string, minLength: 1}
-          hom: {type: string, minLength: 1}
-          hem_chrX: {type: string, minLength: 1}
-      cadd_dir: {type: string, minLength: 1}
-      par_regions:
-        type: [string, "null"]
-        minLength: 1
+          het: {$ref: "#/$defs/resource_identity"}
+          hom: {$ref: "#/$defs/resource_identity"}
+          hem_chrX: {$ref: "#/$defs/resource_identity"}
+      cadd:
+        type: object
+        additionalProperties: false
+        required: [snv, indel]
+        properties:
+          snv: {$ref: "#/$defs/resource_identity"}
+          indel: {$ref: "#/$defs/resource_identity"}
   report:
     type: object
     additionalProperties: false
     properties:
       deduplicate_controls: {type: boolean}
+  bindings:
+    type: object
+    additionalProperties: false
+    required: [reference]
+    properties:
+      reference:
+        type: object
+        additionalProperties: false
+        required: [fasta, coverage, testing_unit_bed, exclusions, lookup_tables, cadd]
+        properties:
+          fasta: {type: string, minLength: 1}
+          coverage: {type: [string, "null"], minLength: 1}
+          testing_unit_bed: {type: string, minLength: 1}
+          exclusions:
+            type: array
+            items: {type: string, minLength: 1}
+          lookup_tables:
+            type: object
+            additionalProperties: false
+            required: [het, hom, hem_chrX]
+            properties:
+              het: {type: string, minLength: 1}
+              hom: {type: string, minLength: 1}
+              hem_chrX: {type: string, minLength: 1}
+          cadd:
+            type: object
+            additionalProperties: false
+            required: [snv, indel]
+            properties:
+              snv: {type: string, minLength: 1}
+              indel: {type: [string, "null"], minLength: 1}
 allOf:
   - if:
-      properties:
-        model:
-          properties:
-            hemizygote: {const: true}
+      properties: {model: {properties: {hemizygote: {const: true}}}}
     then:
       properties:
-        reference:
+        bindings:
           properties:
-            lookup_tables:
-              required: [hem_chrX]
+            reference:
+              properties:
+                lookup_tables:
+                  properties: {hem_chrX: {type: string}}
+$defs:
+  resource_identity:
+    type: object
+    required: [id, sha256]
+    properties:
+      id: {type: string, minLength: 1}
+      sha256:
+        type: [string, "null"]
+        pattern: "^[A-Fa-f0-9]{64}$"
+      optional: {type: boolean}

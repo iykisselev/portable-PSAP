@@ -3,7 +3,7 @@ import shlex
 
 LOOKUP_TABLES = {
     name: configured_path(path)
-    for name, path in config["reference"]["lookup_tables"].items()
+    for name, path in REFERENCE_BINDINGS["lookup_tables"].items()
 }
 HEMIZYGOUS_MODEL_ENABLED = config["model"]["hemizygote"]
 
