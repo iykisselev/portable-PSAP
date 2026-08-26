@@ -1,0 +1,128 @@
+snakefile: workflow/Snakefile
+executor: slurm
+jobs: 50
+local-cores: 1
+use-envmodules: true
+latency-wait: 120
+rerun-incomplete: true
+restart-times: 0
+printshellcmds: true
+show-failed-logs: true
+
+default-resources:
+  mem_mb: 2048
+  runtime: 60
+  slurm_partition: skylake
+  slurm_account: slurm_acc
+
+set-threads:
+  validate_cohort: 1
+  validate_resources: 1
+  validate_model: 1
+  merge_validation: 1
+  require_valid_inputs: 1
+  prepare_input_vcf: 1
+  prepare_coverage: 1
+  prepare_testing_unit_bed: 1
+  prepare_cadd_snv: 1
+  prepare_cadd_indel: 1
+  prepare_exclusion_resource: 1
+  combine_exclusions: 1
+  prepare_combined_exclusions: 1
+  filter_low_coverage: 4
+  filter_excluded_records: 4
+  annotate_variants: 8
+  summarize_annotations: 1
+  require_valid_annotations: 1
+  prepare_testing_units: 4
+  extract_gt: 2
+  standardize_gt: 2
+  apply_sex_model: 2
+  join_sample_annotations: 4
+  apply_psap: 4
+  build_sample_candidates: 2
+  build_control_reference: 4
+  build_cohort_report: 4
+
+set-resources:
+  validate_cohort:
+    mem_mb: 4096
+    runtime: 30
+  validate_resources:
+    mem_mb: 4096
+    runtime: 30
+  validate_model:
+    mem_mb: 512
+    runtime: 10
+  merge_validation:
+    mem_mb: 512
+    runtime: 5
+  require_valid_inputs:
+    mem_mb: 512
+    runtime: 5
+  prepare_input_vcf:
+    mem_mb: 4096
+    runtime: 180
+  prepare_coverage:
+    mem_mb: 2048
+    runtime: 60
+  prepare_testing_unit_bed:
+    mem_mb: 2048
+    runtime: 60
+  prepare_cadd_snv:
+    mem_mb: 2048
+    runtime: 360
+  prepare_cadd_indel:
+    mem_mb: 2048
+    runtime: 360
+  prepare_exclusion_resource:
+    mem_mb: 4096
+    runtime: 180
+  combine_exclusions:
+    mem_mb: 4096
+    runtime: 180
+  prepare_combined_exclusions:
+    mem_mb: 4096
+    runtime: 180
+  filter_low_coverage:
+    mem_mb: 4096
+    runtime: 180
+  filter_excluded_records:
+    mem_mb: 4096
+    runtime: 180
+  annotate_variants:
+    mem_mb: 32000
+    runtime: 720
+  summarize_annotations:
+    mem_mb: 1024
+    runtime: 30
+  require_valid_annotations:
+    mem_mb: 512
+    runtime: 5
+  prepare_testing_units:
+    mem_mb: 16000
+    runtime: 180
+  extract_gt:
+    mem_mb: 4096
+    runtime: 120
+  standardize_gt:
+    mem_mb: 8192
+    runtime: 120
+  apply_sex_model:
+    mem_mb: 8192
+    runtime: 120
+  join_sample_annotations:
+    mem_mb: 16000
+    runtime: 180
+  apply_psap:
+    mem_mb: 16000
+    runtime: 360
+  build_sample_candidates:
+    mem_mb: 4096
+    runtime: 60
+  build_control_reference:
+    mem_mb: 16000
+    runtime: 360
+  build_cohort_report:
+    mem_mb: 16000
+    runtime: 360

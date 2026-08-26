@@ -1,0 +1,40 @@
+outdir: psap
+
+run:
+  apply_prefix: my_analysis
+
+inputs:
+  # Compression/indexing is prepared if needed. Records must be left-normalized
+  # and split into biallelic records.
+  vcf: /project/6004529/kisselev/test_cohort.vcf.gz
+  ped: /project/6004529/kisselev/test_cohort.ped
+
+model:
+  unit: gene
+  hemizygote: True
+  score_max: 70
+  include_indels: True
+
+reference:
+  assembly: GRCh38
+  # Used only to verify that the input VCF is already normalized and split.
+  fasta: ~/projects/def-mliu/kisselev/data/reference/GRCh38.p14.fa.gz
+  # Optional retained regions; use a BED/TSV path or NA/none.
+  coverage: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/final.newsort.allchr.gnomad.genome.r3.0.1.goodquality.dp10.bed
+  # Four-column BED for model.unit. The prepared workflow copy harmonizes
+  # compression, indexing, and chromosome aliases such as chr1 versus 1.
+  # Column 4 contains the lookup-table unit ID.
+  testing_unit_bed: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/sorted_splicing_split_merged_genomic_coding_biomart_grch38_107_wchrX.bed.gz
+  # Optional comma-separated BED/TSV/VCF exclusions; use paths or NA/none.
+  variants_exclude: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomad.genomes.r2.0.1.sites.allchr.splitmultiall.notpass.exclude.bed.gz
+  # Lookup IDs must follow model.unit, including the hem_chrX table.
+  lookup_tables:
+    het: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomadgenv3_af_cadd1.6_hg38_lookup_wchrX_gene_het.txt.gz
+    hom: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomadgenv3_af_cadd1.6_hg38_lookup_wchrX_gene_hom.txt.gz
+    hem_chrX: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomadgenv3_af_cadd1.6_hg38_lookup_wchrX_gene_hem_chrX.txt.gz
+  cadd_dir: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/CADD/CADD_v1.6
+  # Optional legacy PAR BED; merged with variants_exclude and filtered once.
+  par_regions: /project/6004529/kisselev/portable-PSAP/par.bed
+
+report:
+  deduplicate_controls: true

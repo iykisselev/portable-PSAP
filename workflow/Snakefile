@@ -1,0 +1,29 @@
+from pathlib import Path
+
+from snakemake.utils import validate
+
+
+configfile: str(Path(workflow.basedir).parent / "config" / "apply.yaml")
+
+validate(
+    config,
+    Path(workflow.basedir) / "schemas" / "config.schema.yaml",
+)
+
+include: "rules/common.smk"
+
+
+rule all:
+    input:
+        str(COHORT_DIR / "cohort_candidates.tsv.gz"),
+        str(COHORT_DIR / "cohort_summary.tsv.gz"),
+        str(COHORT_DIR / "control_variants.tsv.gz")
+
+
+include: "rules/apply/validate.smk"
+include: "rules/apply/prepare.smk"
+include: "rules/apply/variants.smk"
+include: "rules/apply/annotation.smk"
+include: "rules/apply/samples.smk"
+include: "rules/apply/scoring.smk"
+include: "rules/apply/cohort.smk"

@@ -1,0 +1,76 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+type: object
+additionalProperties: false
+required: [outdir, run, inputs, model, reference]
+properties:
+  outdir:
+    type: string
+    minLength: 1
+  run:
+    type: object
+    additionalProperties: false
+    required: [apply_prefix]
+    properties:
+      apply_prefix:
+        type: string
+        minLength: 1
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+  inputs:
+    type: object
+    additionalProperties: false
+    required: [vcf, ped]
+    properties:
+      vcf: {type: string, minLength: 1}
+      ped: {type: string, minLength: 1}
+  model:
+    type: object
+    additionalProperties: false
+    required: [unit, hemizygote, score_max, include_indels]
+    properties:
+      unit:
+        enum: [gene, cadd_region, coding_cadd_region]
+      hemizygote: {type: boolean}
+      score_max: {type: number, exclusiveMinimum: 0}
+      include_indels: {type: boolean}
+  reference:
+    type: object
+    additionalProperties: false
+    required: [assembly, fasta, testing_unit_bed, lookup_tables, cadd_dir]
+    properties:
+      assembly:
+        enum: [GRCh37, GRCh38]
+      fasta: {type: string, minLength: 1}
+      coverage: {type: [string, "null"], minLength: 1}
+      testing_unit_bed:
+        type: string
+        minLength: 1
+      variants_exclude: {type: [string, "null"], minLength: 1}
+      lookup_tables:
+        type: object
+        additionalProperties: false
+        required: [het, hom]
+        properties:
+          het: {type: string, minLength: 1}
+          hom: {type: string, minLength: 1}
+          hem_chrX: {type: string, minLength: 1}
+      cadd_dir: {type: string, minLength: 1}
+      par_regions:
+        type: [string, "null"]
+        minLength: 1
+  report:
+    type: object
+    additionalProperties: false
+    properties:
+      deduplicate_controls: {type: boolean}
+allOf:
+  - if:
+      properties:
+        model:
+          properties:
+            hemizygote: {const: true}
+    then:
+      properties:
+        reference:
+          properties:
+            lookup_tables:
+              required: [hem_chrX]

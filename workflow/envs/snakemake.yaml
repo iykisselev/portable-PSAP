@@ -1,0 +1,9 @@
+name: portable-psap-snakemake
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - snakemake-minimal=9.23
+  - snakemake-executor-plugin-slurm
+  - pandas>=2.0
