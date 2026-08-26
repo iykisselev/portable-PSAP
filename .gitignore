@@ -1,0 +1,19 @@
+# Snakemake and Conda runtime state
+.snakemake/
+
+# Workflow-generated output roots
+psap/
+results/
+logs/
+benchmarks/
+
+# Smoke-test work directories (fixtures remain trackable)
+smoke-work/
+smoke-output/
+
+# Language caches and interactive session state
+__pycache__/
+*.py[cod]
+.Rhistory
+.RData
+.Ruserdata
