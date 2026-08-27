@@ -8,36 +8,37 @@ MODEL_VALIDATION = VALIDATION_DIR / "model.json"
 VALIDATION_REPORT = Path(APPLY_OUTDIR) / "validation.json"
 VALIDATION_LIBRARY = Path(APPLY_SCRIPT_DIR) / "validate_inputs.py"
 
-VALIDATION_VCF = configured_path(config["inputs"]["vcf"])
+VALIDATION_VCF = INPUT_VCF_SOURCE
+VALIDATION_VCF_INDEX = [INPUT_VCF_SOURCE_INDEX] if INPUT_VCF_SOURCE_INDEX else []
 VALIDATION_PED = optional_config_path(config["inputs"].get("ped"))
 VALIDATION_SAMPLES = optional_config_path(config["inputs"].get("samples"))
 VALIDATION_FASTA = configured_reference_path("fasta")
-VALIDATION_FASTA_INDEX = f"{VALIDATION_FASTA}.fai"
-VALIDATION_FASTA_GZI = (
-    [f"{VALIDATION_FASTA}.gzi"] if VALIDATION_FASTA.endswith(".gz") else []
-)
+VALIDATION_FASTA_INDEX = configured_path(REFERENCE_BINDINGS["fasta"]["fai"])
+VALIDATION_FASTA_GZI = [
+    configured_path(REFERENCE_BINDINGS["fasta"]["gzi"])
+] if REFERENCE_BINDINGS["fasta"]["gzi"] is not None else []
 
 VALIDATION_COVERAGE = optional_reference_path("coverage")
 VALIDATION_COVERAGE_INPUT = [VALIDATION_COVERAGE] if VALIDATION_COVERAGE else []
 VALIDATION_TESTING_UNIT_BED = configured_reference_path("testing_unit_bed")
 VALIDATION_VARIANT_EXCLUSIONS = [
-    configured_path(path)
+    binding_data(path)
     for resource, path in zip(
         config["reference"]["exclusions"], REFERENCE_BINDINGS["exclusions"]
     )
     if resource["role"] == "variants_exclude"
 ]
 VALIDATION_PAR_REGIONS = [
-    configured_path(path)
+    binding_data(path)
     for resource, path in zip(
         config["reference"]["exclusions"], REFERENCE_BINDINGS["exclusions"]
     )
     if resource["role"] == "par_regions"
 ]
 
-VALIDATION_CADD_SNV = configured_path(REFERENCE_BINDINGS["cadd"]["snv"])
+VALIDATION_CADD_SNV = binding_data(REFERENCE_BINDINGS["cadd"]["snv"])
 VALIDATION_CADD_INDEL_INPUT = (
-    [configured_path(REFERENCE_BINDINGS["cadd"]["indel"])]
+    [binding_data(REFERENCE_BINDINGS["cadd"]["indel"])]
     if config["model"]["include_indels"]
     else []
 )
@@ -54,20 +55,25 @@ VALIDATION_LOOKUP_HEM_CHRX_INPUT = (
     else []
 )
 
-VALIDATION_INDEXED_RESOURCES = (
-    [VALIDATION_VCF, VALIDATION_TESTING_UNIT_BED, VALIDATION_CADD_SNV]
-    + VALIDATION_COVERAGE_INPUT
-    + VALIDATION_VARIANT_EXCLUSIONS
-    + VALIDATION_PAR_REGIONS
-    + VALIDATION_CADD_INDEL_INPUT
-)
+VALIDATION_CONFIGURED_INDEXES = [
+    index
+    for index in [
+        INPUT_VCF_SOURCE_INDEX,
+        binding_index(REFERENCE_BINDINGS["coverage"]),
+        binding_index(REFERENCE_BINDINGS["testing_unit_bed"]),
+        *(binding_index(binding) for binding in REFERENCE_BINDINGS["exclusions"]),
+        binding_index(REFERENCE_BINDINGS["cadd"]["snv"]),
+        binding_index(REFERENCE_BINDINGS["cadd"]["indel"]),
+    ]
+    if index
+]
 
 
 rule validate_cohort:
     """Validate cohort VCF/metadata/FASTA inputs and write the sample manifest."""
     input:
         vcf=VALIDATION_VCF,
-        vcf_indexes=existing_genomic_indexes(VALIDATION_VCF),
+        vcf_indexes=VALIDATION_VCF_INDEX,
         metadata=VALIDATION_SAMPLES or VALIDATION_PED,
         fasta=VALIDATION_FASTA,
         fasta_index=VALIDATION_FASTA_INDEX,
@@ -114,7 +120,7 @@ rule validate_resources:
         par_regions=VALIDATION_PAR_REGIONS,
         cadd_snv=VALIDATION_CADD_SNV,
         cadd_indel=VALIDATION_CADD_INDEL_INPUT,
-        indexes=existing_genomic_indexes(VALIDATION_INDEXED_RESOURCES),
+        indexes=VALIDATION_CONFIGURED_INDEXES,
         script=str(Path(APPLY_SCRIPT_DIR) / "validate_resources.py"),
         library=str(VALIDATION_LIBRARY)
     output:

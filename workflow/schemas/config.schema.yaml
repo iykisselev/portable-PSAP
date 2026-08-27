@@ -15,7 +15,7 @@ properties:
     additionalProperties: false
     required: [vcf, ped, samples]
     properties:
-      vcf: {type: string, minLength: 1}
+      vcf: {$ref: "#/$defs/indexed_genomic_binding"}
       ped: {type: [string, "null"], minLength: 1}
       samples: {type: [string, "null"], minLength: 1}
     oneOf:
@@ -41,8 +41,10 @@ properties:
         allOf:
           - {$ref: "#/$defs/resource_identity"}
           - type: object
-            required: [optional]
-            properties: {optional: {const: true}}
+            required: [optional, kind]
+            properties:
+              optional: {const: true}
+              kind: {enum: [bed, tsv]}
       testing_unit_bed: {$ref: "#/$defs/resource_identity"}
       exclusions:
         type: array
@@ -84,12 +86,12 @@ properties:
         additionalProperties: false
         required: [fasta, coverage, testing_unit_bed, exclusions, lookup_tables, cadd]
         properties:
-          fasta: {type: string, minLength: 1}
-          coverage: {type: [string, "null"], minLength: 1}
-          testing_unit_bed: {type: string, minLength: 1}
+          fasta: {$ref: "#/$defs/fasta_binding"}
+          coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+          testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
           exclusions:
             type: array
-            items: {type: string, minLength: 1}
+            items: {$ref: "#/$defs/indexed_genomic_binding"}
           lookup_tables:
             type: object
             additionalProperties: false
@@ -103,9 +105,19 @@ properties:
             additionalProperties: false
             required: [snv, indel]
             properties:
-              snv: {type: string, minLength: 1}
-              indel: {type: [string, "null"], minLength: 1}
+              snv: {$ref: "#/$defs/indexed_genomic_binding"}
+              indel: {$ref: "#/$defs/optional_indexed_genomic_binding"}
 allOf:
+  - if:
+      properties: {model: {properties: {include_indels: {const: true}}}}
+    then:
+      properties:
+        bindings:
+          properties:
+            reference:
+              properties:
+                cadd:
+                  properties: {indel: {$ref: "#/$defs/indexed_genomic_binding"}}
   - if:
       properties: {model: {properties: {hemizygote: {const: true}}}}
     then:
@@ -126,3 +138,25 @@ $defs:
         type: [string, "null"]
         pattern: "^[A-Fa-f0-9]{64}$"
       optional: {type: boolean}
+  indexed_genomic_binding:
+    type: object
+    additionalProperties: false
+    required: [data, index]
+    properties:
+      data: {type: string, minLength: 1}
+      index: {type: [string, "null"], minLength: 1}
+  optional_indexed_genomic_binding:
+    type: object
+    additionalProperties: false
+    required: [data, index]
+    properties:
+      data: {type: [string, "null"], minLength: 1}
+      index: {type: [string, "null"], minLength: 1}
+  fasta_binding:
+    type: object
+    additionalProperties: false
+    required: [data, fai, gzi]
+    properties:
+      data: {type: string, minLength: 1}
+      fai: {type: string, minLength: 1}
+      gzi: {type: [string, "null"], minLength: 1}

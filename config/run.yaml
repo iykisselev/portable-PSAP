@@ -5,7 +5,9 @@ run:
   apply_prefix: my_analysis
 
 inputs:
-  vcf: /project/6004529/kisselev/test_cohort.vcf.gz
+  vcf:
+    data: /project/6004529/kisselev/test_cohort.vcf.gz
+    index: /project/6004529/kisselev/test_cohort.vcf.gz.tbi
   # Compatibility ingest; convert this once to samples.tsv when the bundle is mounted.
   ped: /project/6004529/kisselev/test_cohort.ped
   # Use a schema-validated sample TSV instead of ped when it is available.
@@ -13,16 +15,29 @@ inputs:
 
 bindings:
   reference:
-    fasta: ~/projects/def-mliu/kisselev/data/reference/GRCh38.p14.fa.gz
-    coverage: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/final.newsort.allchr.gnomad.genome.r3.0.1.goodquality.dp10.bed
-    testing_unit_bed: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/sorted_splicing_split_merged_genomic_coding_biomart_grch38_107_wchrX.bed.gz
+    fasta:
+      data: ~/projects/def-mliu/kisselev/data/reference/GRCh38.p14.fa.gz
+      fai: ~/projects/def-mliu/kisselev/data/reference/GRCh38.p14.fa.gz.fai
+      gzi: ~/projects/def-mliu/kisselev/data/reference/GRCh38.p14.fa.gz.gzi
+    coverage:
+      data: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/final.newsort.allchr.gnomad.genome.r3.0.1.goodquality.dp10.bed
+      index: null
+    testing_unit_bed:
+      data: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/sorted_splicing_split_merged_genomic_coding_biomart_grch38_107_wchrX.bed.gz
+      index: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/sorted_splicing_split_merged_genomic_coding_biomart_grch38_107_wchrX.bed.gz.tbi
     exclusions:
-      - /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomad.genomes.r2.0.1.sites.allchr.splitmultiall.notpass.exclude.bed.gz
-      - /project/6004529/kisselev/portable-PSAP/par.bed
+      - data: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomad.genomes.r2.0.1.sites.allchr.splitmultiall.notpass.exclude.bed.gz
+        index: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomad.genomes.r2.0.1.sites.allchr.splitmultiall.notpass.exclude.bed.gz.tbi
+      - data: /project/6004529/kisselev/portable-PSAP/par.bed
+        index: null
     lookup_tables:
       het: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomadgenv3_af_cadd1.6_hg38_lookup_wchrX_gene_het.txt.gz
       hom: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomadgenv3_af_cadd1.6_hg38_lookup_wchrX_gene_hom.txt.gz
       hem_chrX: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/gnomadgenv3_af_cadd1.6_hg38_lookup_wchrX_gene_hem_chrX.txt.gz
     cadd:
-      snv: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/CADD/CADD_v1.6/whole_genome_SNVs.tsv.gz
-      indel: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/CADD/CADD_v1.6/InDels.tsv.gz
+      snv:
+        data: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/CADD/CADD_v1.6/whole_genome_SNVs.tsv.gz
+        index: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/CADD/CADD_v1.6/whole_genome_SNVs.tsv.gz.tbi
+      indel:
+        data: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/CADD/CADD_v1.6/InDels.tsv.gz
+        index: /project/6004529/mliu/Shared_Data/OvarianAgeing/Easy-PSAP/snakemake_apply_PSAP/resources/CADD/CADD_v1.6/InDels.tsv.gz.tbi

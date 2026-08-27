@@ -13,7 +13,7 @@ reference:
   assembly: GRCh38
   # Immutable resource identities; physical locations belong in config/run.yaml.
   fasta: {id: GRCh38.p14, sha256: null}
-  coverage: {id: gnomad-genomes-r3-dp10, sha256: null, optional: true}
+  coverage: {id: gnomad-genomes-r3-dp10, sha256: null, optional: true, kind: bed}
   testing_unit_bed: {id: biomart-grch38-107-gene, sha256: null}
   # Source order is scientific: exclusions are projected and combined in this order.
   exclusions:
