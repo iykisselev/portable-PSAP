@@ -314,4 +314,6 @@ main <- function() {
 }
 
 
-main()
+if (sys.nframe() == 0) {
+    main()
+}
