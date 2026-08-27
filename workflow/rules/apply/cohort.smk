@@ -4,9 +4,7 @@ rule build_sample_candidates:
     """
     input:
         psap=rules.apply_psap.output.psap,
-        sample_manifest=validated_manifest_path,
-        script=str(APPLY_SCRIPT_DIR / "build_sample_candidates.R"),
-        libraries=R_RUNTIME_FILES
+        sample_manifest=validated_manifest_path
     output:
         candidates=ensure(
             str(CANDIDATE_DIR / "{sample}.{testing_unit}.tsv.gz"),
@@ -34,16 +32,8 @@ rule build_sample_candidates:
             / "cohort"
             / "build_sample_candidates_{sample}_{testing_unit}.log"
         )
-    shell:
-        """
-        Rscript {input.script:q} \
-            --input {input.psap:q} \
-            --pid {params.pid:q} \
-            --sex {params.sex:q} \
-            --output {output.candidates:q} \
-            --threads {threads} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(APPLY_SCRIPT_DIR / "build_sample_candidates.R")
 
 
 rule build_control_reference:
@@ -54,9 +44,7 @@ rule build_control_reference:
         validated=validation_marker,
         sample_manifest=validated_manifest_path,
         annotated=control_annotated_tables,
-        psap=control_psap_tables,
-        script=str(APPLY_SCRIPT_DIR / "build_control_reference.R"),
-        libraries=R_RUNTIME_FILES
+        psap=control_psap_tables
     output:
         control_variants=ensure(
             str(COHORT_DIR / "control_variants.tsv.gz"),
@@ -66,11 +54,7 @@ rule build_control_reference:
         pids=control_pids,
         sexes=control_sexes,
         hemizygote=config["model"]["hemizygote"],
-        deduplicate=(
-            "--deduplicate"
-            if config.get("report", {}).get("deduplicate_controls", True)
-            else ""
-        )
+        deduplicate=config.get("report", {}).get("deduplicate_controls", True)
     threads: 4
     resources:
         mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 16000, 256),
@@ -89,19 +73,8 @@ rule build_control_reference:
             / "cohort"
             / "build_control_reference.log"
         )
-    shell:
-        """
-        Rscript {input.script:q} \
-            --input {input.annotated:q} \
-            --psap-input {input.psap:q} \
-            --pid {params.pids:q} \
-            --sex {params.sexes:q} \
-            --hemizygote {params.hemizygote} \
-            {params.deduplicate} \
-            --output {output.control_variants:q} \
-            --threads {threads} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(APPLY_SCRIPT_DIR / "build_control_reference.R")
 
 
 rule build_cohort_report:
@@ -110,9 +83,7 @@ rule build_cohort_report:
     """
     input:
         candidates=affected_candidate_tables,
-        controls=rules.build_control_reference.output.control_variants,
-        script=str(APPLY_SCRIPT_DIR / "build_cohort_report.R"),
-        libraries=R_RUNTIME_FILES
+        controls=rules.build_control_reference.output.control_variants
     output:
         candidates=ensure(
             str(COHORT_DIR / "cohort_candidates.tsv.gz"),
@@ -140,13 +111,5 @@ rule build_cohort_report:
             / "cohort"
             / "build_cohort_report.log"
         )
-    shell:
-        """
-        Rscript {input.script:q} \
-            --candidates {input.candidates:q} \
-            --controls {input.controls:q} \
-            --output-candidates {output.candidates:q} \
-            --output-summary {output.summary:q} \
-            --threads {threads} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(APPLY_SCRIPT_DIR / "build_cohort_report.R")

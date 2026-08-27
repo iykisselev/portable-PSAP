@@ -6,9 +6,7 @@ suppressPackageStartupMessages({
     library(data.table)
 })
 
-script_path <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
-source(file.path(dirname(normalizePath(script_path)), "bootstrap.R"))
-rm(script_path)
+source(file.path(snakemake@scriptdir, "bootstrap.R"))
 
 options(scipen = 999)
 
@@ -85,6 +83,33 @@ parse_cli <- function(args) {
     parsed$sex_value <- vapply(parsed$sex, parse_sex, numeric(1))
     parsed$hemizygote_model <- parse_bool(parsed$hemizygote, "--hemizygote")
     parsed
+}
+
+
+workflow_config <- function() {
+    inputs <- as.character(snakemake@input[["annotated"]])
+    psap_inputs <- as.character(snakemake@input[["psap"]])
+    pids <- as.character(snakemake@params[["pids"]])
+    sexes <- as.character(snakemake@params[["sexes"]])
+    lengths <- c(
+        input = length(inputs), psap_input = length(psap_inputs),
+        pid = length(pids), sex = length(sexes)
+    )
+    if (length(unique(lengths)) != 1L) {
+        abort("Control input counts differ: %s", paste(names(lengths), lengths, sep = "=", collapse = ", "))
+    }
+    list(
+        input = inputs,
+        psap_input = psap_inputs,
+        pid = pids,
+        sex_value = vapply(sexes, parse_sex, numeric(1)),
+        hemizygote_model = parse_bool(
+            as.character(snakemake@params[["hemizygote"]]), "model.hemizygote"
+        ),
+        deduplicate = isTRUE(snakemake@params[["deduplicate"]]),
+        output = snakemake@output[["control_variants"]],
+        threads = snakemake@threads
+    )
 }
 
 
@@ -261,8 +286,7 @@ attach_psap <- function(evidence, scores) {
 }
 
 
-main <- function() {
-    config <- parse_cli(commandArgs(trailingOnly = TRUE))
+run <- function(config) {
     setDTthreads(config$threads)
 
     if (length(config$input) == 0L) {
@@ -314,6 +338,4 @@ main <- function() {
 }
 
 
-if (sys.nframe() == 0) {
-    main()
-}
+run(workflow_config())

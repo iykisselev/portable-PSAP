@@ -3,38 +3,24 @@
 # Construct patient-specific candidates from one affected sample's PSAP output.
 
 suppressPackageStartupMessages({
-    library(argparse)
     library(data.table)
 })
 
-script_path <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
-source(file.path(dirname(normalizePath(script_path)), "bootstrap.R"))
-rm(script_path)
+source(file.path(snakemake@scriptdir, "bootstrap.R"))
 
 options(scipen = 999)
 
 
-parse_cli <- function(args) {
-    parser <- ArgumentParser(
-        description = "Build candidates for one affected sample."
+workflow_config <- function() {
+    pid <- as.character(snakemake@params[["pid"]])
+    if (!nzchar(trimws(pid))) abort("Sample ID must be non-empty")
+    list(
+        input = snakemake@input[["psap"]],
+        pid = pid,
+        sex_value = parse_sex(as.character(snakemake@params[["sex"]])),
+        output = snakemake@output[["candidates"]],
+        threads = snakemake@threads
     )
-
-    parser$add_argument("--input", required = TRUE)
-    parser$add_argument("--pid", required = TRUE)
-    parser$add_argument("--sex", required = TRUE)
-    parser$add_argument("--output", required = TRUE)
-    parser$add_argument("--threads", type = "integer", default = 1L)
-
-    parsed <- parser$parse_args(args = args)
-
-    require_positive_threads(parsed$threads)
-
-    if (!nzchar(trimws(parsed$pid))) {
-        abort("--pid must be non-empty")
-    }
-
-    parsed$sex_value <- parse_sex(parsed$sex)
-    parsed
 }
 
 
@@ -140,8 +126,7 @@ build_candidates <- function(psap, pid, sex) {
 }
 
 
-main <- function() {
-    config <- parse_cli(commandArgs(trailingOnly = TRUE))
+run <- function(config) {
     setDTthreads(config$threads)
 
     psap <- read_psap(config$input)
@@ -162,6 +147,4 @@ main <- function() {
 }
 
 
-if (sys.nframe() == 0) {
-    main()
-}
+run(workflow_config())

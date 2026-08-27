@@ -3,13 +3,10 @@
 # Validate affected candidates against unaffected carried-variant evidence.
 
 suppressPackageStartupMessages({
-    library(argparse)
     library(data.table)
 })
 
-script_path <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
-source(file.path(dirname(normalizePath(script_path)), "bootstrap.R"))
-rm(script_path)
+source(file.path(snakemake@scriptdir, "bootstrap.R"))
 
 options(scipen = 999)
 
@@ -29,6 +26,17 @@ parse_cli <- function(args) {
     require_positive_threads(parsed$threads)
 
     parsed
+}
+
+
+workflow_config <- function() {
+    list(
+        candidates = as.character(snakemake@input[["candidates"]]),
+        controls = snakemake@input[["controls"]],
+        output_candidates = snakemake@output[["candidates"]],
+        output_summary = snakemake@output[["summary"]],
+        threads = snakemake@threads
+    )
 }
 
 
@@ -289,8 +297,7 @@ validate_candidates <- function(candidates, controls) {
 }
 
 
-main <- function() {
-    config <- parse_cli(commandArgs(trailingOnly = TRUE))
+run <- function(config) {
     setDTthreads(config$threads)
 
     candidates <- read_candidate_tables(config$candidates)
@@ -321,6 +328,4 @@ main <- function() {
 }
 
 
-if (sys.nframe() == 0) {
-    main()
-}
+run(workflow_config())
