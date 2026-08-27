@@ -223,8 +223,7 @@ rule merge_validation:
     input:
         cohort=rules.validate_cohort.output.report,
         resources=rules.validate_resources.output.report,
-        model=rules.validate_model.output.report,
-        script=str(Path(APPLY_SCRIPT_DIR) / "merge_validation.py")
+        model=rules.validate_model.output.report
     output:
         report=protected(ensure(str(VALIDATION_REPORT), non_empty=True))
     threads: 1
@@ -237,23 +236,15 @@ rule merge_validation:
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "merge.log")
-    shell:
-        """
-        python {input.script:q} \
-            --fragment {input.cohort:q} \
-            --fragment {input.resources:q} \
-            --fragment {input.model:q} \
-            --output {output.report:q} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "merge_validation.py")
 
 
 checkpoint require_valid_inputs:
     """Gate expensive workflow rules on the merged validation report."""
     input:
         report=rules.merge_validation.output.report,
-        manifest=rules.validate_cohort.output.manifest,
-        script=str(Path(APPLY_SCRIPT_DIR) / "require_valid_inputs.py")
+        manifest=rules.validate_cohort.output.manifest
     output:
         ok=ensure(str(Path(APPLY_OUTDIR) / "validation.ok"), non_empty=True)
     threads: 1
@@ -266,10 +257,5 @@ checkpoint require_valid_inputs:
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "require_valid_inputs.log")
-    shell:
-        """
-        python {input.script:q} \
-            --report {input.report:q} \
-            --output {output.ok:q} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "require_valid_inputs.py")
