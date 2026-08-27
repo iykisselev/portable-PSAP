@@ -53,12 +53,11 @@ rule annotate_variants:
 rule summarize_annotations:
     """Report complete annotation misses before any per-sample scoring."""
     input:
-        annotations=rules.annotate_variants.output.annotations,
-        script=str(APPLY_SCRIPT_DIR / "summarize_annotations.py")
+        annotations=rules.annotate_variants.output.annotations
     output:
         report=ensure(str(ANNOTATION_QC_REPORT), non_empty=True)
     params:
-        include_indels=str(INCLUDE_INDELS)
+        include_indels=INCLUDE_INDELS
     threads: 1
     resources:
         mem_mb=1024,
@@ -72,21 +71,14 @@ rule summarize_annotations:
             LOG_DIR / "apply" / config["run"]["apply_prefix"] /
             "annotation" / "summarize_annotations.log"
         )
-    shell:
-        """
-        python {input.script:q} \
-            --annotations {input.annotations:q} \
-            --include-indels {params.include_indels:q} \
-            --output {output.report:q} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "summarize_annotations.py")
 
 
 rule require_valid_annotations:
     """Stop the workflow when an enabled annotation source matched nothing."""
     input:
-        report=rules.summarize_annotations.output.report,
-        script=str(APPLY_SCRIPT_DIR / "require_valid_annotations.py")
+        report=rules.summarize_annotations.output.report
     output:
         ok=ensure(str(ANNOTATION_QC_OK), non_empty=True)
     threads: 1
@@ -102,13 +94,8 @@ rule require_valid_annotations:
             LOG_DIR / "apply" / config["run"]["apply_prefix"] /
             "annotation" / "require_valid_annotations.log"
         )
-    shell:
-        """
-        python {input.script:q} \
-            --report {input.report:q} \
-            --output {output.ok:q} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "require_valid_annotations.py")
 
 
 rule prepare_testing_units:
