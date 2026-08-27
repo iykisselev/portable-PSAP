@@ -34,10 +34,16 @@ rule apply_psap:
         ),
         score_max=str(config["model"]["score_max"]),
         hemizygote=config["model"]["hemizygote"]
-    threads: 1
+    threads: 4
+    resources:
+        mem_mb=16000,
+        runtime=360
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: "r/4.3.3"
+    envmodules: mod("r")
+    container: sif("r")
+    benchmark:
+        str(BENCHMARK_DIR / "apply_psap_{sample}_{testing_unit}.tsv")
     log:
         str(
             LOG_DIR / "apply" / f'{config["run"]["apply_prefix"]}' / "samples" /

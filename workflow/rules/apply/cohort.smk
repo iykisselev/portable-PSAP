@@ -18,11 +18,14 @@ rule build_sample_candidates:
     params:
         pid=lambda wc: wc.sample,
         sex=affected_sample_sex
-    threads: 1
+    threads: 2
+    resources:
+        mem_mb=4096,
+        runtime=60
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules:
-        "r/4.3.3"
+    envmodules: mod("r")
+    container: sif("r")
     log:
         str(
             LOG_DIR
@@ -68,11 +71,16 @@ rule build_control_reference:
             if config.get("report", {}).get("deduplicate_controls", True)
             else ""
         )
-    threads: 1
+    threads: 4
+    resources:
+        mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 16000, 256),
+        runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 360, 20)
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules:
-        "r/4.3.3"
+    envmodules: mod("r")
+    container: sif("r")
+    benchmark:
+        str(BENCHMARK_DIR / "build_control_reference.tsv")
     log:
         str(
             LOG_DIR
@@ -114,11 +122,16 @@ rule build_cohort_report:
             str(COHORT_DIR / "cohort_summary.tsv.gz"),
             non_empty=True,
         )
-    threads: 1
+    threads: 4
+    resources:
+        mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 16000, 256),
+        runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 360, 20)
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules:
-        "r/4.3.3"
+    envmodules: mod("r")
+    container: sif("r")
+    benchmark:
+        str(BENCHMARK_DIR / "build_cohort_report.tsv")
     log:
         str(
             LOG_DIR

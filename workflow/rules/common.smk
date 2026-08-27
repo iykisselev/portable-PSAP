@@ -1,5 +1,8 @@
 from pathlib import Path
 import re
+import math
+
+import yaml
 
 import pandas as pd
 
@@ -15,6 +18,49 @@ REFERENCE_BINDINGS = config["bindings"]["reference"]
 APPLY_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "apply"
 R_LIB_DIR = Path(workflow.basedir) / "lib" / "r"
 CONDA_ENV_DIR = Path(workflow.basedir) / "envs"
+DEPLOYMENT_DIR = Path(workflow.basedir)
+
+
+def _load_deployment_map(filename):
+    with (DEPLOYMENT_DIR / filename).open(encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+ENVMODULES = _load_deployment_map("envmodules.yaml")
+CONTAINERS = _load_deployment_map("containers.yaml")
+
+
+def mod(*tools):
+    """Expand logical tool names into an ordered, de-duplicated module list."""
+    modules = []
+    for tool in tools:
+        for module in ENVMODULES[tool]:
+            if module not in modules:
+                modules.append(module)
+    return modules
+
+
+def sif(tool):
+    """Return the logical tool's pinned Apptainer/Singularity image reference."""
+    return CONTAINERS[tool]
+
+
+def _input_size_mb(input_files):
+    return sum(
+        path.stat().st_size / (1024 * 1024)
+        for item in input_files
+        if (path := Path(str(item))).is_file()
+    )
+
+
+def scaled_mem_mb(wildcards, input, attempt, baseline_mb, mb_per_gb=0):
+    """Scale expensive jobs by declared input size and retry attempt."""
+    return int((baseline_mb + math.ceil(_input_size_mb(input) / 1024) * mb_per_gb) * attempt)
+
+
+def scaled_runtime_minutes(wildcards, input, attempt, baseline_minutes, minutes_per_gb=0):
+    """Scale runtime with the same portable, scheduler-independent estimate."""
+    return int((baseline_minutes + math.ceil(_input_size_mb(input) / 1024) * minutes_per_gb) * attempt)
 R_RUNTIME_FILES = [
     str(APPLY_SCRIPT_DIR / "bootstrap.R"),
     str(R_LIB_DIR / "common.R"),
@@ -42,6 +88,7 @@ SCORED_DIR = APPLY_OUTDIR / "scored"
 CANDIDATE_DIR = APPLY_OUTDIR / "candidates"
 COHORT_DIR = APPLY_OUTDIR / "cohort"
 PREPARED_DIR = APPLY_OUTDIR / "prepared"
+BENCHMARK_DIR = APPLY_OUTDIR / "benchmarks"
 
 
 def tabix_index(path):

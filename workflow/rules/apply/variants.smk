@@ -18,11 +18,14 @@ rule filter_low_coverage:
     output:
         bcf=ensure(str(FILTERED_BCF), non_empty=True),
         csi=ensure(str(FILTERED_BCF) + ".csi", non_empty=True)
-    threads: 1
+    threads: 4
+    resources:
+        mem_mb=4096,
+        runtime=180
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "variants" / "filter_low_coverage.log")
     params:
@@ -69,11 +72,14 @@ rule filter_excluded_records:
     output:
         vcf=ensure(str(FILTERED_VCF), non_empty=True),
         csi=ensure(str(FILTERED_VCF) + ".csi", non_empty=True)
-    threads: 1
+    threads: 4
+    resources:
+        mem_mb=4096,
+        runtime=180
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "variants" / "filter_excluded_records.log")
     params:

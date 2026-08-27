@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from snakemake.utils import validate
+from snakemake.utils import min_version
 
+min_version("8.0")
 
 # Scientific settings are versioned separately from site/run bindings.  A caller may
 # overlay a different run manifest with --configfile without changing science.
@@ -14,6 +16,10 @@ validate(
 )
 
 include: "rules/common.smk"
+
+# Control-plane checks are fast and inspect small reports; keeping them local avoids
+# scheduler latency without moving any computational work into the submission host.
+localrules: validate_cohort, validate_resources, validate_model, merge_validation, require_valid_inputs, summarize_annotations, require_valid_annotations
 
 
 rule all:

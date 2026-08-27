@@ -81,11 +81,13 @@ rule validate_cohort:
         hemizygote_model=str(config["model"]["hemizygote"]),
         metadata_kind="samples" if VALIDATION_SAMPLES else "ped"
     threads: 1
+    resources:
+        mem_mb=4096,
+        runtime=30
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("validation")
+    container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "cohort.log")
     shell:
@@ -137,11 +139,13 @@ rule validate_resources:
         unit=str(config["model"]["unit"]),
         include_indels=str(config["model"]["include_indels"])
     threads: 1
+    resources:
+        mem_mb=4096,
+        runtime=30
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("validation")
+    container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "resources.log")
     shell:
@@ -182,10 +186,13 @@ rule validate_model:
         hemizygote_model=str(config["model"]["hemizygote"]),
         include_indels=str(config["model"]["include_indels"])
     threads: 1
+    resources:
+        mem_mb=512,
+        runtime=10
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules:
-        "python/3.11.8"
+    envmodules: mod("validation")
+    container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "model.log")
     shell:
@@ -215,10 +222,13 @@ rule merge_validation:
     output:
         report=protected(ensure(str(VALIDATION_REPORT), non_empty=True))
     threads: 1
+    resources:
+        mem_mb=512,
+        runtime=5
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules:
-        "python/3.11.8"
+    envmodules: mod("validation")
+    container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "merge.log")
     shell:
@@ -241,10 +251,13 @@ checkpoint require_valid_inputs:
     output:
         ok=ensure(str(Path(APPLY_OUTDIR) / "validation.ok"), non_empty=True)
     threads: 1
+    resources:
+        mem_mb=512,
+        runtime=5
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules:
-        "python/3.11.8"
+    envmodules: mod("validation")
+    container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "require_valid_inputs.log")
     shell:

@@ -88,11 +88,13 @@ rule prepare_input_vcf:
     params:
         script=PREPARATION_SCRIPT
     threads: 1
+    resources:
+        mem_mb=4096,
+        runtime=180
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "input_vcf.log")
     shell:
@@ -115,11 +117,13 @@ rule prepare_coverage:
         script=PREPARATION_SCRIPT,
         kind=COVERAGE_KIND
     threads: 1
+    resources:
+        mem_mb=2048,
+        runtime=60
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "coverage.log")
     shell:
@@ -142,11 +146,13 @@ rule prepare_testing_unit_bed:
     params:
         script=PREPARATION_SCRIPT
     threads: 1
+    resources:
+        mem_mb=2048,
+        runtime=60
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "testing_units.log")
     shell:
@@ -169,11 +175,15 @@ rule prepare_cadd_snv:
     params:
         script=PREPARATION_SCRIPT
     threads: 1
+    resources:
+        mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 2048, 256),
+        runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 360, 20)
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
+    benchmark:
+        str(BENCHMARK_DIR / "prepare_cadd_snv.tsv")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "cadd_snv.log")
     shell:
@@ -197,11 +207,15 @@ rule prepare_cadd_indel:
     params:
         script=PREPARATION_SCRIPT
     threads: 1
+    resources:
+        mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 2048, 256),
+        runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 360, 20)
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
+    benchmark:
+        str(BENCHMARK_DIR / "prepare_cadd_indel.tsv")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "cadd_indel.log")
     shell:
@@ -225,11 +239,13 @@ rule prepare_exclusion_resource:
     wildcard_constraints:
         item=r"\d{3}"
     threads: 1
+    resources:
+        mem_mb=4096,
+        runtime=180
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "exclusion_{item}.log")
     shell:
@@ -257,10 +273,13 @@ rule combine_exclusions:
             for item in EXCLUSION_IDS
         )
     threads: 1
+    resources:
+        mem_mb=4096,
+        runtime=180
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules:
-        "python/3.11.8"
+    envmodules: mod("validation")
+    container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "combine_exclusions.log")
     shell:
@@ -281,11 +300,13 @@ rule prepare_combined_exclusions:
     params:
         script=PREPARATION_SCRIPT
     threads: 1
+    resources:
+        mem_mb=4096,
+        runtime=180
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "samtools/1.20",
-        "python/3.11.8"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "combined_exclusions.log")
     shell:

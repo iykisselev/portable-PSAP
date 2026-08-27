@@ -1,0 +1,16 @@
+snakefile: workflow/Snakefile
+executor: slurm
+jobs: 50
+local-cores: 1
+software-deployment-method:
+  - conda
+conda-prefix: .snakemake/conda
+latency-wait: 120
+rerun-incomplete: true
+restart-times: 0
+printshellcmds: true
+show-failed-logs: true
+
+default-resources:
+  mem_mb: 2048
+  runtime: 60

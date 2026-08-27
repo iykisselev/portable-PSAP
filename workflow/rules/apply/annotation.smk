@@ -48,12 +48,16 @@ rule annotate_variants:
             if INCLUDE_INDELS
             else "bcftools view -Ou -"
         )
-    threads: 1
+    threads: 8
+    resources:
+        mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 32000, 512),
+        runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 720, 30)
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "CCEnv",
-        "samtools/1.20"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
+    benchmark:
+        str(BENCHMARK_DIR / "annotate_variants.tsv")
     log:
         str(
             LOG_DIR / "apply" / config["run"]["apply_prefix"] /
@@ -105,10 +109,13 @@ rule summarize_annotations:
     params:
         include_indels=str(INCLUDE_INDELS)
     threads: 1
+    resources:
+        mem_mb=1024,
+        runtime=30
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules:
-        "python/3.11.8"
+    envmodules: mod("validation")
+    container: sif("validation")
     log:
         str(
             LOG_DIR / "apply" / config["run"]["apply_prefix"] /
@@ -132,10 +139,13 @@ rule require_valid_annotations:
     output:
         ok=ensure(str(ANNOTATION_QC_OK), non_empty=True)
     threads: 1
+    resources:
+        mem_mb=512,
+        runtime=5
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
-    envmodules:
-        "python/3.11.8"
+    envmodules: mod("validation")
+    container: sif("validation")
     log:
         str(
             LOG_DIR / "apply" / config["run"]["apply_prefix"] /
@@ -161,11 +171,14 @@ rule prepare_testing_units:
         libraries=R_RUNTIME_FILES
     output:
         unit_table=ensure(str(TESTING_UNIT_TABLE), non_empty=True)
-    threads: 1
+    threads: 4
+    resources:
+        mem_mb=16000,
+        runtime=180
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules:
-        "r/4.3.3"
+    envmodules: mod("r")
+    container: sif("r")
     log:
         str(
             LOG_DIR / "apply" / config["run"]["apply_prefix"] /

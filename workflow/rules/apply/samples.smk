@@ -10,12 +10,14 @@ rule extract_gt:
         sample=SAMPLE_PATTERN
     params:
         sample=lambda wc: wc.sample
-    threads: 1
+    threads: 2
+    resources:
+        mem_mb=4096,
+        runtime=120
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
-    envmodules:
-        "CCEnv",
-        "samtools/1.20"
+    envmodules: mod("bioinformatics")
+    container: sif("bioinformatics")
     log:
         str(
             LOG_DIR / "apply" / config["run"]["apply_prefix"] / "samples" /
@@ -45,11 +47,14 @@ rule standardize_gt:
         hemizygote_model=config["model"]["hemizygote"]
     wildcard_constraints:
         sample=SAMPLE_PATTERN
-    threads: 1
+    threads: 2
+    resources:
+        mem_mb=8192,
+        runtime=120
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules:
-        "r/4.3.3"
+    envmodules: mod("r")
+    container: sif("r")
     log:
         str(
             LOG_DIR / "apply" / config["run"]["apply_prefix"] / "samples" /
@@ -83,11 +88,14 @@ rule apply_sex_model:
     params:
         sex=sample_sex,
         hemizygote_model=config["model"]["hemizygote"]
-    threads: 1
+    threads: 2
+    resources:
+        mem_mb=8192,
+        runtime=120
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules:
-        "r/4.3.3"
+    envmodules: mod("r")
+    container: sif("r")
     log:
         str(
             LOG_DIR / "apply" / config["run"]["apply_prefix"] / "samples" /
@@ -123,11 +131,14 @@ rule join_sample_annotations:
     wildcard_constraints:
         sample=SAMPLE_PATTERN,
         testing_unit=TESTING_UNIT_PATTERN
-    threads: 1
+    threads: 4
+    resources:
+        mem_mb=16000,
+        runtime=180
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
-    envmodules:
-        "r/4.3.3"
+    envmodules: mod("r")
+    container: sif("r")
     log:
         str(
             LOG_DIR / "apply" / config["run"]["apply_prefix"] / "samples" /
