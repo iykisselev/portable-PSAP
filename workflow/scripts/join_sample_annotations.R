@@ -8,7 +8,9 @@ suppressPackageStartupMessages({
     library(data.table)
 })
 
-source(file.path(snakemake@scriptdir, "bootstrap.R"))
+if (exists("snakemake", inherits = FALSE)) {
+    source(file.path(snakemake@scriptdir, "bootstrap.R"))
+}
 
 options(scipen = 999)
 
@@ -120,4 +122,6 @@ run <- function(config) {
 }
 
 
-run(workflow_config())
+if (exists("snakemake", inherits = FALSE)) {
+    run(workflow_config())
+}

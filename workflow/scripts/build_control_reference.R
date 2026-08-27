@@ -6,84 +6,11 @@ suppressPackageStartupMessages({
     library(data.table)
 })
 
-source(file.path(snakemake@scriptdir, "bootstrap.R"))
+if (exists("snakemake", inherits = FALSE)) {
+    source(file.path(snakemake@scriptdir, "bootstrap.R"))
+}
 
 options(scipen = 999)
-
-
-parse_cli <- function(args) {
-    parsed <- list(
-        input = character(),
-        psap_input = character(),
-        pid = character(),
-        sex = character(),
-        hemizygote = NULL,
-        deduplicate = FALSE,
-        output = NULL,
-        threads = 1L
-    )
-    list_options <- c("input", "psap-input", "pid", "sex")
-    scalar_options <- c("hemizygote", "output", "threads")
-    option_names <- c(list_options, scalar_options, "deduplicate")
-
-    i <- 1L
-    while (i <= length(args)) {
-        option <- sub("^--", "", args[[i]])
-        if (!startsWith(args[[i]], "--") || !(option %in% option_names)) {
-            abort("Unknown or misplaced argument: %s", args[[i]])
-        }
-
-        if (option == "deduplicate") {
-            parsed$deduplicate <- TRUE
-            i <- i + 1L
-            next
-        }
-
-        if (option %in% list_options) {
-            values <- character()
-            i <- i + 1L
-            while (i <= length(args) && !startsWith(args[[i]], "--")) {
-                values <- c(values, args[[i]])
-                i <- i + 1L
-            }
-            parsed[[gsub("-", "_", option, fixed = TRUE)]] <- values
-            next
-        }
-
-        if (i == length(args) || startsWith(args[[i + 1L]], "--")) {
-            abort("--%s requires a value", option)
-        }
-        value <- args[[i + 1L]]
-        parsed[[gsub("-", "_", option, fixed = TRUE)]] <- value
-        i <- i + 2L
-    }
-
-    if (is.null(parsed$hemizygote)) abort("--hemizygote is required")
-    if (is.null(parsed$output) || !nzchar(parsed$output)) {
-        abort("--output is required")
-    }
-    parsed$threads <- suppressWarnings(as.integer(parsed$threads))
-    if (is.na(parsed$threads)) abort("--threads must be an integer")
-
-    lengths <- c(
-        input = length(parsed$input),
-        psap_input = length(parsed$psap_input),
-        pid = length(parsed$pid),
-        sex = length(parsed$sex)
-    )
-    if (length(unique(lengths)) != 1L) {
-        abort(
-            "--input, --psap-input, --pid, and --sex counts differ: %s",
-            paste(names(lengths), lengths, sep = "=", collapse = ", ")
-        )
-    }
-
-    require_positive_threads(parsed$threads)
-
-    parsed$sex_value <- vapply(parsed$sex, parse_sex, numeric(1))
-    parsed$hemizygote_model <- parse_bool(parsed$hemizygote, "--hemizygote")
-    parsed
-}
 
 
 workflow_config <- function() {
@@ -338,4 +265,6 @@ run <- function(config) {
 }
 
 
-run(workflow_config())
+if (exists("snakemake", inherits = FALSE)) {
+    run(workflow_config())
+}

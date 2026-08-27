@@ -1,9 +1,13 @@
-script_args <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
-if (length(script_args) != 1L) {
-    stop("Could not determine the executing R script path", call. = FALSE)
+if (exists("snakemake", inherits = FALSE)) {
+    PSAP_SCRIPT_DIR <- normalizePath(snakemake@scriptdir, mustWork = TRUE)
+} else {
+    script_args <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+    if (length(script_args) != 1L) {
+        stop("Could not determine the executing R script path", call. = FALSE)
+    }
+    PSAP_SCRIPT_DIR <- dirname(normalizePath(sub("^--file=", "", script_args)))
 }
 
-PSAP_SCRIPT_DIR <- dirname(normalizePath(sub("^--file=", "", script_args)))
 PSAP_R_LIB_DIR <- normalizePath(
     file.path(PSAP_SCRIPT_DIR, "..", "lib", "r"),
     mustWork = TRUE

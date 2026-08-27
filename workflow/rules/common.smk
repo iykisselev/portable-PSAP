@@ -100,16 +100,6 @@ def binding_index(binding):
     """Return only an index explicitly supplied by the run binding."""
     return optional_config_path(binding.get("index"))
 
-R_RUNTIME_FILES = [
-    str(APPLY_SCRIPT_DIR / "bootstrap.R"),
-    str(R_LIB_DIR / "common.R"),
-    str(R_LIB_DIR / "table_contracts.R"),
-    str(R_LIB_DIR / "variant_identity.R"),
-    str(R_LIB_DIR / "disease_models.R"),
-    str(R_LIB_DIR / "genotypes.R"),
-    str(R_LIB_DIR / "lookup_contracts.R"),
-]
-
 ANNOTATION_DIR = APPLY_OUTDIR / "annotations"
 SAMPLE_MANIFEST_PATH = APPLY_OUTDIR / "sample_manifest.tsv"
 

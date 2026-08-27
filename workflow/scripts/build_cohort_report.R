@@ -6,27 +6,11 @@ suppressPackageStartupMessages({
     library(data.table)
 })
 
-source(file.path(snakemake@scriptdir, "bootstrap.R"))
+if (exists("snakemake", inherits = FALSE)) {
+    source(file.path(snakemake@scriptdir, "bootstrap.R"))
+}
 
 options(scipen = 999)
-
-
-parse_cli <- function(args) {
-    parser <- ArgumentParser(
-        description = "Build detailed and summarized PSAP cohort reports."
-    )
-
-    parser$add_argument("--candidates", nargs = "+", required = TRUE)
-    parser$add_argument("--controls", required = TRUE)
-    parser$add_argument("--output-candidates", required = TRUE)
-    parser$add_argument("--output-summary", required = TRUE)
-    parser$add_argument("--threads", type = "integer", default = 1L)
-
-    parsed <- parser$parse_args(args = args)
-    require_positive_threads(parsed$threads)
-
-    parsed
-}
 
 
 workflow_config <- function() {
@@ -328,4 +312,6 @@ run <- function(config) {
 }
 
 
-run(workflow_config())
+if (exists("snakemake", inherits = FALSE)) {
+    run(workflow_config())
+}
