@@ -1,6 +1,3 @@
-import shlex
-
-
 LOOKUP_TABLES = {
     name: configured_path(path)
     for name, path in REFERENCE_BINDINGS["lookup_tables"].items()
@@ -14,8 +11,6 @@ rule apply_psap:
     """
     input:
         annotated_gt=rules.join_sample_annotations.output.annotated_gt,
-        script=str(APPLY_SCRIPT_DIR / "apply_psap.R"),
-        libraries=R_RUNTIME_FILES,
         lookup_het=LOOKUP_TABLES["het"],
         lookup_hom=LOOKUP_TABLES["hom"],
         lookup_hem_chrx=(
@@ -28,10 +23,6 @@ rule apply_psap:
         )
 
     params:
-        lookup_hem_chrx_arg=lambda wc, input: (
-            f"--lookup-hem-chrx {shlex.quote(str(input.lookup_hem_chrx[0]))}"
-            if input.lookup_hem_chrx else ""
-        ),
         score_max=str(config["model"]["score_max"]),
         hemizygote=config["model"]["hemizygote"]
     threads: 4
@@ -49,16 +40,5 @@ rule apply_psap:
             LOG_DIR / "apply" / f'{config["run"]["apply_prefix"]}' / "samples" /
             "apply_psap_{sample}_{testing_unit}.log"
         )
-    shell:
-        """
-        Rscript {input.script:q} \
-            --input {input.annotated_gt} \
-            --lookup-het {input.lookup_het:q} \
-            --lookup-hom {input.lookup_hom:q} \
-            {params.lookup_hem_chrx_arg} \
-            --score-max {params.score_max} \
-            --hemizygote {params.hemizygote} \
-            --output {output.psap} \
-            --threads {threads} \
-            > {log} 2>&1
-        """
+    script:
+        str(APPLY_SCRIPT_DIR / "apply_psap.R")

@@ -3,13 +3,10 @@
 # Apply precomputed PSAP lookup tables to one sample's annotated variants.
 
 suppressPackageStartupMessages({
-    library(argparse)
     library(data.table)
 })
 
-script_path <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
-source(file.path(dirname(normalizePath(script_path)), "bootstrap.R"))
-rm(script_path)
+source(file.path(snakemake@scriptdir, "bootstrap.R"))
 
 options(scipen = 999)
 
@@ -26,90 +23,30 @@ empty_scoring_output <- function() {
 }
 
 
-parse_cli <- function(args) {
-    parser <- ArgumentParser(
-        description = paste(
-            "Calculate per-sample PSAP candidates from lookup tables."
-        )
+workflow_config <- function() {
+    hemizygote_model <- parse_bool(
+        as.character(snakemake@params[["hemizygote"]]),
+        "model.hemizygote"
     )
-
-    parser$add_argument(
-        "--input",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Compressed PSAP-ready sample variant TSV."
-    )
-
-    parser$add_argument(
-        "--lookup-het",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Heterozygous-model PSAP lookup table."
-    )
-
-    parser$add_argument(
-        "--lookup-hom",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Homozygous-model PSAP lookup table."
-    )
-
-    parser$add_argument("--lookup-hem-chrx", default = "", metavar = "FILE")
-
-    parser$add_argument(
-        "--score-max",
-        required = TRUE,
-        type = "double",
-        metavar = "N",
-        help = "Maximum CADD score represented by the lookup grid."
-    )
-
-    parser$add_argument(
-        "--hemizygote",
-        required = TRUE,
-        metavar = "BOOL",
-        help = "Whether to apply the X-linked hemizygote model."
-    )
-
-    parser$add_argument(
-        "--output",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Compressed PSAP candidate output TSV."
-    )
-
-    parser$add_argument(
-        "--threads",
-        type = "integer",
-        default = 1L,
-        metavar = "N",
-        help = "Number of data.table threads to use [default: %(default)s]."
-    )
-
-    parsed <- parser$parse_args(args = args)
-
-    if (is.na(parsed$score_max) || parsed$score_max <= 0) {
-        abort("--score-max must be positive")
+    hem_chrX <- as.character(snakemake@input[["lookup_hem_chrx"]])
+    if (length(hem_chrX) == 0L) hem_chrX <- ""
+    score_max <- as.numeric(snakemake@params[["score_max"]])
+    if (is.na(score_max) || score_max <= 0) abort("model.score_max must be positive")
+    if (hemizygote_model && !nzchar(trimws(hem_chrX[[1L]]))) {
+        abort("The hemizygous model requires a hem_chrX lookup table")
     }
-
-    require_positive_threads(parsed$threads)
-
-    parsed$hemizygote_model <- parse_bool(
-        parsed$hemizygote,
-        "--hemizygote"
+    list(
+        input = snakemake@input[["annotated_gt"]],
+        lookup_paths = list(
+            het = snakemake@input[["lookup_het"]],
+            hom = snakemake@input[["lookup_hom"]],
+            hem_chrX = hem_chrX[[1L]]
+        ),
+        score_max = score_max,
+        hemizygote_model = hemizygote_model,
+        output = snakemake@output[["psap"]],
+        threads = snakemake@threads
     )
-
-    if (parsed$hemizygote_model && !nzchar(trimws(parsed$lookup_hem_chrx))) {
-        abort("--lookup-hem-chrx is required when the hemizygous model is enabled")
-    }
-
-    parsed$lookup_paths <- list(
-        het = parsed$lookup_het,
-        hom = parsed$lookup_hom,
-        hem_chrX = parsed$lookup_hem_chrx
-    )
-
-    parsed
 }
 
 
@@ -332,8 +269,7 @@ score_variants <- function(
 }
 
 
-main <- function() {
-    config <- parse_cli(commandArgs(trailingOnly = TRUE))
+run <- function(config) {
     setDTthreads(config$threads)
 
     message("Reading PSAP-ready variants: ", config$input)
@@ -374,6 +310,4 @@ main <- function() {
 }
 
 
-if (sys.nframe() == 0) {
-    main()
-}
+run(workflow_config())
