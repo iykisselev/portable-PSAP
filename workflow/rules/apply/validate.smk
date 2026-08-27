@@ -121,27 +121,10 @@ rule validate_resources:
         cadd_snv=VALIDATION_CADD_SNV,
         cadd_indel=VALIDATION_CADD_INDEL_INPUT,
         indexes=VALIDATION_CONFIGURED_INDEXES,
-        script=str(Path(APPLY_SCRIPT_DIR) / "validate_resources.py"),
         library=str(VALIDATION_LIBRARY)
     output:
         report=ensure(str(RESOURCE_VALIDATION), non_empty=True)
     params:
-        coverage=lambda wc, input: (
-            str(input.coverage[0]) if input.coverage else "None"
-        ),
-        variants_exclude=lambda wc, input: (
-            ",".join(map(str, input.variants_exclude))
-            if input.variants_exclude
-            else "None"
-        ),
-        par_regions=lambda wc, input: (
-            ",".join(map(str, input.par_regions))
-            if input.par_regions
-            else "None"
-        ),
-        cadd_indel=lambda wc, input: (
-            str(input.cadd_indel[0]) if input.cadd_indel else "None"
-        ),
         unit=str(config["model"]["unit"]),
         include_indels=str(config["model"]["include_indels"])
     threads: 1
@@ -154,21 +137,8 @@ rule validate_resources:
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "resources.log")
-    shell:
-        """
-        python {input.script:q} \
-            --vcf {input.vcf:q} \
-            --coverage {params.coverage:q} \
-            --variants-exclude {params.variants_exclude:q} \
-            --testing-unit-bed {input.testing_unit_bed:q} \
-            --par-regions {params.par_regions:q} \
-            --cadd-snv {input.cadd_snv:q} \
-            --cadd-indel {params.cadd_indel:q} \
-            --unit {params.unit:q} \
-            --include-indels {params.include_indels:q} \
-            --out-json {output.report:q} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "validate_resources.py")
 
 
 rule validate_model:
