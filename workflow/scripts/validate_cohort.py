@@ -12,6 +12,13 @@ from validation import (
 
 
 def main() -> None:
+    """Validate cohort inputs and write the processed-sample manifest.
+
+    Checks metadata, VCF, reference FASTA, indexes, genotype normalization, and
+    hemizygote chromosome requirements supplied by Snakemake. Always writes the
+    accumulated validation report and writes the manifest for downstream dynamic
+    sample selection.
+    """
     errors: list[str] = []
     warnings: list[str] = []
     kind = str(snakemake.params.metadata_kind)

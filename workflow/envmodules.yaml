@@ -1,7 +1,5 @@
-# Logical module routes.  GREX site administrators must verify these module stacks
-# expose every executable invoked by the corresponding rule before enabling the route.
+# Module routes for GREX HPC at University of Manitoba
 bioinformatics:
-  - CCEnv
   - samtools/1.20
   - python/3.11.8
 validation:

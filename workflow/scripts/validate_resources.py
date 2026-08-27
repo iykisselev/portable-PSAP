@@ -14,6 +14,12 @@ from validation import (
 
 
 def main() -> None:
+    """Validate reference-resource formats and chromosome compatibility.
+
+    Converts Snakemake bindings into the shared validation contract, checks
+    required indexes and annotation resources, and writes the resulting JSON
+    report for the workflow validation gate.
+    """
     args = SimpleNamespace(
         vcf=str(snakemake.input.vcf),
         coverage=str(snakemake.input.coverage[0]) if snakemake.input.coverage else "None",

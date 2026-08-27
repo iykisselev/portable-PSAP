@@ -10,12 +10,24 @@ from resources import prepare_table, prepare_vcf, vcf_chromosome_map
 
 
 def main() -> None:
+    """Stage one configured VCF or tabular resource for workflow consumption.
+
+    Reads the selected Snakemake resource and writes its normalized staged copy.
+    VCF resources retain their own format; tabular resources may use the cohort
+    VCF to harmonize chromosome labels and an optional source index.
+
+    Raises:
+        OSError: If a configured input or output cannot be accessed.
+        ValueError: If the resource layout is unsupported or malformed.
+    """
     source = Path(snakemake.input.source)
     output = Path(snakemake.output.data)
     kind = str(snakemake.params.kind)
     if kind == "vcf":
         prepare_vcf(source, output)
         return
+    # Tabular chromosome labels must agree with the cohort before joins, whereas
+    # a staged VCF preserves its native contig metadata.
     chromosome_map = vcf_chromosome_map(Path(snakemake.input.cohort[0])) if snakemake.input.cohort else None
     source_index = (
         Path(snakemake.input.source_index[0])

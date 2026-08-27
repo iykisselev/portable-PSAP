@@ -1,5 +1,4 @@
-# Logical SIF bindings.  These are immutable local image names; replace only with an
-# approved registry reference pinned by digest before enabling Apptainer deployment.
+# Logical SIF bindings
 bioinformatics: containers/portable-psap-bioinformatics-1.20.sif
 validation: containers/portable-psap-validation-1.20.sif
 r: containers/portable-psap-r-4.3.3.sif

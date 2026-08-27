@@ -5,7 +5,19 @@ import subprocess
 
 
 def main() -> None:
+    """Create indexed CADD and testing-unit annotations for the filtered VCF.
+
+    Reads the VCF and configured annotation resources from Snakemake, writes an
+    indexed annotated VCF plus a BGZF tabular annotation extract, and sends the
+    invoked `bcftools` output to the rule log.
+
+    Raises:
+        subprocess.CalledProcessError: If any command in the annotation pipeline
+            fails.
+    """
     include_indels = bool(snakemake.params.include_indels)
+    # Keep the stream intact when indels are disabled; the later unit annotation
+    # still has to run for every retained VCF record.
     indel_annotation = (
         "bcftools annotate "
         f"--annotations {shlex.quote(str(snakemake.input.cadd_indel[0]))} "

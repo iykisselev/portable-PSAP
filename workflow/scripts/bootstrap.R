@@ -1,16 +1,8 @@
-if (exists("snakemake", inherits = FALSE)) {
-    PSAP_SCRIPT_DIR <- normalizePath(snakemake@scriptdir, mustWork = TRUE)
-} else {
-    script_args <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
-    if (length(script_args) != 1L) {
-        stop("Could not determine the executing R script path", call. = FALSE)
-    }
-    PSAP_SCRIPT_DIR <- dirname(normalizePath(sub("^--file=", "", script_args)))
-}
-
+# Locate the workflow R library when invoked by Snakemake
+PSAP_SCRIPT_DIR <- normalizePath(snakemake@scriptdir, mustWork = TRUE) 
 PSAP_R_LIB_DIR <- normalizePath(
-    file.path(PSAP_SCRIPT_DIR, "..", "lib", "r"),
-    mustWork = TRUE
+  file.path(PSAP_SCRIPT_DIR, "..", "lib", "r"),
+  mustWork = TRUE
 )
 
 source(file.path(PSAP_R_LIB_DIR, "common.R"), local = FALSE)

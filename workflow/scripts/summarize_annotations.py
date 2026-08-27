@@ -11,6 +11,12 @@ from annotation_qc import summarize_annotations
 
 
 def main() -> None:
+    """Write annotation-completeness QC for the configured cohort annotations.
+
+    Reads the flattened annotation table and indel setting from Snakemake, then
+    writes a deterministic JSON report consumed by the annotation validation
+    gate. Input-format errors propagate from `summarize_annotations`.
+    """
     report = summarize_annotations(
         snakemake.input.annotations,
         include_indels=bool(snakemake.params.include_indels),

@@ -7,6 +7,20 @@ from pathlib import Path
 
 
 def main() -> int:
+    """Convert a PED file into the sample-sheet columns used by validation.
+
+    Reads `--ped` as a tab-delimited PED file and writes family ID, sample ID,
+    sex, and phenotype to `--output`. Blank rows are ignored.
+
+    Returns:
+        Zero after writing the sample sheet.
+
+    Raises:
+        ValueError: If a non-blank PED row has fewer than the required six
+            columns.
+        OSError: If either file cannot be opened or the output directory cannot
+            be created.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ped", required=True)
     parser.add_argument("--output", required=True)

@@ -97,3 +97,21 @@ expect_error(
     ),
     "DOM-het lookup is missing 1 observed testing-unit ID"
 )
+
+source(file.path(repo_dir, "workflow", "scripts", "apply_psap.R"))
+tied_scores <- data.table(
+    .testing_unit_id = c("unit-1", "unit-1", "unit-1", "unit-2"),
+    CADD_PHRED = c(25, 25, 20, 30),
+    Key = c("variant-b", "variant-a", "variant-c", "variant-d")
+)
+selected_scores <- select_highest(copy(tied_scores))
+stopifnot(
+    identical(
+        selected_scores[.testing_unit_id == "unit-1", Key],
+        c("variant-a", "variant-b")
+    ),
+    identical(
+        selected_scores[.testing_unit_id == "unit-2", Key],
+        "variant-d"
+    )
+)

@@ -3,268 +3,282 @@
 # Build a control reference from every carried variant in unaffected samples.
 
 suppressPackageStartupMessages({
-    library(data.table)
+  library(data.table)
 })
 
 if (exists("snakemake", inherits = FALSE)) {
-    source(file.path(snakemake@scriptdir, "bootstrap.R"))
+  source(file.path(snakemake@scriptdir, "bootstrap.R"))
 }
 
 options(scipen = 999)
 
 
+# Build aligned per-control input vectors from the Snakemake rule bindings.
 workflow_config <- function() {
-    inputs <- as.character(snakemake@input[["annotated"]])
-    psap_inputs <- as.character(snakemake@input[["psap"]])
-    pids <- as.character(snakemake@params[["pids"]])
-    sexes <- as.character(snakemake@params[["sexes"]])
-    lengths <- c(
-        input = length(inputs), psap_input = length(psap_inputs),
-        pid = length(pids), sex = length(sexes)
-    )
-    if (length(unique(lengths)) != 1L) {
-        abort("Control input counts differ: %s", paste(names(lengths), lengths, sep = "=", collapse = ", "))
-    }
-    list(
-        input = inputs,
-        psap_input = psap_inputs,
-        pid = pids,
-        sex_value = vapply(sexes, parse_sex, numeric(1)),
-        hemizygote_model = parse_bool(
-            as.character(snakemake@params[["hemizygote"]]), "model.hemizygote"
-        ),
-        deduplicate = isTRUE(snakemake@params[["deduplicate"]]),
-        output = snakemake@output[["control_variants"]],
-        threads = snakemake@threads
-    )
+  inputs <- as.character(snakemake@input[["annotated"]])
+  psap_inputs <- as.character(snakemake@input[["psap"]])
+  pids <- as.character(snakemake@params[["pids"]])
+  sexes <- as.character(snakemake@params[["sexes"]])
+  lengths <- c(
+    input = length(inputs), psap_input = length(psap_inputs),
+    pid = length(pids), sex = length(sexes)
+  )
+  if (length(unique(lengths)) != 1L) {
+    abort("Control input counts differ: %s", paste(names(lengths), lengths, sep = "=", collapse = ", "))
+  }
+  list(
+    input = inputs,
+    psap_input = psap_inputs,
+    pid = pids,
+    sex_value = vapply(sexes, parse_sex, numeric(1)),
+    hemizygote_model = parse_bool(
+      as.character(snakemake@params[["hemizygote"]]), "model.hemizygote"
+    ),
+    deduplicate = isTRUE(snakemake@params[["deduplicate"]]),
+    output = snakemake@output[["control_variants"]],
+    threads = snakemake@threads
+  )
 }
 
 
+# Return a typed empty table that preserves the control-reference schema.
 empty_reference <- function() {
-    data.table(
-        pid = character(),
-        phenotype = character(),
-        sex = numeric(),
-        unit = character(),
-        model = character(),
-        variant_key = character(),
-        PSAP = numeric()
-    )
+  data.table(
+    pid = character(),
+    phenotype = character(),
+    sex = numeric(),
+    unit = character(),
+    model = character(),
+    variant_key = character(),
+    PSAP = numeric()
+  )
 }
 
 
+# Extract variant/unit/model evidence for one disease-model compatibility filter.
 make_evidence <- function(variants, row_filter, model, unit = variants$unit) {
-    selected <- variants[row_filter]
-    if (nrow(selected) == 0L) return(NULL)
+  selected <- variants[row_filter]
+  if (nrow(selected) == 0L) {
+    return(NULL)
+  }
 
-    selected[
-        ,
-        .(
-            unit = unit[row_filter],
-            model = model,
-            variant_key
-        )
-    ]
+  selected[
+    ,
+    .(
+      unit = unit[row_filter],
+      model = model,
+      variant_key
+    )
+  ]
 }
 
 
+# Derive all carried-variant model evidence for one unaffected individual.
 derive_control_evidence <- function(
-    path,
-    pid,
-    sex,
-    hemizygote_model
+  path,
+  pid,
+  sex,
+  hemizygote_model
 ) {
-    variants <- fread(
-        path,
-        sep = "\t",
-        header = TRUE,
-        quote = "",
-        data.table = TRUE,
-        showProgress = FALSE
-    )
+  variants <- fread(
+    path,
+    sep = "\t",
+    header = TRUE,
+    quote = "",
+    data.table = TRUE,
+    showProgress = FALSE
+  )
 
+  require_columns(
+    variants,
+    c("Key", "gt_class"),
+    sprintf("Control annotation table for %s", pid)
+  )
+
+  variants[, variant_key := clean_identifier(Key)]
+  variants[, gt_class := tolower(clean_identifier(gt_class))]
+  require_columns(
+    variants,
+    "unit",
+    sprintf("Control annotation table for %s", pid)
+  )
+  variants[, unit := clean_identifier(unit)]
+
+  invalid <- is.na(variants$variant_key) | is.na(variants$gt_class) | is.na(variants$unit)
+  if (any(invalid)) {
+    abort(
+      "Control %s contains %d row(s) with missing key, genotype class, or unit",
+      pid,
+      sum(invalid)
+    )
+  }
+
+  definitions <- DISEASE_MODELS[DISEASE_MODELS$lookup != "hem_chrX", ]
+
+  evidence <- lapply(seq_len(nrow(definitions)), function(index) {
+    definition <- definitions[index, ]
+    make_evidence(
+      variants,
+      variants$gt_class == definition$genotype_class,
+      definition$model
+    )
+  })
+
+  if (hemizygote_model && any(variants$gt_class == "hem")) {
     require_columns(
-        variants,
-        c("Key", "gt_class"),
-        sprintf("Control annotation table for %s", pid)
+      variants,
+      "CHROM",
+      sprintf("Hemizygous control annotation table for %s", pid)
     )
-
-    variants[, variant_key := clean_identifier(Key)]
-    variants[, gt_class := tolower(clean_identifier(gt_class))]
-    require_columns(
-        variants,
-        "unit",
-        sprintf("Control annotation table for %s", pid)
+    chromosome <- sub(
+      "^CHR",
+      "",
+      toupper(trimws(as.character(variants$CHROM)))
     )
-    variants[, unit := clean_identifier(unit)]
-
-    invalid <- is.na(variants$variant_key) | is.na(variants$gt_class) | is.na(variants$unit)
-    if (any(invalid)) {
-        abort(
-            "Control %s contains %d row(s) with missing key, genotype class, or unit",
-            pid,
-            sum(invalid)
-        )
-    }
-
-    definitions <- DISEASE_MODELS[DISEASE_MODELS$lookup != "hem_chrX", ]
-
-    evidence <- lapply(seq_len(nrow(definitions)), function(index) {
-        definition <- definitions[index, ]
-        make_evidence(
-            variants,
-            variants$gt_class == definition$genotype_class,
-            definition$model
-        )
-    })
-
-    if (hemizygote_model && any(variants$gt_class == "hem")) {
-        require_columns(
-            variants,
-            "CHROM",
-            sprintf("Hemizygous control annotation table for %s", pid)
-        )
-        chromosome <- sub(
-            "^CHR",
-            "",
-            toupper(trimws(as.character(variants$CHROM)))
-        )
-        hem_definition <- DISEASE_MODELS[
-            DISEASE_MODELS$lookup == "hem_chrX",
-            ,
-            drop = FALSE
-        ]
-        evidence <- c(
-            evidence,
-            list(make_evidence(
-                variants,
-                variants$gt_class == hem_definition$genotype_class &
-                    chromosome == "X",
-                hem_definition$model
-            ))
-        )
-    }
-
-    evidence <- Filter(Negate(is.null), evidence)
-    if (length(evidence) == 0L) return(empty_reference())
-
-    output <- unique(
-        rbindlist(evidence, use.names = TRUE),
-        by = c("unit", "model", "variant_key")
-    )
-    output[
-        ,
-        `:=`(
-            pid = as.character(pid),
-            phenotype = "unaffected",
-            sex = sex,
-            PSAP = NA_real_
-        )
+    hem_definition <- DISEASE_MODELS[
+      DISEASE_MODELS$lookup == "hem_chrX", ,
+      drop = FALSE
     ]
-    setcolorder(
-        output,
-        c("pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP")
+    evidence <- c(
+      evidence,
+      list(make_evidence(
+        variants,
+        variants$gt_class == hem_definition$genotype_class &
+          chromosome == "X",
+        hem_definition$model
+      ))
     )
-    output
+  }
+
+  evidence <- Filter(Negate(is.null), evidence)
+  if (length(evidence) == 0L) {
+    return(empty_reference())
+  }
+
+  output <- unique(
+    rbindlist(evidence, use.names = TRUE),
+    by = c("unit", "model", "variant_key")
+  )
+  output[
+    ,
+    `:=`(
+      pid = as.character(pid),
+      phenotype = "unaffected",
+      sex = sex,
+      PSAP = NA_real_
+    )
+  ]
+  setcolorder(
+    output,
+    c("pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP")
+  )
+  output
 }
 
 
+# Reduce PSAP output to the best score for each control evidence record.
 read_psap_scores <- function(path, pid) {
-    scores <- fread(
-        path,
-        sep = "\t",
-        header = TRUE,
-        quote = "",
-        data.table = TRUE,
-        showProgress = FALSE
-    )
+  scores <- fread(
+    path,
+    sep = "\t",
+    header = TRUE,
+    quote = "",
+    data.table = TRUE,
+    showProgress = FALSE
+  )
 
-    require_columns(
-        scores,
-        c("Key", "unit", "Dz.Model", "PSAP"),
-        sprintf("Control PSAP table for %s", pid)
-    )
+  require_columns(
+    scores,
+    c("Key", "unit", "Dz.Model", "PSAP"),
+    sprintf("Control PSAP table for %s", pid)
+  )
 
-    scores[, unit := clean_identifier(unit)]
-    scores[, model := clean_identifier(`Dz.Model`)]
-    scores[, variant_key := clean_identifier(Key)]
-    scores[, PSAP := suppressWarnings(as.numeric(PSAP))]
-    scores <- scores[
-        !is.na(unit) & !is.na(model) & !is.na(variant_key),
-        .(unit, model, variant_key, PSAP)
-    ]
+  scores[, unit := clean_identifier(unit)]
+  scores[, model := clean_identifier(`Dz.Model`)]
+  scores[, variant_key := clean_identifier(Key)]
+  scores[, PSAP := suppressWarnings(as.numeric(PSAP))]
+  scores <- scores[
+    !is.na(unit) & !is.na(model) & !is.na(variant_key),
+    .(unit, model, variant_key, PSAP)
+  ]
 
-    scores[
-        ,
-        .(PSAP = if (all(is.na(PSAP))) NA_real_ else min(PSAP, na.rm = TRUE)),
-        by = .(unit, model, variant_key)
-    ]
+  scores[
+    ,
+    .(PSAP = if (all(is.na(PSAP))) NA_real_ else min(PSAP, na.rm = TRUE)),
+    by = .(unit, model, variant_key)
+  ]
 }
 
 
+# Attach available PSAP scores without dropping unscored control evidence.
 attach_psap <- function(evidence, scores) {
-    if (nrow(evidence) == 0L || nrow(scores) == 0L) return(evidence)
+  if (nrow(evidence) == 0L || nrow(scores) == 0L) {
+    return(evidence)
+  }
 
-    evidence[, PSAP := NULL]
-    scores[evidence, on = c("unit", "model", "variant_key")][
-        ,
-        .(pid, phenotype, sex, unit, model, variant_key, PSAP)
-    ]
+  evidence[, PSAP := NULL]
+  scores[evidence, on = c("unit", "model", "variant_key")][
+    ,
+    .(pid, phenotype, sex, unit, model, variant_key, PSAP)
+  ]
 }
 
 
+# Build and optionally de-duplicate the cohort-wide unaffected control reference.
 run <- function(config) {
-    setDTthreads(config$threads)
+  setDTthreads(config$threads)
 
-    if (length(config$input) == 0L) {
-        reference <- empty_reference()
-    } else {
-        controls <- vector("list", length(config$input))
+  if (length(config$input) == 0L) {
+    reference <- empty_reference()
+  } else {
+    controls <- vector("list", length(config$input))
 
-        for (i in seq_along(config$input)) {
-            evidence <- derive_control_evidence(
-                config$input[[i]],
-                config$pid[[i]],
-                config$sex_value[[i]],
-                config$hemizygote_model
-            )
-            scores <- read_psap_scores(config$psap_input[[i]], config$pid[[i]])
-            controls[[i]] <- attach_psap(evidence, scores)
-        }
-
-        reference <- rbindlist(controls, use.names = TRUE, fill = FALSE)
+    for (i in seq_along(config$input)) {
+      evidence <- derive_control_evidence(
+        config$input[[i]],
+        config$pid[[i]],
+        config$sex_value[[i]],
+        config$hemizygote_model
+      )
+      scores <- read_psap_scores(config$psap_input[[i]], config$pid[[i]])
+      controls[[i]] <- attach_psap(evidence, scores)
     }
 
-    if (config$deduplicate && nrow(reference) > 0L) {
-        before <- nrow(reference)
-        reference <- unique(reference, by = names(reference))
-        message("Exact duplicate rows removed: ", before - nrow(reference))
-    }
+    reference <- rbindlist(controls, use.names = TRUE, fill = FALSE)
+  }
 
-    if (nrow(reference) > 0L) {
-        setorderv(
-            reference,
-            c("unit", "model", "variant_key", "pid"),
-            c(1L, 1L, 1L, 1L)
-        )
-    }
+  if (config$deduplicate && nrow(reference) > 0L) {
+    before <- nrow(reference)
+    # Exact-row de-duplication preserves distinct people or variants that share
+    # some fields while removing repeated evidence from equivalent inputs.
+    reference <- unique(reference, by = names(reference))
+    message("Exact duplicate rows removed: ", before - nrow(reference))
+  }
 
-    fwrite(
-        reference,
-        file = config$output,
-        sep = "\t",
-        quote = FALSE,
-        row.names = FALSE,
-        col.names = TRUE,
-        nThread = config$threads
+  if (nrow(reference) > 0L) {
+    setorderv(
+      reference,
+      c("unit", "model", "variant_key", "pid"),
+      c(1L, 1L, 1L, 1L)
     )
+  }
 
-    message("Unaffected individuals: ", length(config$input))
-    message("Control evidence rows written: ", nrow(reference))
-    message("Wrote control reference: ", config$output)
+  fwrite(
+    reference,
+    file = config$output,
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = TRUE,
+    nThread = config$threads
+  )
+
+  message("Unaffected individuals: ", length(config$input))
+  message("Control evidence rows written: ", nrow(reference))
+  message("Wrote control reference: ", config$output)
 }
 
 
 if (exists("snakemake", inherits = FALSE)) {
-    run(workflow_config())
+  run(workflow_config())
 }

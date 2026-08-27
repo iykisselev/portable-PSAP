@@ -5,6 +5,15 @@ from pathlib import Path
 
 
 def append_unique(target: list[str], values: list[str]) -> None:
+    """Append unseen messages while preserving their first-reporting order.
+
+    Args:
+        target: Mutable list receiving messages not already present.
+        values: Messages from one validation-report fragment.
+
+    Side Effects:
+        Mutates `target` in place. No value is returned.
+    """
     seen = set(target)
     for value in values:
         if value not in seen:
@@ -13,6 +22,17 @@ def append_unique(target: list[str], values: list[str]) -> None:
 
 
 def main() -> None:
+    """Merge validation fragments into the workflow's single gate report.
+
+    Reads JSON reports listed by Snakemake and writes one report containing
+    ordered, de-duplicated errors and warnings. Summary keys follow input order,
+    so a later fragment intentionally replaces an earlier value with the same
+    key.
+
+    Raises:
+        OSError: If a fragment or the destination cannot be read or written.
+        json.JSONDecodeError: If a validation fragment is not valid JSON.
+    """
     errors: list[str] = []
     warnings: list[str] = []
     summary: dict = {}
@@ -22,6 +42,8 @@ def main() -> None:
         fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
         append_unique(errors, fragment.get("errors", []))
         append_unique(warnings, fragment.get("warnings", []))
+        # Each validator owns different summary keys; later input order is the
+        # explicit tie-breaker if a key is shared.
         summary.update(fragment.get("summary", {}))
         sections.append(fragment_path.stem)
     report = {"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": summary, "validation_sections": sections}

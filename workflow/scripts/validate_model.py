@@ -15,6 +15,12 @@ from validation import (
 
 
 def main() -> None:
+    """Validate model settings and lookup tables against testing-unit annotations.
+
+    Converts Snakemake settings into the validation library's argument contract,
+    checks every enabled lookup table, and writes a JSON report used by the
+    shared validation gate.
+    """
     args = SimpleNamespace(
         score_max=str(snakemake.params.score_max),
         assembly=str(snakemake.params.assembly),

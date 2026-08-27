@@ -3,315 +3,338 @@
 # Validate affected candidates against unaffected carried-variant evidence.
 
 suppressPackageStartupMessages({
-    library(data.table)
+  library(data.table)
 })
 
 if (exists("snakemake", inherits = FALSE)) {
-    source(file.path(snakemake@scriptdir, "bootstrap.R"))
+  source(file.path(snakemake@scriptdir, "bootstrap.R"))
 }
 
 options(scipen = 999)
 
 
+# Build the cohort-level input/output contract from the Snakemake rule bindings.
 workflow_config <- function() {
-    list(
-        candidates = as.character(snakemake@input[["candidates"]]),
-        controls = snakemake@input[["controls"]],
-        output_candidates = snakemake@output[["candidates"]],
-        output_summary = snakemake@output[["summary"]],
-        threads = snakemake@threads
-    )
+  list(
+    candidates = as.character(snakemake@input[["candidates"]]),
+    controls = snakemake@input[["controls"]],
+    output_candidates = snakemake@output[["candidates"]],
+    output_summary = snakemake@output[["summary"]],
+    threads = snakemake@threads
+  )
 }
 
 
+# Read affected candidate artifacts and enforce their shared table schema.
 read_candidate_tables <- function(paths) {
-    required <- c(
-        "candidate_id",
-        "pid",
-        "phenotype",
-        "sex",
-        "unit",
-        "model",
-        "variant_key",
-        "PSAP"
+  required <- c(
+    "candidate_id",
+    "pid",
+    "phenotype",
+    "sex",
+    "unit",
+    "model",
+    "variant_key",
+    "PSAP"
+  )
+
+  tables <- lapply(paths, function(path) {
+    candidates <- fread(
+      path,
+      sep = "\t",
+      header = TRUE,
+      quote = "",
+      data.table = TRUE,
+      showProgress = FALSE
     )
+    require_columns(candidates, required, paste("Candidate table", path))
+    candidates[, required, with = FALSE]
+  })
 
-    tables <- lapply(paths, function(path) {
-        candidates <- fread(
-            path,
-            sep = "\t",
-            header = TRUE,
-            quote = "",
-            data.table = TRUE,
-            showProgress = FALSE
-        )
-        require_columns(candidates, required, paste("Candidate table", path))
-        candidates[, required, with = FALSE]
-    })
+  candidates <- rbindlist(tables, use.names = TRUE, fill = FALSE)
+  candidates[, PSAP := suppressWarnings(as.numeric(PSAP))]
 
-    candidates <- rbindlist(tables, use.names = TRUE, fill = FALSE)
-    candidates[, PSAP := suppressWarnings(as.numeric(PSAP))]
+  if (any(candidates$phenotype != "affected")) {
+    abort("Candidate tables contain rows not labelled affected")
+  }
 
-    if (any(candidates$phenotype != "affected")) {
-        abort("Candidate tables contain rows not labelled affected")
-    }
-
-    candidates
+  candidates
 }
 
 
+# Read the unaffected evidence reference and retain one row per person/variant/model.
 read_controls <- function(path) {
-    required <- c(
-        "pid",
-        "phenotype",
-        "sex",
-        "unit",
-        "model",
-        "variant_key",
-        "PSAP"
-    )
-    controls <- fread(
-        path,
-        sep = "\t",
-        header = TRUE,
-        quote = "",
-        data.table = TRUE,
-        showProgress = FALSE
-    )
-    require_columns(controls, required, "Control reference")
-    controls <- controls[, required, with = FALSE]
+  required <- c(
+    "pid",
+    "phenotype",
+    "sex",
+    "unit",
+    "model",
+    "variant_key",
+    "PSAP"
+  )
+  controls <- fread(
+    path,
+    sep = "\t",
+    header = TRUE,
+    quote = "",
+    data.table = TRUE,
+    showProgress = FALSE
+  )
+  require_columns(controls, required, "Control reference")
+  controls <- controls[, required, with = FALSE]
 
-    if (any(controls$phenotype != "unaffected")) {
-        abort("Control reference contains rows not labelled unaffected")
-    }
+  if (any(controls$phenotype != "unaffected")) {
+    abort("Control reference contains rows not labelled unaffected")
+  }
 
-    unique(controls, by = c("pid", "unit", "model", "variant_key"))
+  unique(controls, by = c("pid", "unit", "model", "variant_key"))
 }
 
 
+# Return the minimum numeric value, or NA when no numeric evidence is available.
 minimum_or_na <- function(value) {
-    if (length(value) == 0L || all(is.na(value))) return(NA_real_)
-    min(value, na.rm = TRUE)
+  if (length(value) == 0L || all(is.na(value))) {
+    return(NA_real_)
+  }
+  min(value, na.rm = TRUE)
 }
 
 
+# Serialize a unique sorted identifier set, using NA for an empty set.
 collapse_ids <- function(value) {
-    value <- unique(value[!is.na(value) & nzchar(value)])
-    if (length(value) == 0L) return(NA_character_)
-    paste(sort(value), collapse = ",")
+  value <- unique(value[!is.na(value) & nzchar(value)])
+  if (length(value) == 0L) {
+    return(NA_character_)
+  }
+  paste(sort(value), collapse = ",")
 }
 
 
+# Merge comma-delimited identifier sets into one normalized list.
 combine_id_lists <- function(value) {
-    value <- value[!is.na(value) & nzchar(value)]
-    if (length(value) == 0L) return(NA_character_)
-    collapse_ids(unlist(strsplit(value, ",", fixed = TRUE), use.names = FALSE))
+  value <- value[!is.na(value) & nzchar(value)]
+  if (length(value) == 0L) {
+    return(NA_character_)
+  }
+  collapse_ids(unlist(strsplit(value, ",", fixed = TRUE), use.names = FALSE))
 }
 
 
+# Reduce candidate statuses so a control match outranks every other result.
 validation_priority <- function(value) {
-    if ("control_match" %in% value) return("control_match")
-    if (all(value == "no_controls")) return("no_controls")
-    "ok"
+  if ("control_match" %in% value) {
+    return("control_match")
+  }
+  if (all(value == "no_controls")) {
+    return("no_controls")
+  }
+  "ok"
 }
 
 
+# Group candidate rows and enforce the one-variant-per-candidate invariant.
 build_candidate_groups <- function(candidates) {
-    inconsistent <- candidates[
-        ,
-        .(
-            pid_count = uniqueN(pid),
-            unit_count = uniqueN(unit),
-            model_count = uniqueN(model)
-        ),
-        by = candidate_id
-    ][pid_count != 1L | unit_count != 1L | model_count != 1L]
+  inconsistent <- candidates[
+    ,
+    .(
+      pid_count = uniqueN(pid),
+      unit_count = uniqueN(unit),
+      model_count = uniqueN(model)
+    ),
+    by = candidate_id
+  ][pid_count != 1L | unit_count != 1L | model_count != 1L]
 
-    if (nrow(inconsistent) > 0L) {
-        abort("candidate_id values span multiple patients, units, or models")
-    }
+  if (nrow(inconsistent) > 0L) {
+    abort("candidate_id values span multiple patients, units, or models")
+  }
 
-    groups <- candidates[
-        ,
-        .(
-            pid = pid[[1]],
-            unit = unit[[1]],
-            model = model[[1]],
-            variant_keys = list(sort(unique(variant_key))),
-            PSAP = minimum_or_na(PSAP)
-        ),
-        by = candidate_id
-    ]
-    groups[, variant_count := lengths(variant_keys)]
+  groups <- candidates[
+    ,
+    .(
+      pid = pid[[1]],
+      unit = unit[[1]],
+      model = model[[1]],
+      variant_keys = list(sort(unique(variant_key))),
+      PSAP = minimum_or_na(PSAP)
+    ),
+    by = candidate_id
+  ]
+  groups[, variant_count := lengths(variant_keys)]
 
-    if (any(groups$variant_count != 1L)) {
-        abort("Candidates must contain exactly one distinct variant")
-    }
+  # Candidate IDs encode one ranked variant; multi-variant groups would make the
+  # control comparison and cohort summary ambiguous.
+  if (any(groups$variant_count != 1L)) {
+    abort("Candidates must contain exactly one distinct variant")
+  }
 
-    groups[
-        ,
-        candidate_signature := vapply(
-            variant_keys,
-            paste,
-            collapse = "|",
-            FUN.VALUE = character(1)
-        )
-    ]
-    groups
+  groups[
+    ,
+    candidate_signature := vapply(
+      variant_keys,
+      paste,
+      collapse = "|",
+      FUN.VALUE = character(1)
+    )
+  ]
+  groups
 }
 
 
+# Compare one candidate group against compatible unaffected control evidence.
 validate_one_candidate <- function(group, controls) {
-    if (nrow(controls) == 0L) {
-        return(list(
-            validation = "no_controls",
-            control_count = 0L,
-            control_pids = NA_character_
-        ))
-    }
+  if (nrow(controls) == 0L) {
+    return(list(
+      validation = "no_controls",
+      control_count = 0L,
+      control_pids = NA_character_
+    ))
+  }
 
-    candidate_model <- group$model[[1]]
-    candidate_unit <- group$unit[[1]]
-    keys <- group$variant_keys[[1]]
-    relevant <- controls[
-        controls$unit == candidate_unit & variant_key %in% keys
-    ]
-    relevant <- relevant[
-        relevant$model %in% compatible_control_models(candidate_model)
-    ]
-    control_pids <- sort(unique(relevant$pid))
+  candidate_model <- group$model[[1]]
+  candidate_unit <- group$unit[[1]]
+  keys <- group$variant_keys[[1]]
+  relevant <- controls[
+    controls$unit == candidate_unit & variant_key %in% keys
+  ]
+  relevant <- relevant[
+    relevant$model %in% compatible_control_models(candidate_model)
+  ]
+  control_pids <- sort(unique(relevant$pid))
 
-    list(
-        validation = if (length(control_pids) > 0L) "control_match" else "ok",
-        control_count = length(control_pids),
-        control_pids = collapse_ids(control_pids)
-    )
+  list(
+    validation = if (length(control_pids) > 0L) "control_match" else "ok",
+    control_count = length(control_pids),
+    control_pids = collapse_ids(control_pids)
+  )
 }
 
 
+# Produce candidate-level validation detail and a grouped cohort summary.
 validate_candidates <- function(candidates, controls) {
-    if (nrow(candidates) == 0L) {
-        detail <- copy(candidates)
-        detail[, `:=`(
-            validation = character(),
-            control_count = integer(),
-            control_pids = character()
-        )]
-        summary <- data.table(
-            unit = character(),
-            model = character(),
-            candidate_signature = character(),
-            affected_count = integer(),
-            affected_pids = character(),
-            minimum_PSAP = numeric(),
-            validation = character(),
-            control_count = integer(),
-            control_pids = character()
-        )
-        return(list(detail = detail, summary = summary))
-    }
-
-    groups <- build_candidate_groups(candidates)
-    status <- vector("list", nrow(groups))
-
-    for (i in seq_len(nrow(groups))) {
-        result <- validate_one_candidate(groups[i], controls)
-        status[[i]] <- data.table(
-            candidate_id = groups$candidate_id[[i]],
-            validation = result$validation,
-            control_count = as.integer(result$control_count),
-            control_pids = result$control_pids
-        )
-    }
-
-    status <- rbindlist(status, use.names = TRUE)
-    detail <- status[candidates, on = "candidate_id"]
-    setcolorder(
-        detail,
-        c(
-            "candidate_id",
-            "pid",
-            "phenotype",
-            "sex",
-            "unit",
-            "model",
-            "variant_key",
-            "PSAP",
-            "validation",
-            "control_count",
-            "control_pids"
-        )
+  if (nrow(candidates) == 0L) {
+    detail <- copy(candidates)
+    detail[, `:=`(
+      validation = character(),
+      control_count = integer(),
+      control_pids = character()
+    )]
+    summary <- data.table(
+      unit = character(),
+      model = character(),
+      candidate_signature = character(),
+      affected_count = integer(),
+      affected_pids = character(),
+      minimum_PSAP = numeric(),
+      validation = character(),
+      control_count = integer(),
+      control_pids = character()
     )
+    return(list(detail = detail, summary = summary))
+  }
 
-    candidate_level <- status[groups, on = "candidate_id"]
-    summary <- candidate_level[
-        ,
-        .(
-            affected_count = uniqueN(pid),
-            affected_pids = collapse_ids(pid),
-            minimum_PSAP = minimum_or_na(PSAP),
-            validation = validation_priority(validation),
-            control_count = uniqueN(unlist(
-                strsplit(
-                    control_pids[!is.na(control_pids)],
-                    ",",
-                    fixed = TRUE
-                ),
-                use.names = FALSE
-            )),
-            control_pids = combine_id_lists(control_pids)
+  groups <- build_candidate_groups(candidates)
+  status <- vector("list", nrow(groups))
+
+  for (i in seq_len(nrow(groups))) {
+    result <- validate_one_candidate(groups[i], controls)
+    status[[i]] <- data.table(
+      candidate_id = groups$candidate_id[[i]],
+      validation = result$validation,
+      control_count = as.integer(result$control_count),
+      control_pids = result$control_pids
+    )
+  }
+
+  status <- rbindlist(status, use.names = TRUE)
+  detail <- status[candidates, on = "candidate_id"]
+  setcolorder(
+    detail,
+    c(
+      "candidate_id",
+      "pid",
+      "phenotype",
+      "sex",
+      "unit",
+      "model",
+      "variant_key",
+      "PSAP",
+      "validation",
+      "control_count",
+      "control_pids"
+    )
+  )
+
+  candidate_level <- status[groups, on = "candidate_id"]
+  summary <- candidate_level[
+    ,
+    .(
+      affected_count = uniqueN(pid),
+      affected_pids = collapse_ids(pid),
+      minimum_PSAP = minimum_or_na(PSAP),
+      validation = validation_priority(validation),
+      control_count = uniqueN(unlist(
+        strsplit(
+          control_pids[!is.na(control_pids)],
+          ",",
+          fixed = TRUE
         ),
-        by = .(unit, model, candidate_signature)
-    ]
+        use.names = FALSE
+      )),
+      control_pids = combine_id_lists(control_pids)
+    ),
+    by = .(unit, model, candidate_signature)
+  ]
 
-    setorderv(
-        detail,
-        c("PSAP", "unit", "model", "candidate_id", "variant_key"),
-        c(1L, 1L, 1L, 1L, 1L),
-        na.last = TRUE
-    )
-    setorderv(
-        summary,
-        c("minimum_PSAP", "unit", "model", "candidate_signature"),
-        c(1L, 1L, 1L, 1L),
-        na.last = TRUE
-    )
+  setorderv(
+    detail,
+    c("PSAP", "unit", "model", "candidate_id", "variant_key"),
+    c(1L, 1L, 1L, 1L, 1L),
+    na.last = TRUE
+  )
+  setorderv(
+    summary,
+    c("minimum_PSAP", "unit", "model", "candidate_signature"),
+    c(1L, 1L, 1L, 1L),
+    na.last = TRUE
+  )
 
-    list(detail = detail, summary = summary)
+  list(detail = detail, summary = summary)
 }
 
 
+# Write the detailed candidate report and its cohort-level summary artifact.
 run <- function(config) {
-    setDTthreads(config$threads)
+  setDTthreads(config$threads)
 
-    candidates <- read_candidate_tables(config$candidates)
-    controls <- read_controls(config$controls)
-    report <- validate_candidates(candidates, controls)
+  candidates <- read_candidate_tables(config$candidates)
+  controls <- read_controls(config$controls)
+  report <- validate_candidates(candidates, controls)
 
-    fwrite(
-        report$detail,
-        file = config$output_candidates,
-        sep = "\t",
-        quote = FALSE,
-        row.names = FALSE,
-        col.names = TRUE,
-        nThread = config$threads
-    )
-    fwrite(
-        report$summary,
-        file = config$output_summary,
-        sep = "\t",
-        quote = FALSE,
-        row.names = FALSE,
-        col.names = TRUE,
-        nThread = config$threads
-    )
+  fwrite(
+    report$detail,
+    file = config$output_candidates,
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = TRUE,
+    nThread = config$threads
+  )
+  fwrite(
+    report$summary,
+    file = config$output_summary,
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = TRUE,
+    nThread = config$threads
+  )
 
-    message("Affected candidate rows: ", nrow(report$detail))
-    message("Cohort summary rows: ", nrow(report$summary))
+  message("Affected candidate rows: ", nrow(report$detail))
+  message("Cohort summary rows: ", nrow(report$summary))
 }
 
 
 if (exists("snakemake", inherits = FALSE)) {
-    run(workflow_config())
+  run(workflow_config())
 }
