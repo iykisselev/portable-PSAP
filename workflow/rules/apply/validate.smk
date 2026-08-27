@@ -189,6 +189,10 @@ checkpoint require_valid_inputs:
         manifest=rules.validate_cohort.output.manifest
     output:
         ok=ensure(str(Path(APPLY_OUTDIR) / "validation.ok"), non_empty=True)
+    params:
+        failure_message="Input validation failed",
+        include_errors=True,
+        success_marker="validated\n"
     threads: 1
     resources:
         mem_mb=512,
@@ -200,4 +204,4 @@ checkpoint require_valid_inputs:
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "require_valid_inputs.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "require_valid_inputs.py")
+        str(Path(workflow.basedir) / "scripts" / "require_valid_report.py")

@@ -71,6 +71,7 @@ read_genotypes <- function(path) {
 
 
 deduplicate_by_key <- function(genotypes) {
+    # This producer owns the conflicting-call failure and one-row-per-Key contract.
     if (nrow(genotypes) == 0L) {
         return(genotypes)
     }

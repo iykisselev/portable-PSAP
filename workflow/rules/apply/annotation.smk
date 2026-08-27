@@ -81,6 +81,10 @@ rule require_valid_annotations:
         report=rules.summarize_annotations.output.report
     output:
         ok=ensure(str(ANNOTATION_QC_OK), non_empty=True)
+    params:
+        failure_message="Annotation validation failed",
+        include_errors=False,
+        success_marker="annotation validation passed\n"
     threads: 1
     resources:
         mem_mb=512,
@@ -95,7 +99,7 @@ rule require_valid_annotations:
             "annotation" / "require_valid_annotations.log"
         )
     script:
-        str(Path(workflow.basedir) / "scripts" / "require_valid_annotations.py")
+        str(Path(workflow.basedir) / "scripts" / "require_valid_report.py")
 
 
 rule prepare_testing_units:

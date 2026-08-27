@@ -35,10 +35,6 @@ read_table <- function(path, description) {
         showProgress = FALSE
     )
 
-    if (ncol(table) == 0) {
-        abort("%s is empty: %s", description, path)
-    }
-
     table
 }
 
@@ -70,10 +66,6 @@ join_annotations <- function(genotypes, unit_table) {
         genotype_columns,
         "Standardized genotype table"
     )
-
-    if (anyDuplicated(genotypes$Key)) {
-        abort("Standardized genotype table contains duplicate Key values")
-    }
 
     joined <- merge(
         unit_table[, annotation_columns, with = FALSE],
