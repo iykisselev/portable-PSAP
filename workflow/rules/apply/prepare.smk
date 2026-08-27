@@ -1,9 +1,3 @@
-import shlex
-
-
-COMBINE_EXCLUSIONS_SCRIPT = str(APPLY_SCRIPT_DIR / "combine_exclusions.py")
-
-
 rule prepare_vcf_resource:
     """Stage either the cohort or projected exclusions at a stable VCF target."""
     input:
@@ -74,14 +68,10 @@ rule combine_exclusions:
     output:
         vcf=ensure(COMBINED_EXCLUSIONS_VCF, non_empty=True)
     params:
-        script=COMBINE_EXCLUSIONS_SCRIPT,
-        source_args=" ".join(
-            "--source "
-            + shlex.quote(
-                f"{EXCLUSION_KIND_BY_ID[item]}:{WORKFLOW_EXCLUSIONS[position]}"
-            )
+        sources=[
+            f"{EXCLUSION_KIND_BY_ID[item]}:{WORKFLOW_EXCLUSIONS[position]}"
             for position, item in enumerate(EXCLUSION_IDS)
-        )
+        ]
     threads: 1
     resources:
         mem_mb=4096,
@@ -92,10 +82,5 @@ rule combine_exclusions:
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "combine_exclusions.log")
-    shell:
-        """
-        python {params.script:q} \
-            --cohort-vcf {input.cohort:q} \
-            {params.source_args} \
-            --output {output.vcf:q} > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "combine_exclusions.py")
