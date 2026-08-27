@@ -1,7 +1,6 @@
 import shlex
 
 
-PREPARATION_SCRIPT = str(APPLY_SCRIPT_DIR / "prepare_genomic_resource.py")
 COMBINE_EXCLUSIONS_SCRIPT = str(APPLY_SCRIPT_DIR / "combine_exclusions.py")
 
 
@@ -15,7 +14,8 @@ rule prepare_vcf_resource:
         data=ensure(str(PREPARED_DIR / "{resource}.vcf.gz"), non_empty=True),
         index=ensure(str(PREPARED_DIR / "{resource}.vcf.gz.tbi"), non_empty=True)
     params:
-        script=PREPARATION_SCRIPT
+        kind="vcf",
+        tsv_layout="auto"
     wildcard_constraints:
         resource=VCF_RESOURCE_PATTERN
     threads: 1
@@ -28,11 +28,8 @@ rule prepare_vcf_resource:
     container: sif("bioinformatics")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "vcf_{resource}.log")
-    shell:
-        """
-        python {params.script:q} --input {input.source:q} --output {output.data:q} \
-            --kind vcf > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "prepare_resource.py")
 
 
 rule prepare_table_resource:
@@ -47,10 +44,8 @@ rule prepare_table_resource:
         data=ensure(str(PREPARED_TABLE_DIR / "{resource}.gz"), non_empty=True),
         index=ensure(str(PREPARED_TABLE_DIR / "{resource}.gz.tbi"), non_empty=True)
     params:
-        script=PREPARATION_SCRIPT,
         kind=lambda wc: TABLE_RESOURCE_SPECS[wc.resource]["kind"],
-        chromosome_map=table_resource_chromosome_map,
-        tsv_layout=table_resource_tsv_layout
+        tsv_layout=lambda wc: TABLE_RESOURCE_SPECS[wc.resource]["tsv_layout"] or "auto"
     wildcard_constraints:
         resource=TABLE_RESOURCE_PATTERN
     threads: 1
@@ -65,12 +60,8 @@ rule prepare_table_resource:
         str(BENCHMARK_DIR / "prepare_{resource}.tsv")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "table_{resource}.log")
-    shell:
-        """
-        python {params.script:q} --input {input.source:q} --output {output.data:q} \
-            --kind {params.kind:q} {params.tsv_layout} {params.chromosome_map} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "prepare_resource.py")
 
 
 rule combine_exclusions:
