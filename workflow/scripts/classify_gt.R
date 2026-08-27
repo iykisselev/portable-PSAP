@@ -4,63 +4,25 @@
 # =======================================================================
 
 suppressPackageStartupMessages({
-    library(argparse)
     library(data.table)
 })
 
-script_path <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
-source(file.path(dirname(normalizePath(script_path)), "bootstrap.R"))
-rm(script_path)
+source(file.path(snakemake@scriptdir, "bootstrap.R"))
 
 options(scipen = 999)
 
 
-parse_cli <- function(args) {
-    parser <- ArgumentParser(
-        description = paste(
-            "Apply sex-aware classification to standardized genotype calls."
-        )
+workflow_config <- function() {
+    list(
+        input = snakemake@input[["gt"]],
+        output = snakemake@output[["gt"]],
+        sex_value = parse_sex(as.character(snakemake@params[["sex"]])),
+        hemizygote = parse_bool(
+            as.character(snakemake@params[["hemizygote_model"]]),
+            "model.hemizygote"
+        ),
+        threads = snakemake@threads
     )
-
-    parser$add_argument(
-        "--input",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Compressed standardized genotype TSV."
-    )
-
-    parser$add_argument(
-        "--output",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Compressed classified genotype TSV output."
-    )
-
-    parser$add_argument(
-        "--sex",
-        required = TRUE,
-        metavar = "N",
-        help = "Numeric sex code: 1 male, 2 female, other or missing unknown."
-    )
-
-    parser$add_argument(
-        "--hemizygote-model",
-        required = TRUE,
-        metavar = "BOOL",
-        help = "Whether to classify male X/Y calls as hemizygous: True or False."
-    )
-
-    parser$add_argument("--threads", type = "integer", default = 1L)
-
-    parsed <- parser$parse_args(args = args)
-    require_positive_threads(parsed$threads)
-    parsed$sex_value <- parse_sex(parsed$sex)
-    parsed$hemizygote <- parse_bool(
-        parsed$hemizygote_model,
-        "--hemizygote-model"
-    )
-
-    parsed
 }
 
 
@@ -84,8 +46,7 @@ read_genotypes <- function(path) {
 }
 
 
-main <- function() {
-    config <- parse_cli(commandArgs(trailingOnly = TRUE))
+run <- function(config) {
     setDTthreads(config$threads)
 
     message("Reading standardized genotypes: ", config$input)
@@ -117,6 +78,4 @@ main <- function() {
 }
 
 
-if (sys.nframe() == 0) {
-    main()
-}
+run(workflow_config())

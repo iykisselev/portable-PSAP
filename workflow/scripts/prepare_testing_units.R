@@ -3,28 +3,20 @@
 # Normalize the configured cohort-level testing-unit annotations.
 
 suppressPackageStartupMessages({
-    library(argparse)
     library(data.table)
 })
 
-script_path <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
-source(file.path(dirname(normalizePath(script_path)), "bootstrap.R"))
-rm(script_path)
+source(file.path(snakemake@scriptdir, "bootstrap.R"))
 
 options(scipen = 999)
 
 
-parse_cli <- function(args) {
-    parser <- ArgumentParser(
-        description = "Normalize cohort-level testing-unit annotations."
+workflow_config <- function() {
+    list(
+        input = snakemake@input[["annotations"]],
+        output = snakemake@output[["unit_table"]],
+        threads = snakemake@threads
     )
-    parser$add_argument("--input", required = TRUE)
-    parser$add_argument("--output", required = TRUE)
-    parser$add_argument("--threads", type = "integer", default = 1L)
-
-    parsed <- parser$parse_args(args = args)
-    require_positive_threads(parsed$threads)
-    parsed
 }
 
 
@@ -67,8 +59,7 @@ prepare_testing_units <- function(annotations) {
 }
 
 
-main <- function() {
-    config <- parse_cli(commandArgs(trailingOnly = TRUE))
+run <- function(config) {
     setDTthreads(config$threads)
 
     message("Reading configured testing-unit annotations: ", config$input)
@@ -101,6 +92,4 @@ main <- function() {
 }
 
 
-if (sys.nframe() == 0) {
-    main()
-}
+run(workflow_config())

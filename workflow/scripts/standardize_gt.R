@@ -5,54 +5,24 @@
 # =============================================================================
 
 suppressPackageStartupMessages({
-    library(argparse)
     library(data.table)
 })
 
-script_path <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
-source(file.path(dirname(normalizePath(script_path)), "bootstrap.R"))
-rm(script_path)
+source(file.path(snakemake@scriptdir, "bootstrap.R"))
 
 options(scipen = 999)
 
 
-parse_cli <- function(args) {
-    parser <- ArgumentParser(
-        description = paste(
-            "Standardize one-sample genotype calls from a bcftools query TSV."
-        )
+workflow_config <- function() {
+    list(
+        input = snakemake@input[["gt"]],
+        output = snakemake@output[["gt"]],
+        hemizygote = parse_bool(
+            as.character(snakemake@params[["hemizygote_model"]]),
+            "model.hemizygote"
+        ),
+        threads = snakemake@threads
     )
-
-    parser$add_argument(
-        "--input",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Gzipped TSV containing CHROM, POS, REF, ALT, and GT fields."
-    )
-
-    parser$add_argument(
-        "--output",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Compressed TSV output path."
-    )
-
-    parser$add_argument(
-        "--hemizygote-model",
-        required = TRUE,
-        metavar = "BOOL",
-        help = "Whether haploid X/Y calls are supported: True or False."
-    )
-
-    parser$add_argument("--threads", type = "integer", default = 1L)
-
-    parsed <- parser$parse_args(args = args)
-    require_positive_threads(parsed$threads)
-    parsed$hemizygote <- parse_bool(
-        parsed$hemizygote_model,
-        "--hemizygote-model"
-    )
-    parsed
 }
 
 
@@ -129,8 +99,7 @@ deduplicate_by_key <- function(genotypes) {
 }
 
 
-main <- function() {
-    config <- parse_cli(commandArgs(trailingOnly = TRUE))
+run <- function(config) {
     setDTthreads(config$threads)
 
     message("Reading genotype calls: ", config$input)
@@ -174,6 +143,4 @@ main <- function() {
 }
 
 
-if (sys.nframe() == 0) {
-    main()
-}
+run(workflow_config())

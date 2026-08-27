@@ -5,58 +5,21 @@
 # =============================================================================
 
 suppressPackageStartupMessages({
-    library(argparse)
     library(data.table)
 })
 
-script_path <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
-source(file.path(dirname(normalizePath(script_path)), "bootstrap.R"))
-rm(script_path)
+source(file.path(snakemake@scriptdir, "bootstrap.R"))
 
 options(scipen = 999)
 
 
-parse_cli <- function(args) {
-    parser <- ArgumentParser(
-        description = paste(
-            "Join standardized sample genotypes to testing-unit annotations."
-        )
+workflow_config <- function() {
+    list(
+        gt = snakemake@input[["gt"]],
+        unit_table = snakemake@input[["unit_tbl"]],
+        output = snakemake@output[["annotated_gt"]],
+        threads = snakemake@threads
     )
-
-    parser$add_argument(
-        "--gt",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Compressed standardized genotype TSV."
-    )
-
-    parser$add_argument(
-        "--unit-table",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Compressed testing-unit annotation TSV."
-    )
-
-    parser$add_argument(
-        "--output",
-        required = TRUE,
-        metavar = "FILE",
-        help = "Compressed joined TSV output path."
-    )
-
-    parser$add_argument(
-        "--threads",
-        type = "integer",
-        default = 1,
-        metavar = "N",
-        help = "Number of data.table threads to use [default: %(default)s]."
-    )
-
-    parsed <- parser$parse_args(args = args)
-
-    require_positive_threads(parsed$threads)
-
-    parsed
 }
 
 
@@ -122,8 +85,7 @@ join_annotations <- function(genotypes, unit_table) {
 }
 
 
-main <- function() {
-    config <- parse_cli(commandArgs(trailingOnly = TRUE))
+run <- function(config) {
     setDTthreads(config$threads)
 
     message("Reading testing-unit annotations: ", config$unit_table)
@@ -158,6 +120,4 @@ main <- function() {
 }
 
 
-if (sys.nframe() == 0) {
-    main()
-}
+run(workflow_config())

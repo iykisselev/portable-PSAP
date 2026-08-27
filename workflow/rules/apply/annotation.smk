@@ -104,9 +104,7 @@ rule prepare_testing_units:
     """
     input:
         annotations=rules.annotate_variants.output.annotations,
-        annotation_qc=rules.require_valid_annotations.output.ok,
-        script=str(APPLY_SCRIPT_DIR / "prepare_testing_units.R"),
-        libraries=R_RUNTIME_FILES
+        annotation_qc=rules.require_valid_annotations.output.ok
     output:
         unit_table=ensure(str(TESTING_UNIT_TABLE), non_empty=True)
     threads: 4
@@ -122,11 +120,5 @@ rule prepare_testing_units:
             LOG_DIR / "apply" / config["run"]["apply_prefix"] /
             "annotation" / "prepare_testing_units.log"
         )
-    shell:
-        """
-        Rscript {input.script:q} \
-            --input {input.annotations:q} \
-            --output {output.unit_table:q} \
-            --threads {threads} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(APPLY_SCRIPT_DIR / "prepare_testing_units.R")
