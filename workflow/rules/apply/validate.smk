@@ -178,14 +178,10 @@ rule validate_model:
         lookup_het=VALIDATION_LOOKUP_HET,
         lookup_hom=VALIDATION_LOOKUP_HOM,
         lookup_hem_chrx=VALIDATION_LOOKUP_HEM_CHRX_INPUT,
-        script=str(Path(APPLY_SCRIPT_DIR) / "validate_model.py"),
         library=str(VALIDATION_LIBRARY)
     output:
         report=ensure(str(MODEL_VALIDATION), non_empty=True)
     params:
-        lookup_hem_chrx=lambda wc, input: (
-            str(input.lookup_hem_chrx[0]) if input.lookup_hem_chrx else "None"
-        ),
         score_max=str(config["model"]["score_max"]),
         assembly=str(config["reference"]["assembly"]),
         unit=str(config["model"]["unit"]),
@@ -201,21 +197,8 @@ rule validate_model:
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "model.log")
-    shell:
-        """
-        python {input.script:q} \
-            --testing-unit-bed {input.testing_unit_bed:q} \
-            --lookup-het {input.lookup_het:q} \
-            --lookup-hom {input.lookup_hom:q} \
-            --lookup-hem-chrx {params.lookup_hem_chrx:q} \
-            --score-max {params.score_max:q} \
-            --assembly {params.assembly:q} \
-            --unit {params.unit:q} \
-            --hemizygote-model {params.hemizygote_model:q} \
-            --include-indels {params.include_indels:q} \
-            --out-json {output.report:q} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "validate_model.py")
 
 
 rule merge_validation:
