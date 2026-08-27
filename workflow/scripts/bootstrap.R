@@ -5,7 +5,7 @@ if (length(script_args) != 1L) {
 
 PSAP_SCRIPT_DIR <- dirname(normalizePath(sub("^--file=", "", script_args)))
 PSAP_R_LIB_DIR <- normalizePath(
-    file.path(PSAP_SCRIPT_DIR, "..", "..", "lib", "r"),
+    file.path(PSAP_SCRIPT_DIR, "..", "lib", "r"),
     mustWork = TRUE
 )
 
