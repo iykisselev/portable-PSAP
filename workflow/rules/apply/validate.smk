@@ -78,7 +78,6 @@ rule validate_cohort:
         fasta=VALIDATION_FASTA,
         fasta_index=VALIDATION_FASTA_INDEX,
         fasta_gzi=VALIDATION_FASTA_GZI,
-        script=str(Path(APPLY_SCRIPT_DIR) / "validate_cohort.py"),
         library=str(VALIDATION_LIBRARY)
     output:
         report=ensure(str(COHORT_VALIDATION), non_empty=True),
@@ -96,18 +95,8 @@ rule validate_cohort:
     container: sif("validation")
     log:
         str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "validation" / "cohort.log")
-    shell:
-        """
-        python {input.script:q} \
-            --vcf {input.vcf:q} \
-            --sample-metadata {input.metadata:q} \
-            --sample-metadata-kind {params.metadata_kind:q} \
-            --fasta {input.fasta:q} \
-            --hemizygote-model {params.hemizygote_model:q} \
-            --out-json {output.report:q} \
-            --out-manifest {output.manifest:q} \
-            > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "validate_cohort.py")
 
 
 rule validate_resources:
