@@ -1,6 +1,3 @@
-import shlex
-
-
 CADD_SNV = WORKFLOW_CADD_SNV
 CADD_INDEL = WORKFLOW_CADD_INDEL
 INCLUDE_INDELS = config["model"]["include_indels"]
@@ -32,22 +29,8 @@ rule annotate_variants:
         csi=ensure(str(ANNOTATED_VCF_CSI), non_empty=True),
         annotations=ensure(str(RAW_UNIT_ANNOTATIONS), non_empty=True)
     params:
-        info_header=(
-            "##INFO=<ID=TESTING_UNIT,Number=.,Type=String,"
-            f'Description="PSAP {TESTING_UNIT} unit IDs">'
-        ),
-        query_format=(
-            "%CHROM\\t%POS\\t%REF\\t%ALT\\t%INFO/PSAP_CADD_PHRED"
-            "\\t%INFO/TESTING_UNIT\\n"
-        ),
-        indel_annotation=(
-            "bcftools annotate "
-            f"--annotations {shlex.quote(str(CADD_INDEL))} "
-            "--columns CHROM,POS,REF,ALT,-,+INFO/PSAP_CADD_PHRED "
-            "--pair-logic exact -Ou -"
-            if INCLUDE_INDELS
-            else "bcftools view -Ou -"
-        )
+        include_indels=INCLUDE_INDELS,
+        testing_unit=TESTING_UNIT
     threads: 8
     resources:
         mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 32000, 512),
@@ -63,40 +46,8 @@ rule annotate_variants:
             LOG_DIR / "apply" / config["run"]["apply_prefix"] /
             "annotation" / "annotate_variants.log"
         )
-    shell:
-        r"""
-        {{
-            bcftools annotate \
-                --annotations {input.cadd_snv:q} \
-                --columns CHROM,POS,REF,ALT,-,INFO/PSAP_CADD_PHRED \
-                --header-line '##INFO=<ID=PSAP_CADD_PHRED,Number=1,Type=Float,Description="CADD PHRED score">' \
-                --pair-logic exact \
-                -Ou \
-                {input.vcf:q} | \
-            {params.indel_annotation} | \
-            bcftools annotate \
-                --annotations {input.unit_bed:q} \
-                --columns CHROM,FROM,TO,INFO/TESTING_UNIT \
-                --header-line {params.info_header:q} \
-                --merge-logic TESTING_UNIT:unique \
-                --threads {threads} \
-                -Oz \
-                -o {output.vcf:q} \
-                -
-
-            bcftools index \
-                --threads {threads} \
-                --force \
-                {output.vcf:q}
-
-            {{
-                printf 'CHROM\tPOS\tREF\tALT\tCADD_PHRED\tunit\n'
-                bcftools query \
-                    --format {params.query_format:q} \
-                    {output.vcf:q}
-            }} | bgzip --threads {threads} --stdout > {output.annotations:q}
-        }} > {log:q} 2>&1
-        """
+    script:
+        str(Path(workflow.basedir) / "scripts" / "annotate_variants.py")
 
 
 rule summarize_annotations:

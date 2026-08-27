@@ -153,7 +153,6 @@ main <- function() {
         nThread = config$threads
     )
 
-    message("Testing unit: ", config$unit)
     message("Joined rows written: ", nrow(joined))
     message("Wrote joined annotations: ", config$output)
 }
