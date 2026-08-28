@@ -371,7 +371,7 @@ the profile if they do not match the site or project allocation.
 
 ## References
 
-1. Köster, J. & Rahmann, S. Snakemake—a scalable bioinformatics workflow
+1. Köster, J. & Rahmann, S. Snakemake - a scalable bioinformatics workflow
    engine. *Bioinformatics* **28**, 2520–2522 (2012).
 2. Kircher, M. *et al.* A general framework for estimating the relative
    pathogenicity of human genetic variants. *Nature Genetics* **46**,
@@ -380,7 +380,7 @@ the profile if they do not match the site or project allocation.
    single case exomes. *Nature Genetics* **48**, 1455–1461 (2016).
 4. Karczewski, K. J. *et al.* The mutational constraint spectrum quantified
    from variation in 141,456 humans. *Nature* **581**, 434–443 (2020).
-5. Rentzsch, P., Schubach, M., Shendure, J. & Kircher, M. CADD-Splice—improving
+5. Rentzsch, P., Schubach, M., Shendure, J. & Kircher, M. CADD-Splice - improving
    genome-wide variant effect prediction using deep learning-derived splice
    scores. *Genome Medicine* **13**, 31 (2021).
 6. Chen, S. *et al.* A genomic mutational constraint map using variation in
