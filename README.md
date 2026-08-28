@@ -3,7 +3,7 @@
 Portable PSAP is a Snakemake workflow [1] that applies precomputed PSAP lookup
 tables to a cohort VCF and prioritizes variants under the selected disease
 models using the single-case PSAP framework and its genomic-regions extension
-[2,7].
+[3,7].
 
 ## Workflow overview
 
@@ -43,7 +43,7 @@ its span overlaps an excluded region.
 The filtered VCF receives CADD-PHRED scores and every overlapping testing-unit
 ID. SNVs always use the configured SNV CADD table. Indels use the configured
 indel table only when `model.include_indels` is `true`. CADD scores and their
-splice-focused extension are described in [3,5].
+splice-focused extension are described in [2,5].
 
 Annotation QC stops the run if an expected resource annotates no relevant
 records:
@@ -373,11 +373,11 @@ the profile if they do not match the site or project allocation.
 
 1. Köster, J. & Rahmann, S. Snakemake—a scalable bioinformatics workflow
    engine. *Bioinformatics* **28**, 2520–2522 (2012).
-2. Wilfert, A. B. *et al.* Genomewide significance testing of variation from
-   single case exomes. *Nature Genetics* **48**, 1455–1461 (2016).
-3. Kircher, M. *et al.* A general framework for estimating the relative
+2. Kircher, M. *et al.* A general framework for estimating the relative
    pathogenicity of human genetic variants. *Nature Genetics* **46**,
    310–315 (2014).
+3. Wilfert, A. B. *et al.* Genomewide significance testing of variation from
+   single case exomes. *Nature Genetics* **48**, 1455–1461 (2016).
 4. Karczewski, K. J. *et al.* The mutational constraint spectrum quantified
    from variation in 141,456 humans. *Nature* **581**, 434–443 (2020).
 5. Rentzsch, P., Schubach, M., Shendure, J. & Kircher, M. CADD-Splice—improving
@@ -385,9 +385,7 @@ the profile if they do not match the site or project allocation.
    scores. *Genome Medicine* **13**, 31 (2021).
 6. Chen, S. *et al.* A genomic mutational constraint map using variation in
    76,156 human genomes. *Nature* **625**, 92–100 (2024).
-7. Ogloblinsky, M.-S.C., Bocher, O., Aloui, C., Leutenegger, A.-L., Ozisik,
-   O., Baudot, A., Tournier-Lasserve, E., Castillo-Madeen, H., Lewinsohn, D.,
-   Conrad, D.F., Génin, E. & Marenne, G. PSAP-Genomic-Regions: A method
+7. Ogloblinsky, M.-S.C., *et al.* PSAP-Genomic-Regions: A method
    leveraging population data to prioritize coding and non-coding variants in
    whole-genome sequencing for rare disease diagnosis. *Genetic Epidemiology*
-   **49**, e22593 (2025). https://doi.org/10.1002/gepi.22593
+   **49**, e22593 (2025).
