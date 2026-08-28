@@ -1,17 +1,9 @@
 # Portable PSAP
 
-Portable PSAP is a Snakemake workflow that applies precomputed PSAP lookup
-tables to a cohort VCF and identifies sample-specific candidates under the
-selected disease models.
-
-Scientific settings are kept separate from the paths and settings for an
-individual run:
-
-- [`config/config.yaml`](config/config.yaml) defines the scientific model,
-  reference identities, and reporting policy.
-- [`runs/run.example.yaml`](runs/run.example.yaml) is the template for one
-  cohort, its resource paths, and output location.
-- [`profiles/`](profiles) determines execution profiles.
+Portable PSAP is a Snakemake workflow [1] that applies precomputed PSAP lookup
+tables to a cohort VCF and prioritizes variants under the selected disease
+models using the single-case PSAP framework and its genomic-regions extension
+[2,7].
 
 ## Workflow overview
 
@@ -35,9 +27,7 @@ Warnings do not stop the run, but remain recorded in `validation.json`.
 
 The workflow creates indexed working copies of inputs below the run output 
 directory. When necessary, it sorts and BGZF-compresses the VCF and
-tabular genomic resources, then creates `.tbi` indexes for the staged files.
-
-It then:
+tabular genomic resources, then creates indexes for the staged files. It then:
 
 1. retains variants in the configured callable/coverage regions, when a
    coverage resource is provided;
@@ -52,7 +42,8 @@ its span overlaps an excluded region.
 
 The filtered VCF receives CADD-PHRED scores and every overlapping testing-unit
 ID. SNVs always use the configured SNV CADD table. Indels use the configured
-indel table only when `model.include_indels` is `true`.
+indel table only when `model.include_indels` is `true`. CADD scores and their
+splice-focused extension are described in [3,5].
 
 Annotation QC stops the run if an expected resource annotates no relevant
 records:
@@ -194,6 +185,11 @@ avoid some staging work.
 | `exclusions` | An ordered list of BED, TSV, or VCF resources. BED rows are zero-based, half-open intervals. TSV rows are either `CHROM, start, end` with 1-based inclusive coordinates or `CHROM, POS, REF, ALT` exact variants. VCF exclusions match exact alleles. |
 | `cadd.snv` | Tab-delimited CADD SNV table with `Chrom`, `Pos`, `Ref`, `Alt`, `RawScore`, and `PHRED` as the first six data columns. |
 | `cadd.indel` | Same required CADD layout for indels when `model.include_indels: true`; otherwise it may be `null`. |
+
+The default scientific configuration names gnomAD-derived coverage and lookup
+resource releases. When substituting a resource, reflect assembly and release 
+changes in the run documentation; gnomAD constraint resources are described
+in [4,6].
 
 ### PSAP lookup tables
 
@@ -372,3 +368,26 @@ snakemake \
 
 Tune `jobs`, `default-resources.mem_mb`, and `default-resources.runtime` in
 the profile if they do not match the site or project allocation.
+
+## References
+
+1. Köster, J. & Rahmann, S. Snakemake—a scalable bioinformatics workflow
+   engine. *Bioinformatics* **28**, 2520–2522 (2012).
+2. Wilfert, A. B. *et al.* Genomewide significance testing of variation from
+   single case exomes. *Nature Genetics* **48**, 1455–1461 (2016).
+3. Kircher, M. *et al.* A general framework for estimating the relative
+   pathogenicity of human genetic variants. *Nature Genetics* **46**,
+   310–315 (2014).
+4. Karczewski, K. J. *et al.* The mutational constraint spectrum quantified
+   from variation in 141,456 humans. *Nature* **581**, 434–443 (2020).
+5. Rentzsch, P., Schubach, M., Shendure, J. & Kircher, M. CADD-Splice—improving
+   genome-wide variant effect prediction using deep learning-derived splice
+   scores. *Genome Medicine* **13**, 31 (2021).
+6. Chen, S. *et al.* A genomic mutational constraint map using variation in
+   76,156 human genomes. *Nature* **625**, 92–100 (2024).
+7. Ogloblinsky, M.-S.C., Bocher, O., Aloui, C., Leutenegger, A.-L., Ozisik,
+   O., Baudot, A., Tournier-Lasserve, E., Castillo-Madeen, H., Lewinsohn, D.,
+   Conrad, D.F., Génin, E. & Marenne, G. PSAP-Genomic-Regions: A method
+   leveraging population data to prioritize coding and non-coding variants in
+   whole-genome sequencing for rare disease diagnosis. *Genetic Epidemiology*
+   **49**, e22593 (2025). https://doi.org/10.1002/gepi.22593
