@@ -73,7 +73,7 @@ rule combine_exclusions:
         ]
     threads: 1
     resources:
-        mem_mb=4096,
+        mem_mb=12000,
         runtime=180
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
