@@ -65,6 +65,7 @@ run <- function(config) {
     "Male X/Y heterozygous calls removed: ",
     classified$removed_male_xy_het
   )
+  message("Unknown-sex X/Y calls removed: ", classified$removed_unknown_sex_xy)
   message("Output rows: ", nrow(classified$genotypes))
 
   fwrite(

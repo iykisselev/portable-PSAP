@@ -1,6 +1,6 @@
 VARIANT_DIR = APPLY_OUTDIR / "variants"
-FILTERED_BCF = VARIANT_DIR / f"{config['run']['apply_prefix']}.covered.bcf"
-FILTERED_VCF = VARIANT_DIR / f"{config['run']['apply_prefix']}.filtered_pass.vcf.gz"
+FILTERED_BCF = VARIANT_DIR / f"{APPLY_OUTDIR.name}.covered.bcf"
+FILTERED_VCF = VARIANT_DIR / f"{APPLY_OUTDIR.name}.filtered_pass.vcf.gz"
 
 
 rule filter_low_coverage:
@@ -27,7 +27,7 @@ rule filter_low_coverage:
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
-        str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "variants" / "filter_low_coverage.log")
+        str(APPLY_LOG_DIR / "variants" / "filter_low_coverage.log")
     params:
         coverage=(
             lambda wc, input: str(input.covered_regions[0])
@@ -81,7 +81,7 @@ rule filter_excluded_records:
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
-        str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "variants" / "filter_excluded_records.log")
+        str(APPLY_LOG_DIR / "variants" / "filter_excluded_records.log")
     params:
         exclusions=(
             lambda wc, input: str(input.exclusions[0])

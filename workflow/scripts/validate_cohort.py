@@ -4,11 +4,8 @@ from _library import add_library_path
 
 add_library_path(snakemake.scriptdir)
 
-from validation import (
-    parse_bool, read_ped, read_samples_tsv, read_vcf, validate_fasta,
-    validate_hemizygote_chromosomes, validate_normalized_split_vcf,
-    validate_vcf_resource, validate_vcf_samples, write_manifest, write_report,
-)
+from validation_cohort import validate_cohort_inputs
+from validation_reporting import write_validation_report
 
 
 def main() -> None:
@@ -19,21 +16,21 @@ def main() -> None:
     accumulated validation report and writes the manifest for downstream dynamic
     sample selection.
     """
-    errors: list[str] = []
-    warnings: list[str] = []
     kind = str(snakemake.params.metadata_kind)
-    hemizygote = parse_bool(str(snakemake.params.hemizygote_model), "hemizygote_model", errors)
-    metadata = read_ped(snakemake.input.metadata, errors, warnings) if kind == "ped" else read_samples_tsv(snakemake.input.metadata, errors, warnings)
-    vcf_samples, vcf_chromosomes = read_vcf(snakemake.input.vcf, errors)
-    validate_hemizygote_chromosomes(hemizygote, vcf_chromosomes, errors)
-    validate_vcf_samples(vcf_samples, metadata["sample_ids"], errors, metadata_label="PED" if kind == "ped" else "Sample sheet")
     vcf_index = str(snakemake.input.vcf_index[0]) if snakemake.input.vcf_index else None
     fasta_gzi = str(snakemake.input.fasta_gzi[0]) if snakemake.input.fasta_gzi else None
-    validate_vcf_resource(snakemake.input.vcf, "Input VCF", errors, warnings, vcf_index)
-    validate_fasta(snakemake.input.fasta, snakemake.input.fasta_index, fasta_gzi, errors)
-    validate_normalized_split_vcf(snakemake.input.vcf, snakemake.input.fasta, snakemake.input.fasta_index, errors, warnings)
-    write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"n_ped_samples": len(metadata["all_sample_ids"]), "n_processed_samples": len(metadata["sample_ids"]), "n_excluded_phenotype_samples": len(metadata["excluded_phenotype_sample_ids"]), "n_vcf_samples": len(vcf_samples), "n_affected_samples": metadata["affected_count"], "n_male_samples": metadata["male_count"], "sex_counts": metadata["sex_counts"], "phenotype_counts": metadata["phenotype_counts"], "vcf_chromosomes": vcf_chromosomes}}, snakemake.output.report, create_parents=False)
-    write_manifest(metadata["manifest"], snakemake.output.manifest, create_parents=False)
+    report = validate_cohort_inputs(
+        metadata_path=snakemake.input.metadata,
+        metadata_kind=kind,
+        vcf=snakemake.input.vcf,
+        vcf_index=vcf_index,
+        fasta=snakemake.input.fasta,
+        fasta_index=snakemake.input.fasta_index,
+        fasta_gzi=fasta_gzi,
+        hemizygote_model=str(snakemake.params.hemizygote_model),
+        manifest_path=snakemake.output.manifest,
+    )
+    write_validation_report(report, snakemake.output.report, create_parents=False)
 
 
 if __name__ == "__main__":

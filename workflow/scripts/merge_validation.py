@@ -1,24 +1,10 @@
-"""Merge validation fragments via injected Snakemake I/O."""
+"""Merge schema-validated fragments into the one apply validation report."""
 
-import json
-from pathlib import Path
+from _library import add_library_path
 
+add_library_path(snakemake.scriptdir)
 
-def append_unique(target: list[str], values: list[str]) -> None:
-    """Append unseen messages while preserving their first-reporting order.
-
-    Args:
-        target: Mutable list receiving messages not already present.
-        values: Messages from one validation-report fragment.
-
-    Side Effects:
-        Mutates `target` in place. No value is returned.
-    """
-    seen = set(target)
-    for value in values:
-        if value not in seen:
-            target.append(value)
-            seen.add(value)
+from validation_reporting import merge_validation_reports, write_validation_report
 
 
 def main() -> None:
@@ -33,21 +19,11 @@ def main() -> None:
         OSError: If a fragment or the destination cannot be read or written.
         json.JSONDecodeError: If a validation fragment is not valid JSON.
     """
-    errors: list[str] = []
-    warnings: list[str] = []
-    summary: dict = {}
-    sections: list[str] = []
-    for fragment_text in snakemake.input:
-        fragment_path = Path(fragment_text)
-        fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
-        append_unique(errors, fragment.get("errors", []))
-        append_unique(warnings, fragment.get("warnings", []))
-        # Each validator owns different summary keys; later input order is the
-        # explicit tie-breaker if a key is shared.
-        summary.update(fragment.get("summary", {}))
-        sections.append(fragment_path.stem)
-    report = {"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": summary, "validation_sections": sections}
-    Path(snakemake.output.report).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_validation_report(
+        merge_validation_reports(snakemake.input),
+        snakemake.output.report,
+        create_parents=False,
+    )
 
 
 if __name__ == "__main__":

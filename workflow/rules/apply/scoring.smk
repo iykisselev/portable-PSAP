@@ -1,8 +1,8 @@
 LOOKUP_TABLES = {
-    name: configured_path(path)
-    for name, path in REFERENCE_BINDINGS["lookup_tables"].items()
+    name: path
+    for name, path in LOOKUP_SOURCE.tables.items()
 }
-HEMIZYGOUS_MODEL_ENABLED = config["model"]["hemizygote"]
+HEMIZYGOUS_MODEL_ENABLED = WORKFLOW_PLAN.model.hemizygote
 
 
 rule apply_psap:
@@ -15,7 +15,14 @@ rule apply_psap:
         lookup_hom=LOOKUP_TABLES["hom"],
         lookup_hem_chrx=(
             [LOOKUP_TABLES["hem_chrX"]] if HEMIZYGOUS_MODEL_ENABLED else []
-        )
+        ),
+        lookup_metadata=[LOOKUP_SOURCE.metadata] if LOOKUP_SOURCE.metadata else [],
+        lookup_validation=[LOOKUP_SOURCE.validation] if LOOKUP_SOURCE.validation else [],
+        lookup_marker=[LOOKUP_SOURCE.marker] if LOOKUP_SOURCE.marker else [],
+        eligible_units=[LOOKUP_SOURCE.eligible_units] if LOOKUP_SOURCE.eligible_units else [],
+        calibration_mask=[LOOKUP_SOURCE.calibration_mask] if LOOKUP_SOURCE.calibration_mask else [],
+        excluded_alleles=list(LOOKUP_SOURCE.excluded_alleles),
+        excluded_units=[LOOKUP_SOURCE.excluded_units] if LOOKUP_SOURCE.excluded_units else []
     output:
         psap=ensure(
             str(SCORED_DIR / "{sample}.{testing_unit}.tsv.gz"),
@@ -23,8 +30,10 @@ rule apply_psap:
         )
 
     params:
-        score_max=str(config["model"]["score_max"]),
-        hemizygote=config["model"]["hemizygote"]
+        score_max=str(WORKFLOW_PLAN.model.score_max),
+        hemizygote=WORKFLOW_PLAN.model.hemizygote,
+        lookup_contract=LOOKUP_SOURCE.contract,
+        lookup_bin_width=LOOKUP_SOURCE.bin_width or ""
     threads: 4
     resources:
         mem_mb=16000,
@@ -37,7 +46,7 @@ rule apply_psap:
         str(BENCHMARK_DIR / "apply_psap_{sample}_{testing_unit}.tsv")
     log:
         str(
-            LOG_DIR / "apply" / f'{config["run"]["apply_prefix"]}' / "samples" /
+            APPLY_LOG_DIR / "samples" /
             "apply_psap_{sample}_{testing_unit}.log"
         )
     script:

@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import csv
 import gzip
-import json
 import os
 import shutil
 import subprocess
 from collections import Counter
 from pathlib import Path
+
+from sample_manifest import write_sample_manifest
+from validation_reporting import build_validation_report, write_validation_report
 
 
 VALID_UNITS = {"gene", "cadd_region", "coding_cadd_region"}
@@ -1012,14 +1014,10 @@ def validate_hemizygote_chromosomes(
     if not hemizygote or not vcf_chromosomes:
         return
 
-    missing = [
-        chromosome
-        for chromosome in ("X", "Y")
-        if chromosome not in vcf_chromosomes
-    ]
+    missing = [chromosome for chromosome in ("X",) if chromosome not in vcf_chromosomes]
     if missing:
         errors.append(
-            "Hemizygote model requires sex chromosome(s) in the input VCF: "
+            "HEM chromosome-X model requires chromosome(s) in the input VCF: "
             + ", ".join(missing)
         )
 
@@ -1098,7 +1096,10 @@ def read_lookup_unit_ids(
             for row in csv.reader(handle, delimiter="\t"):
                 if not row or not row[0].strip() or row[0].lstrip().startswith("#"):
                     continue
-                identifiers.add(row[0].strip())
+                identifier = row[0].strip()
+                if identifier.lower() == "testing_unit_id":
+                    continue
+                identifiers.add(identifier)
     except OSError as exc:
         errors.append(f"Could not read testing-unit IDs from {description}: {path}: {exc}")
     return identifiers
@@ -1500,14 +1501,20 @@ def write_report(
     *,
     create_parents: bool = True,
 ) -> Path:
-    output_path = Path(path)
-    if create_parents:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    """Compatibility wrapper for the shared schema-validated report writer."""
+    summary = dict(report.get("summary", {}))
+    if "sample_manifest" in report:
+        summary["sample_manifest"] = report["sample_manifest"]
+    return write_validation_report(
+        build_validation_report(
+            errors=report.get("errors", []),
+            warnings=report.get("warnings", []),
+            summary=summary,
+            sections=("legacy",),
+        ),
+        path,
+        create_parents=create_parents,
     )
-    return output_path
 
 
 def write_manifest(
@@ -1516,19 +1523,5 @@ def write_manifest(
     *,
     create_parents: bool = True,
 ) -> Path:
-    output_path = Path(path)
-    if create_parents:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with output_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=["family_id", "pid", "sex", "phenotype"],
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
-
-    return output_path
-
+    """Compatibility wrapper for atomic canonical-manifest publication."""
+    return write_sample_manifest(rows, path, create_parents=create_parents)

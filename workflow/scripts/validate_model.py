@@ -6,12 +6,9 @@ from _library import add_library_path
 
 add_library_path(snakemake.scriptdir)
 
-from validation import (
-    parse_model_settings,
-    validate_lookup_files,
-    validate_lookup_unit_overlap,
-    write_report,
-)
+from bundle_contract import is_supported_contract
+from validation_model import validate_model_inputs
+from validation_reporting import write_validation_report
 
 
 def main() -> None:
@@ -28,17 +25,40 @@ def main() -> None:
         hemizygote_model=str(snakemake.params.hemizygote_model),
         include_indels=str(snakemake.params.include_indels),
     )
-    errors: list[str] = []
-    warnings: list[str] = []
-    settings = parse_model_settings(args, errors)
     configured = {
         "het": str(snakemake.input.lookup_het),
         "hom": str(snakemake.input.lookup_hom),
         "hem_chrX": str(snakemake.input.lookup_hem_chrx[0]) if snakemake.input.lookup_hem_chrx else "",
     }
-    checked = validate_lookup_files(configured, settings, errors)
-    overlap = validate_lookup_unit_overlap(snakemake.input.testing_unit_bed, configured, settings, errors)
-    write_report({"status": "failed" if errors else "ok", "errors": errors, "warnings": warnings, "summary": {"unit": args.unit, "assembly": args.assembly, "hemizygote_model": settings["hemizygote"], "include_indels": settings["include_indels"], "lookup_files_checked": checked, "lookup_testing_unit_overlap": overlap}}, snakemake.output.report, create_parents=False)
+    contract = str(snakemake.params.lookup_contract)
+    certificate = None
+    components: dict[str, str] = {}
+    if is_supported_contract(contract):
+        certificate = {
+            "metadata": str(snakemake.input.lookup_metadata[0]),
+            "validation": str(snakemake.input.lookup_validation[0]),
+            "marker": str(snakemake.input.lookup_marker[0]),
+        }
+        components = {
+            "lookup_het": configured["het"],
+            "lookup_hom": configured["hom"],
+            "eligible_testing_units": str(snakemake.input.lookup_eligible_units[0]),
+            "calibration_regions": str(snakemake.input.lookup_calibration_mask[0]),
+            "excluded_alleles": str(snakemake.input.lookup_excluded_alleles[0]),
+            "excluded_units": str(snakemake.input.lookup_excluded_units[0]),
+        }
+        if str(snakemake.params.hemizygote_model).lower() == "true":
+            components["lookup_hem_chrX"] = configured["hem_chrX"]
+    report = validate_model_inputs(
+        args=args,
+        testing_unit_bed=snakemake.input.testing_unit_bed,
+        lookup_tables=configured,
+        lookup_contract=contract,
+        lookup_bin_width=str(snakemake.params.lookup_bin_width),
+        bundle_certificate=certificate,
+        bundle_components=components,
+    )
+    write_validation_report(report, snakemake.output.report, create_parents=False)
 
 
 if __name__ == "__main__":

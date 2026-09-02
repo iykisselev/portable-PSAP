@@ -72,7 +72,7 @@ properties:
   generation_settings:
     type: object
     additionalProperties: false
-    required: [coverage_minimum, variant_classes, score_bin_width, mutation_conversion]
+    required: [coverage_minimum, variant_classes, score_bin_width, mutation_conversion, x_chromosome]
     properties:
       coverage_minimum: {type: number, minimum: 0, maximum: 1}
       variant_classes:
@@ -80,6 +80,13 @@ properties:
         const: [snv]
       score_bin_width: {type: number, exclusiveMinimum: 0}
       mutation_conversion: {const: de_novo_proxy}
+      x_chromosome:
+        type: object
+        additionalProperties: false
+        required: [af_policy, mutation_rate_policy]
+        properties:
+          af_policy: {enum: [sex_specific, overall_proxy]}
+          mutation_rate_policy: {enum: [reject, sex_averaged_proxy]}
 $defs:
   resource_identity:
     type: object

@@ -14,7 +14,13 @@ PSAP_R_LIB_DIR <- file.path(psap_find_workflow_root(PSAP_SCRIPT_DIR), "lib", "r"
 
 source(file.path(PSAP_R_LIB_DIR, "common.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "table_contracts.R"), local = FALSE)
+source(file.path(PSAP_R_LIB_DIR, "genomic_contracts.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "variant_identity.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "disease_models.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "genotypes.R"), local = FALSE)
+source(file.path(PSAP_R_LIB_DIR, "bundle_contracts.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "lookup_contracts.R"), local = FALSE)
+source(file.path(PSAP_R_LIB_DIR, "psap_scoring.R"), local = FALSE)
+source(file.path(PSAP_R_LIB_DIR, "cohort_reporting.R"), local = FALSE)
+source(file.path(PSAP_R_LIB_DIR, "control_reference.R"), local = FALSE)
+source(file.path(PSAP_R_LIB_DIR, "candidate_reporting.R"), local = FALSE)

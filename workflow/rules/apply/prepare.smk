@@ -2,6 +2,7 @@ rule prepare_vcf_resource:
     """Stage either the cohort or projected exclusions at a stable VCF target."""
     input:
         source=vcf_resource_source,
+        source_index=vcf_resource_source_index,
         validated=vcf_resource_validation_marker
     output:
         data=ensure(str(PREPARED_DIR / "{resource}.vcf.gz"), non_empty=True),
@@ -13,14 +14,18 @@ rule prepare_vcf_resource:
         resource=VCF_RESOURCE_PATTERN
     threads: 1
     resources:
-        mem_mb=4096,
-        runtime=180
+        mem_mb=lambda wc, input, attempt: resource_mem_mb(
+            "stage_vcf", input, attempt
+        ),
+        runtime=lambda wc, input, attempt: resource_runtime_minutes(
+            "stage_vcf", input, attempt
+        )
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
-        str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "vcf_{resource}.log")
+        str(APPLY_LOG_DIR / "prepare" / "vcf_{resource}.log")
     script:
         str(Path(workflow.basedir) / "scripts" / "prepare_resource.py")
 
@@ -34,13 +39,14 @@ rule prepare_table_resource:
         cohort_index=table_resource_cohort_index,
         validated=validation_marker
     output:
-        data=ensure(str(PREPARED_TABLE_DIR / "{resource}.gz"), non_empty=True),
-        index=ensure(str(PREPARED_TABLE_DIR / "{resource}.gz.tbi"), non_empty=True)
+        data=ensure(str(PREPARED_TABLE_DIR / "{resource}.{extension}.gz"), non_empty=True),
+        index=ensure(str(PREPARED_TABLE_DIR / "{resource}.{extension}.gz.tbi"), non_empty=True)
     params:
-        kind=lambda wc: TABLE_RESOURCE_SPECS[wc.resource]["kind"],
-        tsv_layout=lambda wc: TABLE_RESOURCE_SPECS[wc.resource]["tsv_layout"] or "auto"
+        kind=table_resource_kind,
+        tsv_layout=table_resource_tsv_layout
     wildcard_constraints:
-        resource=TABLE_RESOURCE_PATTERN
+        resource=TABLE_RESOURCE_PATTERN,
+        extension="(?:bed|tsv|vcf)"
     threads: 1
     resources:
         mem_mb=table_resource_mem_mb,
@@ -50,9 +56,9 @@ rule prepare_table_resource:
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     benchmark:
-        str(BENCHMARK_DIR / "prepare_{resource}.tsv")
+        str(BENCHMARK_DIR / "prepare_{resource}_{extension}.tsv")
     log:
-        str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "table_{resource}.log")
+        str(APPLY_LOG_DIR / "prepare" / "table_{resource}_{extension}.log")
     script:
         str(Path(workflow.basedir) / "scripts" / "prepare_resource.py")
 
@@ -80,6 +86,6 @@ rule combine_exclusions:
     envmodules: *mod("validation")
     container: sif("validation")
     log:
-        str(LOG_DIR / "apply" / config["run"]["apply_prefix"] / "prepare" / "combine_exclusions.log")
+        str(APPLY_LOG_DIR / "prepare" / "combine_exclusions.log")
     script:
         str(Path(workflow.basedir) / "scripts" / "combine_exclusions.py")

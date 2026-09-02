@@ -20,7 +20,7 @@ rule extract_gt:
     container: sif("bioinformatics")
     log:
         str(
-            LOG_DIR / "apply" / config["run"]["apply_prefix"] / "samples" /
+            APPLY_LOG_DIR / "samples" /
             "extract_gt_{sample}.log"
         )
     shell:
@@ -42,7 +42,7 @@ rule standardize_gt:
     output:
         gt=ensure(str(STANDARDIZED_DIR / "{sample}.tsv.gz"), non_empty=True)
     params:
-        hemizygote_model=config["model"]["hemizygote"]
+        hemizygote_model=WORKFLOW_PLAN.model.hemizygote
     wildcard_constraints:
         sample=SAMPLE_PATTERN
     threads: 2
@@ -55,7 +55,7 @@ rule standardize_gt:
     container: sif("r")
     log:
         str(
-            LOG_DIR / "apply" / config["run"]["apply_prefix"] / "samples" /
+            APPLY_LOG_DIR / "samples" /
             "standardize_gt_{sample}.log"
         )
     script:
@@ -76,7 +76,7 @@ rule apply_sex_model:
         sample=SAMPLE_PATTERN
     params:
         sex=sample_sex,
-        hemizygote_model=config["model"]["hemizygote"]
+        hemizygote_model=WORKFLOW_PLAN.model.hemizygote
     threads: 2
     resources:
         mem_mb=8192,
@@ -87,7 +87,7 @@ rule apply_sex_model:
     container: sif("r")
     log:
         str(
-            LOG_DIR / "apply" / config["run"]["apply_prefix"] / "samples" /
+            APPLY_LOG_DIR / "samples" /
             "apply_sex_model_{sample}.log"
         )
     script:
@@ -120,7 +120,7 @@ rule join_sample_annotations:
     container: sif("r")
     log:
         str(
-            LOG_DIR / "apply" / config["run"]["apply_prefix"] / "samples" /
+            APPLY_LOG_DIR / "samples" /
             "join_sample_annotations_{sample}_{testing_unit}.log"
         )
     script:

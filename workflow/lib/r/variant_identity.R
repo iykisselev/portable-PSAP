@@ -1,5 +1,5 @@
 variant_key <- function(chr, start, end, ref, alt) {
-  paste0(chr, ":", start, "-", end, "_", ref, ">", alt)
+  clinical_variant_key(chr, start, end, ref, alt)
 }
 
 

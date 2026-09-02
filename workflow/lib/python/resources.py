@@ -70,19 +70,32 @@ def run(command: list[str], **kwargs) -> None:
     subprocess.run(command, check=True, **kwargs)
 
 
-def prepare_vcf(source: Path, output: Path) -> None:
+def prepare_vcf(
+    source: Path, output: Path, source_index: Path | None = None
+) -> None:
+    """Stage a cohort VCF, reusing a complete conventional BGZF pair when safe."""
     bcftools = require_tool("bcftools")
-    run(
-        [
-            bcftools,
-            "sort",
-            "--output-type",
-            "z",
-            "--output-file",
-            str(output),
-            str(source),
-        ]
+    reusable = (
+        is_bgzip(source)
+        and has_bgzf_eof(source)
+        and source_has_index(source_index)
+        and source_index is not None
+        and is_conventional_source_index(source, source_index)
     )
+    if reusable:
+        link_compatible_table(source, output)
+    else:
+        run(
+            [
+                bcftools,
+                "sort",
+                "--output-type",
+                "z",
+                "--output-file",
+                str(output),
+                str(source),
+            ]
+        )
     run([bcftools, "index", "--force", "--tbi", str(output)])
 
 
@@ -345,4 +358,3 @@ def prepare_table(
         copy_as_bgzip(source, output, chromosome_map)
 
     run([tabix, "--force", *index_args, str(output)])
-

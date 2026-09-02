@@ -16,8 +16,8 @@ rule build_sample_candidates:
     params:
         pid=lambda wc: wc.sample,
         sex=affected_sample_sex,
-        candidate_id_separator=config["report"]["candidate_id"]["separator"],
-        candidate_id_ordinal_width=config["report"]["candidate_id"]["ordinal_width"]
+        candidate_id_separator=WORKFLOW_PLAN.report.candidate_id_separator,
+        candidate_id_ordinal_width=WORKFLOW_PLAN.report.candidate_id_ordinal_width
     threads: 2
     resources:
         mem_mb=4096,
@@ -28,9 +28,7 @@ rule build_sample_candidates:
     container: sif("r")
     log:
         str(
-            LOG_DIR
-            / "apply"
-            / config["run"]["apply_prefix"]
+            APPLY_LOG_DIR
             / "cohort"
             / "build_sample_candidates_{sample}_{testing_unit}.log"
         )
@@ -55,12 +53,16 @@ rule build_control_reference:
     params:
         pids=control_pids,
         sexes=control_sexes,
-        hemizygote=config["model"]["hemizygote"],
-        deduplicate=config.get("report", {}).get("deduplicate_controls", True)
+        hemizygote=WORKFLOW_PLAN.model.hemizygote,
+        deduplicate=WORKFLOW_PLAN.report.deduplicate_controls
     threads: 4
     resources:
-        mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 16000, 256),
-        runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 360, 20)
+        mem_mb=lambda wc, input, attempt: execution_mem_mb(
+            wc, input, attempt, "cohort_aggregate"
+        ),
+        runtime=lambda wc, input, attempt: execution_runtime_minutes(
+            wc, input, attempt, "cohort_aggregate"
+        )
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")
@@ -69,9 +71,7 @@ rule build_control_reference:
         str(BENCHMARK_DIR / "build_control_reference.tsv")
     log:
         str(
-            LOG_DIR
-            / "apply"
-            / config["run"]["apply_prefix"]
+            APPLY_LOG_DIR
             / "cohort"
             / "build_control_reference.log"
         )
@@ -97,8 +97,12 @@ rule build_cohort_report:
         )
     threads: 4
     resources:
-        mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 16000, 256),
-        runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 360, 20)
+        mem_mb=lambda wc, input, attempt: execution_mem_mb(
+            wc, input, attempt, "cohort_aggregate"
+        ),
+        runtime=lambda wc, input, attempt: execution_runtime_minutes(
+            wc, input, attempt, "cohort_aggregate"
+        )
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")
@@ -107,9 +111,7 @@ rule build_cohort_report:
         str(BENCHMARK_DIR / "build_cohort_report.tsv")
     log:
         str(
-            LOG_DIR
-            / "apply"
-            / config["run"]["apply_prefix"]
+            APPLY_LOG_DIR
             / "cohort"
             / "build_cohort_report.log"
         )

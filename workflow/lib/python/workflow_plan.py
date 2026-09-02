@@ -1,0 +1,680 @@
+"""Immutable resolution of Portable PSAP workflow configuration.
+
+Snakemake parses rule modules in one shared Python namespace.  Resolving the
+run mode and physical resource bindings here keeps that parsing layer from
+rewriting configuration or maintaining parallel, partially-effective binding
+dictionaries.
+"""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import dataclass
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Mapping
+import warnings
+
+try:
+    from bundle_contract import (
+        BUNDLE_COMPONENT_FILENAMES,
+        CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
+    )
+except ModuleNotFoundError:
+    from .bundle_contract import (
+        BUNDLE_COMPONENT_FILENAMES,
+        CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
+    )
+
+
+class WorkflowPlanError(ValueError):
+    """Raised when a valid-looking configuration cannot form one workflow plan."""
+
+
+def normalize_run_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy a legacy manifest into the explicit apply-mode configuration shape."""
+    normalized = deepcopy(dict(config))
+    if "workflow" not in normalized:
+        warnings.warn(
+            "Run manifests without workflow.mode are deprecated and currently "
+            "default to apply mode; add workflow: {mode: apply} before workflow "
+            "configuration contract v2, when workflow.mode becomes mandatory.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        normalized["workflow"] = {"mode": "apply"}
+    return normalized
+
+
+def _mapping(value: Any, key: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise WorkflowPlanError(f"{key} must be a mapping")
+    return value
+
+
+def _required(value: Any, key: str) -> str:
+    if value is None:
+        raise WorkflowPlanError(f"Required configuration value is missing: {key}")
+    path = str(value).strip()
+    if not path or path.lower() in {"na", "none", "null", ".", "-"}:
+        raise WorkflowPlanError(f"Required configuration value is missing: {key}")
+    return str(Path(path).expanduser())
+
+
+def _optional(value: Any) -> str | None:
+    if value is None:
+        return None
+    path = str(value).strip()
+    if path.lower() in {"", "na", "none", "null", ".", "-"}:
+        return None
+    return str(Path(path).expanduser())
+
+
+def _number(value: Any, key: str, converter: type[float] | type[int]) -> float | int:
+    try:
+        return converter(value)
+    except (TypeError, ValueError) as exc:
+        raise WorkflowPlanError(f"{key} must be a {converter.__name__}") from exc
+
+
+def _frozen_mapping(values: Mapping[str, str]) -> Mapping[str, str]:
+    return MappingProxyType(dict(values))
+
+
+def generated_bundle_paths(bundle_dir: Path) -> Mapping[str, str]:
+    """Return the public generated-bundle component paths for one output root."""
+    return _frozen_mapping(
+        {
+            component: str(bundle_dir / filename)
+            for component, filename in BUNDLE_COMPONENT_FILENAMES.items()
+        }
+    )
+
+
+@dataclass(frozen=True)
+class FileBinding:
+    """One data file and its optional declared index."""
+
+    data: str | None
+    index: str | None = None
+
+    @classmethod
+    def from_config(
+        cls, value: Any, key: str, *, required: bool = True
+    ) -> "FileBinding":
+        mapping = _mapping(value, key)
+        data = _required(mapping.get("data"), f"{key}.data") if required else _optional(mapping.get("data"))
+        return cls(data=data, index=_optional(mapping.get("index")))
+
+
+@dataclass(frozen=True)
+class FastaBinding:
+    """One reference FASTA and its explicitly declared companion indexes."""
+
+    data: str
+    fai: str
+    gzi: str | None
+
+    @classmethod
+    def from_config(cls, value: Any, key: str) -> "FastaBinding":
+        mapping = _mapping(value, key)
+        return cls(
+            data=_required(mapping.get("data"), f"{key}.data"),
+            fai=_required(mapping.get("fai"), f"{key}.fai"),
+            gzi=_optional(mapping.get("gzi")),
+        )
+
+
+@dataclass(frozen=True)
+class ExclusionMetadata:
+    """Scientific identity and role of one exclusion binding."""
+
+    identifier: str
+    kind: str
+    role: str
+
+
+@dataclass(frozen=True)
+class ReferenceMetadata:
+    """Scientific resource identities that accompany a physical binding set."""
+
+    assembly: str
+    fasta_id: str
+    coverage_id: str
+    coverage_kind: str
+    testing_unit_id: str
+    cadd_snv_id: str
+    cadd_indel_id: str | None
+    exclusions: tuple[ExclusionMetadata, ...]
+
+
+@dataclass(frozen=True)
+class ReferenceBindings:
+    """Immutable physical bindings used to execute one reference scope."""
+
+    fasta: FastaBinding
+    coverage: FileBinding
+    testing_unit_bed: FileBinding
+    exclusions: tuple[FileBinding, ...]
+    cadd_snv: FileBinding
+    cadd_indel: FileBinding | None
+
+
+@dataclass(frozen=True)
+class LookupSource:
+    """Resolved lookup tables and optional generated-bundle certificate files."""
+
+    source_type: str
+    contract: str
+    tables: Mapping[str, str]
+    score_max: float
+    bin_width: float | None
+    metadata: str | None = None
+    validation: str | None = None
+    marker: str | None = None
+    eligible_units: str | None = None
+    calibration_mask: str | None = None
+    excluded_alleles: tuple[str, ...] = ()
+    excluded_units: str | None = None
+
+    @property
+    def is_bundle(self) -> bool:
+        return self.source_type == "bundle"
+
+
+@dataclass(frozen=True)
+class ModelPlan:
+    unit: str
+    hemizygote: bool
+    include_indels: bool
+    score_max: float
+
+
+@dataclass(frozen=True)
+class GenerationSettings:
+    coverage_minimum: float
+    score_bin_width: float
+    mutation_conversion: str
+    variant_classes: tuple[str, ...]
+    x_af_policy: str
+    x_mutation_rate_policy: str
+
+
+@dataclass(frozen=True)
+class GenerationPlan:
+    """Generation inputs, policy, and paths for generate/full modes."""
+
+    output_dir: Path
+    log_dir: Path
+    population_vcf: FileBinding
+    score_snv: FileBinding
+    coverage: FileBinding
+    testing_unit_bed: FileBinding
+    fasta: FastaBinding
+    par_regions: FileBinding
+    exclusions: tuple[FileBinding, ...]
+    mutation_rate: FileBinding | None
+    unobserved_policy: str
+    af_source: Mapping[str, str]
+    partition_size_bp: int
+    unit_bucket_size: int
+    parquet_compression: str
+
+    @property
+    def scalable_dir(self) -> Path:
+        return self.output_dir / "scalable"
+
+    @property
+    def bundle_dir(self) -> Path:
+        return self.output_dir / "bundle"
+
+
+@dataclass(frozen=True)
+class InputBindings:
+    vcf: FileBinding
+    ped: str | None
+    samples: str | None
+
+
+@dataclass(frozen=True)
+class ApplyPlan:
+    """Apply inputs and the configured/effective reference distinction."""
+
+    output_dir: Path
+    log_dir: Path
+    inputs: InputBindings
+    configured_reference: ReferenceBindings
+    effective_reference: ReferenceBindings
+    effective_exclusion_metadata: tuple[ExclusionMetadata, ...]
+    lookup_source: LookupSource
+
+
+@dataclass(frozen=True)
+class ReportPlan:
+    candidate_id_separator: str
+    candidate_id_ordinal_width: int
+    deduplicate_controls: bool
+
+
+@dataclass(frozen=True)
+class WorkflowPlan:
+    """The complete, immutable interpretation of one merged run configuration."""
+
+    mode: str
+    output_root: Path
+    model: ModelPlan
+    reference: ReferenceMetadata
+    generation_settings: GenerationSettings
+    report: ReportPlan
+    generation: GenerationPlan | None
+    apply: ApplyPlan | None
+
+
+def binding_data(binding: FileBinding | FastaBinding | None, *, required: bool = True) -> str:
+    """Return a binding's data path, preserving a clear missing-binding error."""
+    if binding is None or binding.data is None:
+        if required:
+            raise WorkflowPlanError("Required binding has no data path")
+        return ""
+    return binding.data
+
+
+def binding_index(binding: FileBinding | None) -> str:
+    """Return only the index declared by the run manifest."""
+    return "" if binding is None or binding.index is None else binding.index
+
+
+def _reference_metadata(config: Mapping[str, Any]) -> ReferenceMetadata:
+    reference = _mapping(config.get("reference"), "reference")
+    exclusions = tuple(
+        ExclusionMetadata(
+            identifier=_required(item.get("id"), f"reference.exclusions[{index}].id"),
+            kind=_required(item.get("kind"), f"reference.exclusions[{index}].kind"),
+            role=_required(item.get("role"), f"reference.exclusions[{index}].role"),
+        )
+        for index, item in enumerate(reference.get("exclusions", []))
+    )
+    cadd = _mapping(reference.get("cadd"), "reference.cadd")
+    indel = cadd.get("indel")
+    return ReferenceMetadata(
+        assembly=_required(reference.get("assembly"), "reference.assembly"),
+        fasta_id=_required(_mapping(reference.get("fasta"), "reference.fasta").get("id"), "reference.fasta.id"),
+        coverage_id=_required(_mapping(reference.get("coverage"), "reference.coverage").get("id"), "reference.coverage.id"),
+        coverage_kind=_required(_mapping(reference.get("coverage"), "reference.coverage").get("kind"), "reference.coverage.kind"),
+        testing_unit_id=_required(_mapping(reference.get("testing_unit_bed"), "reference.testing_unit_bed").get("id"), "reference.testing_unit_bed.id"),
+        cadd_snv_id=_required(_mapping(cadd.get("snv"), "reference.cadd.snv").get("id"), "reference.cadd.snv.id"),
+        cadd_indel_id=(
+            _required(_mapping(indel, "reference.cadd.indel").get("id"), "reference.cadd.indel.id")
+            if indel is not None
+            else None
+        ),
+        exclusions=exclusions,
+    )
+
+
+def _reference_bindings(value: Any, key: str, *, require_lookup: bool) -> ReferenceBindings:
+    reference = _mapping(value, key)
+    cadd = _mapping(reference.get("cadd"), f"{key}.cadd")
+    indel = cadd.get("indel")
+    if require_lookup:
+        _mapping(reference.get("lookup_source"), f"{key}.lookup_source")
+    return ReferenceBindings(
+        fasta=FastaBinding.from_config(reference.get("fasta"), f"{key}.fasta"),
+        coverage=FileBinding.from_config(
+            reference.get("coverage"), f"{key}.coverage", required=False
+        ),
+        testing_unit_bed=FileBinding.from_config(
+            reference.get("testing_unit_bed"), f"{key}.testing_unit_bed"
+        ),
+        exclusions=tuple(
+            FileBinding.from_config(item, f"{key}.exclusions[{index}]")
+            for index, item in enumerate(reference.get("exclusions", []))
+        ),
+        cadd_snv=FileBinding.from_config(cadd.get("snv"), f"{key}.cadd.snv"),
+        cadd_indel=(
+            FileBinding.from_config(indel, f"{key}.cadd.indel", required=False)
+            if indel is not None
+            else None
+        ),
+    )
+
+
+def _lookup_source(
+    value: Any,
+    key: str,
+    *,
+    configured_reference: ReferenceBindings,
+    model: ModelPlan,
+    settings: GenerationSettings,
+) -> LookupSource:
+    source = _mapping(value, key)
+    source_type = _required(source.get("type"), f"{key}.type")
+    contract = _required(source.get("contract"), f"{key}.contract")
+    tables = _frozen_mapping(
+        {
+            name: _required(path, f"{key}.tables.{name}")
+            for name, path in _mapping(source.get("tables"), f"{key}.tables").items()
+        }
+    )
+    for role in ("het", "hom"):
+        if role not in tables:
+            raise WorkflowPlanError(f"{key}.tables.{role} is required")
+    if model.hemizygote and "hem_chrX" not in tables:
+        raise WorkflowPlanError(
+            f"{key}.tables.hem_chrX is required when model.hemizygote is true"
+        )
+
+    is_bundle = source_type == "bundle"
+    metadata = _optional(source.get("metadata"))
+    validation = _optional(source.get("validation"))
+    marker = _optional(source.get("marker"))
+    eligible_units = (
+        _optional(source.get("eligible_units"))
+        if is_bundle
+        else binding_data(configured_reference.testing_unit_bed)
+    )
+    calibration_mask = (
+        _optional(source.get("calibration_mask"))
+        if is_bundle
+        else binding_data(configured_reference.coverage, required=False) or None
+    )
+    excluded_alleles = (
+        (_required(source.get("excluded_alleles"), f"{key}.excluded_alleles"),)
+        if is_bundle
+        else tuple(binding_data(binding) for binding in configured_reference.exclusions)
+    )
+    excluded_units = _optional(source.get("excluded_units")) if is_bundle else None
+    if is_bundle and not all(
+        (metadata, validation, marker, eligible_units, calibration_mask, excluded_units)
+    ):
+        raise WorkflowPlanError(
+            f"{key} bundle sources require metadata, validation, marker, eligible_units, "
+            "calibration_mask, and excluded_units"
+        )
+    return LookupSource(
+        source_type=source_type,
+        contract=contract,
+        tables=tables,
+        score_max=model.score_max,
+        bin_width=settings.score_bin_width
+        if contract in {"generated_bundle_v1", GENERATED_BUNDLE_CONTRACT}
+        else None,
+        metadata=metadata,
+        validation=validation,
+        marker=marker,
+        eligible_units=eligible_units,
+        calibration_mask=calibration_mask,
+        excluded_alleles=excluded_alleles,
+        excluded_units=excluded_units,
+    )
+
+
+def _generation_plan(
+    config: Mapping[str, Any],
+    *,
+    output_root: Path,
+    mode: str,
+    configured_reference: ReferenceBindings | None,
+    reference_metadata: ReferenceMetadata,
+) -> GenerationPlan:
+    generation = _mapping(config.get("generation"), "generation")
+    run = _mapping(config.get("run"), "run")
+    prefix = _required(run.get("generation_prefix"), "run.generation_prefix")
+    execution = _mapping(generation.get("execution", {}), "generation.execution")
+    if mode == "full":
+        if configured_reference is None:
+            raise WorkflowPlanError("full mode requires bindings.reference")
+        if len(reference_metadata.exclusions) != len(configured_reference.exclusions):
+            raise WorkflowPlanError(
+                "reference.exclusions and bindings.reference.exclusions must have equal lengths"
+            )
+        paired_exclusions = tuple(zip(reference_metadata.exclusions, configured_reference.exclusions))
+        par_bindings = [
+            binding for metadata, binding in paired_exclusions if metadata.role == "par_regions"
+        ]
+        if len(par_bindings) != 1:
+            raise WorkflowPlanError(
+                "full mode requires exactly one bindings.reference exclusion with role par_regions"
+            )
+        resources = configured_reference
+        par_regions = par_bindings[0]
+        exclusions = tuple(
+            binding
+            for metadata, binding in paired_exclusions
+            if metadata.role == "variants_exclude"
+        )
+    else:
+        resources = ReferenceBindings(
+            fasta=FastaBinding.from_config(generation.get("fasta"), "generation.fasta"),
+            coverage=FileBinding.from_config(
+                generation.get("coverage"), "generation.coverage", required=False
+            ),
+            testing_unit_bed=FileBinding.from_config(
+                generation.get("testing_unit_bed"), "generation.testing_unit_bed"
+            ),
+            exclusions=(),
+            cadd_snv=FileBinding.from_config(generation.get("score_snv"), "generation.score_snv"),
+            cadd_indel=None,
+        )
+        par_regions = FileBinding.from_config(generation.get("par_regions"), "generation.par_regions")
+        exclusions = tuple(
+            FileBinding.from_config(item, f"generation.exclusions[{index}]")
+            for index, item in enumerate(generation.get("exclusions", []))
+        )
+    af_source = _frozen_mapping(
+        {
+            name: _required(value, f"generation.af_source.{name}")
+            for name, value in _mapping(generation.get("af_source"), "generation.af_source").items()
+            if value is not None
+        }
+    )
+    if "overall" not in af_source:
+        raise WorkflowPlanError("generation.af_source.overall is required")
+    mutation_rate = generation.get("mutation_rate")
+    return GenerationPlan(
+        output_dir=output_root / "generate" / prefix,
+        log_dir=output_root / "logs" / "generate" / prefix,
+        population_vcf=FileBinding.from_config(
+            generation.get("population_vcf"), "generation.population_vcf"
+        ),
+        score_snv=resources.cadd_snv,
+        coverage=resources.coverage,
+        testing_unit_bed=resources.testing_unit_bed,
+        fasta=resources.fasta,
+        par_regions=par_regions,
+        exclusions=exclusions,
+        mutation_rate=(
+            FileBinding.from_config(mutation_rate, "generation.mutation_rate")
+            if mutation_rate is not None
+            else None
+        ),
+        unobserved_policy=_required(
+            generation.get("unobserved_policy"), "generation.unobserved_policy"
+        ),
+        af_source=af_source,
+        partition_size_bp=_number(
+            execution.get("partition_size_bp", 5_000_000),
+            "generation.execution.partition_size_bp",
+            int,
+        ),
+        unit_bucket_size=_number(
+            execution.get("unit_bucket_size", 250),
+            "generation.execution.unit_bucket_size",
+            int,
+        ),
+        parquet_compression=str(execution.get("parquet_compression", "zstd")),
+    )
+
+
+def _generated_lookup_source(
+    generation: GenerationPlan, model: ModelPlan, settings: GenerationSettings
+) -> LookupSource:
+    bundle_paths = generated_bundle_paths(generation.bundle_dir)
+    tables = {
+        "het": bundle_paths["lookup_het"],
+        "hom": bundle_paths["lookup_hom"],
+    }
+    if model.hemizygote:
+        tables["hem_chrX"] = bundle_paths["lookup_hem"]
+    return LookupSource(
+        source_type="bundle",
+        contract=GENERATED_BUNDLE_CONTRACT,
+        tables=_frozen_mapping(tables),
+        score_max=model.score_max,
+        bin_width=settings.score_bin_width,
+        metadata=bundle_paths["metadata"],
+        validation=bundle_paths["validation"],
+        marker=bundle_paths["marker"],
+        eligible_units=bundle_paths["eligible_bed"],
+        calibration_mask=bundle_paths["calibration_regions"],
+        excluded_alleles=(bundle_paths["excluded_alleles"],),
+        excluded_units=bundle_paths["excluded_units"],
+    )
+
+
+def _effective_bundle_reference(
+    configured_reference: ReferenceBindings, lookup_source: LookupSource
+) -> tuple[ReferenceBindings, tuple[ExclusionMetadata, ...]]:
+    return (
+        ReferenceBindings(
+            fasta=configured_reference.fasta,
+            coverage=FileBinding(lookup_source.calibration_mask),
+            testing_unit_bed=FileBinding(lookup_source.eligible_units),
+            exclusions=tuple(FileBinding(path) for path in lookup_source.excluded_alleles),
+            cadd_snv=configured_reference.cadd_snv,
+            cadd_indel=configured_reference.cadd_indel,
+        ),
+        tuple(
+            ExclusionMetadata(
+                identifier="generated-bundle-excluded-alleles",
+                kind="tsv",
+                role="variants_exclude",
+            )
+            for _ in lookup_source.excluded_alleles
+        ),
+    )
+
+
+def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
+    """Resolve validated configuration into immutable mode-specific records."""
+    normalized = normalize_run_config(config)
+    mode = _required(_mapping(normalized.get("workflow"), "workflow").get("mode"), "workflow.mode")
+    if mode not in {"apply", "generate", "full"}:
+        raise WorkflowPlanError(f"Unsupported workflow.mode: {mode!r}")
+    output_root = Path(_required(normalized.get("outdir"), "outdir"))
+    model_config = _mapping(normalized.get("model"), "model")
+    model = ModelPlan(
+        unit=_required(model_config.get("unit"), "model.unit"),
+        hemizygote=bool(model_config.get("hemizygote")),
+        include_indels=bool(model_config.get("include_indels")),
+        score_max=_number(model_config.get("score_max"), "model.score_max", float),
+    )
+    generation_settings_config = _mapping(
+        normalized.get("generation_settings"), "generation_settings"
+    )
+    x_chromosome = _mapping(
+        generation_settings_config.get("x_chromosome"), "generation_settings.x_chromosome"
+    )
+    settings = GenerationSettings(
+        coverage_minimum=_number(
+            generation_settings_config.get("coverage_minimum"),
+            "generation_settings.coverage_minimum",
+            float,
+        ),
+        score_bin_width=_number(
+            generation_settings_config.get("score_bin_width"),
+            "generation_settings.score_bin_width",
+            float,
+        ),
+        mutation_conversion=_required(
+            generation_settings_config.get("mutation_conversion"),
+            "generation_settings.mutation_conversion",
+        ),
+        variant_classes=tuple(generation_settings_config.get("variant_classes", [])),
+        x_af_policy=_required(x_chromosome.get("af_policy"), "generation_settings.x_chromosome.af_policy"),
+        x_mutation_rate_policy=_required(
+            x_chromosome.get("mutation_rate_policy"),
+            "generation_settings.x_chromosome.mutation_rate_policy",
+        ),
+    )
+    reference_metadata = _reference_metadata(normalized)
+    report_config = _mapping(normalized.get("report"), "report")
+    candidate_id = _mapping(report_config.get("candidate_id"), "report.candidate_id")
+    report = ReportPlan(
+        candidate_id_separator=_required(candidate_id.get("separator"), "report.candidate_id.separator"),
+        candidate_id_ordinal_width=_number(
+            candidate_id.get("ordinal_width"), "report.candidate_id.ordinal_width", int
+        ),
+        deduplicate_controls=bool(report_config.get("deduplicate_controls", True)),
+    )
+
+    configured_reference: ReferenceBindings | None = None
+    generation: GenerationPlan | None = None
+    apply: ApplyPlan | None = None
+    if mode in {"apply", "full"}:
+        bindings = _mapping(normalized.get("bindings"), "bindings")
+        configured_reference = _reference_bindings(
+            bindings.get("reference"), "bindings.reference", require_lookup=mode == "apply"
+        )
+    if mode in {"generate", "full"}:
+        generation = _generation_plan(
+            normalized,
+            output_root=output_root,
+            mode=mode,
+            configured_reference=configured_reference,
+            reference_metadata=reference_metadata,
+        )
+    if mode in {"apply", "full"}:
+        if configured_reference is None:
+            raise WorkflowPlanError(f"{mode} mode requires bindings.reference")
+        run = _mapping(normalized.get("run"), "run")
+        prefix = _required(run.get("apply_prefix"), "run.apply_prefix")
+        if mode == "full":
+            if generation is None:
+                raise WorkflowPlanError("full mode requires generation inputs")
+            lookup_source = _generated_lookup_source(generation, model, settings)
+            effective_reference, effective_metadata = _effective_bundle_reference(
+                configured_reference, lookup_source
+            )
+        else:
+            source_config = _mapping(bindings.get("reference"), "bindings.reference").get(
+                "lookup_source"
+            )
+            lookup_source = _lookup_source(
+                source_config,
+                "bindings.reference.lookup_source",
+                configured_reference=configured_reference,
+                model=model,
+                settings=settings,
+            )
+            if lookup_source.is_bundle:
+                effective_reference, effective_metadata = _effective_bundle_reference(
+                    configured_reference, lookup_source
+                )
+            else:
+                effective_reference = configured_reference
+                effective_metadata = reference_metadata.exclusions
+        inputs_config = _mapping(normalized.get("inputs"), "inputs")
+        apply = ApplyPlan(
+            output_dir=output_root / "apply" / prefix,
+            log_dir=output_root / "logs" / "apply" / prefix,
+            inputs=InputBindings(
+                vcf=FileBinding.from_config(inputs_config.get("vcf"), "inputs.vcf"),
+                ped=_optional(inputs_config.get("ped")),
+                samples=_optional(inputs_config.get("samples")),
+            ),
+            configured_reference=configured_reference,
+            effective_reference=effective_reference,
+            effective_exclusion_metadata=effective_metadata,
+            lookup_source=lookup_source,
+        )
+    return WorkflowPlan(
+        mode=mode,
+        output_root=output_root,
+        model=model,
+        reference=reference_metadata,
+        generation_settings=settings,
+        report=report,
+        generation=generation,
+        apply=apply,
+    )

@@ -26,11 +26,7 @@ standardize_genotypes <- function(genotypes, hemizygote_model) {
   }
 
   if (any(haploid)) {
-    chromosome <- sub(
-      "^CHR",
-      "",
-      toupper(trimws(as.character(genotypes$CHROM)))
-    )
+    chromosome <- canonical_chromosome(genotypes$CHROM)
     unsupported <- haploid & !(chromosome %chin% c("X", "Y"))
     if (any(unsupported)) {
       examples <- head(unique(chromosome[unsupported]), 5L)
@@ -88,8 +84,7 @@ standardize_genotypes <- function(genotypes, hemizygote_model) {
 
 
 apply_sex_classification <- function(genotypes, sex, hemizygote_model) {
-  chromosome <- toupper(trimws(as.character(genotypes$CHROM)))
-  chromosome <- sub("^CHR", "", chromosome)
+  chromosome <- canonical_chromosome(genotypes$CHROM)
 
   gt_class <- tolower(trimws(as.character(genotypes$gt_class)))
   is_hom <- gt_class %chin% c("hom", "homozygous")
@@ -110,15 +105,18 @@ apply_sex_classification <- function(genotypes, sex, hemizygote_model) {
 
   remove <- rep(FALSE, nrow(genotypes))
   removed_male_xy_het <- 0
+  removed_unknown_sex_xy <- 0
 
   if (!is.na(sex) && sex == 1) {
     if (!hemizygote_model) {
       remove <- is_xy
     } else {
-      remove <- is_xy & is_het
-      removed_male_xy_het <- sum(remove)
+      # The generated HEM contract is chromosome-X only.  Do not reinterpret
+      # Y calls as X-linked hemizygous evidence.
+      remove <- is_y | (is_x & is_het)
+      removed_male_xy_het <- sum(is_x & is_het)
       genotypes[
-        is_xy & (is_hom | is_haploid),
+        is_x & (is_hom | is_haploid),
         gt_class := "hem"
       ]
     }
@@ -134,12 +132,20 @@ apply_sex_classification <- function(genotypes, sex, hemizygote_model) {
       is_x & is_hom,
       gt_class := "hom_female"
     ]
-  } else if (any(is_haploid)) {
-    abort("Haploid X/Y genotype calls require a known male sample sex")
+  } else {
+    if (any(is_haploid)) {
+      abort("Haploid X/Y genotype calls require a known male sample sex")
+    }
+    # Sex is required to distinguish female-X diploid models from male-X HEM.
+    # Unknown-sex X/Y calls are retained nowhere rather than leaking into the
+    # autosomal DOM/REC paths.
+    remove <- is_xy
+    removed_unknown_sex_xy <- sum(remove)
   }
 
   list(
     genotypes = genotypes[!remove],
-    removed_male_xy_het = removed_male_xy_het
+    removed_male_xy_het = removed_male_xy_het,
+    removed_unknown_sex_xy = removed_unknown_sex_xy
   )
 }

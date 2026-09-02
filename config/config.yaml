@@ -52,3 +52,6 @@ generation_settings:
   variant_classes: [snv]  # initial preparation scope; indel generation is rejected
   score_bin_width: 0.05  # generated-grid width; score_max is included in the final bin
   mutation_conversion: de_novo_proxy  # D2-selected proxy; p_effective = per-allele mu
+  x_chromosome:
+    af_policy: sex_specific  # use female AF for chrX HET/HOM and male AF for chrX HEM
+    mutation_rate_policy: reject  # require an explicit sex-averaging choice before chrX mutation fallback

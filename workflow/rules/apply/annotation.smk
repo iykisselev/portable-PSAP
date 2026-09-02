@@ -1,6 +1,6 @@
 CADD_SNV = WORKFLOW_CADD_SNV
 CADD_INDEL = WORKFLOW_CADD_INDEL
-INCLUDE_INDELS = config["model"]["include_indels"]
+INCLUDE_INDELS = WORKFLOW_PLAN.model.include_indels
 TESTING_UNIT_BED = WORKFLOW_TESTING_UNIT
 ANNOTATED_VCF = ANNOTATION_DIR / f"{TESTING_UNIT}.vcf.gz"
 ANNOTATED_VCF_CSI = Path(f"{ANNOTATED_VCF}.csi")
@@ -33,8 +33,12 @@ rule annotate_variants:
         testing_unit=TESTING_UNIT
     threads: 8
     resources:
-        mem_mb=lambda wc, input, attempt: scaled_mem_mb(wc, input, attempt, 32000, 512),
-        runtime=lambda wc, input, attempt: scaled_runtime_minutes(wc, input, attempt, 720, 30)
+        mem_mb=lambda wc, input, attempt: execution_mem_mb(
+            wc, input, attempt, "annotate_variants"
+        ),
+        runtime=lambda wc, input, attempt: execution_runtime_minutes(
+            wc, input, attempt, "annotate_variants"
+        )
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
     envmodules: *mod("bioinformatics")
@@ -43,7 +47,7 @@ rule annotate_variants:
         str(BENCHMARK_DIR / "annotate_variants.tsv")
     log:
         str(
-            LOG_DIR / "apply" / config["run"]["apply_prefix"] /
+            APPLY_LOG_DIR /
             "annotation" / "annotate_variants.log"
         )
     script:
@@ -68,7 +72,7 @@ rule summarize_annotations:
     container: sif("validation")
     log:
         str(
-            LOG_DIR / "apply" / config["run"]["apply_prefix"] /
+            APPLY_LOG_DIR /
             "annotation" / "summarize_annotations.log"
         )
     script:
@@ -95,7 +99,7 @@ rule require_valid_annotations:
     container: sif("validation")
     log:
         str(
-            LOG_DIR / "apply" / config["run"]["apply_prefix"] /
+            APPLY_LOG_DIR /
             "annotation" / "require_valid_annotations.log"
         )
     script:
@@ -121,7 +125,7 @@ rule prepare_testing_units:
     container: sif("r")
     log:
         str(
-            LOG_DIR / "apply" / config["run"]["apply_prefix"] /
+            APPLY_LOG_DIR /
             "annotation" / "prepare_testing_units.log"
         )
     script:

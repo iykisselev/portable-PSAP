@@ -1,7 +1,12 @@
 from pathlib import Path
+import sys
 
 from snakemake.utils import validate
 from snakemake.utils import min_version
+
+PYTHON_LIBRARY_DIR = Path(workflow.basedir) / "lib" / "python"
+sys.path.insert(0, str(PYTHON_LIBRARY_DIR))
+from workflow_plan import build_workflow_plan, normalize_run_config
 
 min_version("8.0")
 
@@ -9,33 +14,70 @@ min_version("8.0")
 # user-owned run manifest with --configfile; it must satisfy the merged schema.
 configfile: str(Path(workflow.basedir).parent / "config" / "config.yaml")
 
-# Existing run manifests predate explicit workflow modes. Normalize them before
-# schema validation so they retain the established apply-only behavior.
-if "workflow" not in config:
-    config["workflow"] = {"mode": "apply"}
+# Existing run manifests predate explicit workflow modes. Normalization returns
+# a private copy, warns about the pending migration, and never alters Snakemake's
+# configuration object.
+NORMALIZED_CONFIG = normalize_run_config(config)
 
 validate(
-    config,
+    NORMALIZED_CONFIG,
     Path(workflow.basedir) / "schemas" / "config.schema.yaml",
 )
 
-WORKFLOW_MODE = config["workflow"]["mode"]
+WORKFLOW_PLAN = build_workflow_plan(NORMALIZED_CONFIG)
+WORKFLOW_MODE = WORKFLOW_PLAN.mode
 
-if WORKFLOW_MODE == "apply":
-    include: "rules/common.smk"
-    include: "rules/resources.smk"
-    include: "rules/validation_helpers.smk"
+# Deployment bindings are a dependency of every mode. Keep this single include
+# outside the branches so mode-specific modules only define workflow behavior.
+include: "rules/deployment.smk"
+
+if WORKFLOW_MODE in {"generate", "full"}:
+    include: "rules/generate/context.smk"
+    include: "rules/generate/prepare.smk"
+    include: "rules/generate/calculate.smk"
+    include: "rules/generate/finalize.smk"
+
+if WORKFLOW_MODE == "generate":
+    # Keep the historical default target stable; generate_results is the
+    # explicit public alias for callers that select a mode-specific target.
+    rule null_distributions:
+        input:
+            marker=rules.validate_null_distribution_bundle.output.marker,
+            allele_states=lambda wc: generation_partition_artifacts(
+                wc, "allele_states"
+            ),
+            allele_memberships=lambda wc: generation_partition_artifacts(
+                wc, "allele_membership"
+            ),
+            allele_scores=lambda wc: generation_partition_artifacts(
+                wc, "allele_scores"
+            ),
+            statistics=generation_statistics_artifacts,
+            lookup_het=lambda wc: generation_bucket_artifacts(wc, "lookup_het"),
+            lookup_hom=lambda wc: generation_bucket_artifacts(wc, "lookup_hom"),
+            lookup_hem=(
+                lambda wc: generation_bucket_artifacts(wc, "lookup_hem")
+                if GENERATION_HEM_ENABLED
+                else []
+            ),
+            diagnostics=lambda wc: generation_bucket_artifacts(wc, "diagnostics")
+        default_target: True
+
+    rule generate_results:
+        input:
+            rules.null_distributions.input
+
+elif WORKFLOW_MODE in {"apply", "full"}:
+    include: "rules/apply/paths.smk"
+    include: "rules/apply/lookup_inputs.smk"
+    include: "rules/apply/sample_discovery.smk"
+    include: "rules/apply/resources.smk"
+    include: "rules/apply/validation_helpers.smk"
 
     # Control-plane checks are fast and inspect small reports; keeping them local avoids
     # scheduler latency without moving any computational work into the submission host.
     localrules: validate_cohort, validate_resources, validate_model, merge_validation, require_valid_inputs, summarize_annotations, require_valid_annotations
 
-    rule all:
-        input:
-            str(COHORT_DIR / "cohort_candidates.tsv.gz"),
-            str(COHORT_DIR / "cohort_summary.tsv.gz"),
-            str(COHORT_DIR / "control_variants.tsv.gz")
-
     include: "rules/apply/validate.smk"
     include: "rules/apply/prepare.smk"
     include: "rules/apply/variants.smk"
@@ -44,48 +86,51 @@ if WORKFLOW_MODE == "apply":
     include: "rules/apply/scoring.smk"
     include: "rules/apply/cohort.smk"
 
-elif WORKFLOW_MODE == "generate":
-    include: "rules/deployment.smk"
-    include: "rules/generate/prepare.smk"
-    include: "rules/generate/calculate.smk"
-    include: "rules/generate/finalize.smk"
+    if WORKFLOW_MODE == "apply":
+        rule all:
+            input:
+                str(COHORT_DIR / "cohort_candidates.tsv.gz"),
+                str(COHORT_DIR / "cohort_summary.tsv.gz"),
+                str(COHORT_DIR / "control_variants.tsv.gz")
+            default_target: True
 
-    rule null_distributions:
-        input:
-            rules.finalize_null_distribution_bundle.output.marker
-
-elif WORKFLOW_MODE == "full":
-    include: "rules/deployment.smk"
-    include: "rules/generate/prepare.smk"
-    include: "rules/generate/calculate.smk"
-    include: "rules/generate/finalize.smk"
-
-    # Full manifests are forbidden from naming external lookup tables.  These
-    # internal bindings point only to outputs declared by the generation DAG.
-    config["bindings"]["reference"]["lookup_tables"] = {
-        "het": str(rules.finalize_null_distribution_bundle.output.lookup_het),
-        "hom": str(rules.finalize_null_distribution_bundle.output.lookup_hom),
-    }
-
-    include: "rules/common.smk"
-    include: "rules/resources.smk"
-    include: "rules/validation_helpers.smk"
-    localrules: validate_cohort, validate_resources, validate_model, merge_validation, require_valid_inputs, summarize_annotations, require_valid_annotations
-
-    include: "rules/apply/validate.smk"
-    include: "rules/apply/prepare.smk"
-    include: "rules/apply/variants.smk"
-    include: "rules/apply/annotation.smk"
-    include: "rules/apply/samples.smk"
-    include: "rules/apply/scoring.smk"
-    include: "rules/apply/cohort.smk"
-
-    rule full_results:
-        input:
-            rules.finalize_null_distribution_bundle.output.marker,
-            str(COHORT_DIR / "cohort_candidates.tsv.gz"),
-            str(COHORT_DIR / "cohort_summary.tsv.gz"),
-            str(COHORT_DIR / "control_variants.tsv.gz")
+        rule apply_results:
+            input:
+                str(COHORT_DIR / "cohort_candidates.tsv.gz"),
+                str(COHORT_DIR / "cohort_summary.tsv.gz"),
+                str(COHORT_DIR / "control_variants.tsv.gz")
+    else:
+        rule full_results:
+            input:
+                marker=rules.validate_null_distribution_bundle.output.marker,
+                cohort_candidates=str(COHORT_DIR / "cohort_candidates.tsv.gz"),
+                cohort_summary=str(COHORT_DIR / "cohort_summary.tsv.gz"),
+                control_variants=str(COHORT_DIR / "control_variants.tsv.gz"),
+                allele_states=lambda wc: generation_partition_artifacts(
+                    wc, "allele_states"
+                ),
+                allele_memberships=lambda wc: generation_partition_artifacts(
+                    wc, "allele_membership"
+                ),
+                allele_scores=lambda wc: generation_partition_artifacts(
+                    wc, "allele_scores"
+                ),
+                statistics=generation_statistics_artifacts,
+                lookup_het=lambda wc: generation_bucket_artifacts(
+                    wc, "lookup_het"
+                ),
+                lookup_hom=lambda wc: generation_bucket_artifacts(
+                    wc, "lookup_hom"
+                ),
+                lookup_hem=(
+                    lambda wc: generation_bucket_artifacts(wc, "lookup_hem")
+                    if GENERATION_HEM_ENABLED
+                    else []
+                ),
+                diagnostics=lambda wc: generation_bucket_artifacts(
+                    wc, "diagnostics"
+                )
+            default_target: True
 
 else:
     raise ValueError(f"Unsupported workflow mode: {WORKFLOW_MODE!r}")

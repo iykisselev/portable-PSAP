@@ -1,0 +1,96 @@
+"""Model and lookup-bundle validation for the apply barrier."""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+from types import SimpleNamespace
+
+from bundle_contract import is_supported_contract
+from bundle_certificate import BundleCertificateError, verify_bundle_certificate
+from validation import (
+    parse_model_settings,
+    validate_lookup_files,
+    validate_lookup_unit_overlap,
+)
+from validation_reporting import build_validation_report
+
+
+def validate_model_inputs(
+    *,
+    args: SimpleNamespace,
+    testing_unit_bed: str | Path,
+    lookup_tables: dict[str, str],
+    lookup_contract: str,
+    lookup_bin_width: str,
+    bundle_certificate: dict[str, str | Path] | None,
+    bundle_components: dict[str, str | Path],
+) -> dict[str, object]:
+    """Validate model settings and either an external or certified lookup source."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    settings = parse_model_settings(args, errors)
+    checked = validate_lookup_files(lookup_tables, settings, errors)
+    overlap = validate_lookup_unit_overlap(
+        testing_unit_bed,
+        lookup_tables,
+        settings,
+        errors,
+    )
+    if is_supported_contract(lookup_contract):
+        try:
+            if bundle_certificate is None:
+                raise BundleCertificateError(
+                    "Generated lookup bundle is missing its validation certificate"
+                )
+            metadata = verify_bundle_certificate(
+                contract=lookup_contract,
+                metadata_path=bundle_certificate["metadata"],
+                validation_path=bundle_certificate["validation"],
+                marker_path=bundle_certificate["marker"],
+                components=bundle_components,
+            )
+            roles = metadata["model_assumptions"]["roles"]
+            if bool(settings["hemizygote"]) != ("hem_chrX" in roles):
+                errors.append("Generated lookup HEM role does not match model.hemizygote")
+            if metadata.get("assembly") != args.assembly:
+                errors.append("Generated lookup assembly differs from reference.assembly")
+            if metadata.get("testing_unit_type") != args.unit:
+                errors.append(
+                    "Generated lookup testing-unit type differs from model.unit"
+                )
+            binning = metadata["binning"]
+            if not math.isclose(
+                float(binning["score_max"]),
+                float(args.score_max),
+                rel_tol=0,
+                abs_tol=1e-12,
+            ):
+                errors.append("Generated lookup score_max differs from model.score_max")
+            if not math.isclose(
+                float(binning["bin_width"]),
+                float(lookup_bin_width),
+                rel_tol=0,
+                abs_tol=1e-15,
+            ):
+                errors.append(
+                    "Generated lookup bin_width differs from the resolved lookup source"
+                )
+        except (BundleCertificateError, KeyError, TypeError, ValueError) as exc:
+            errors.append(f"Could not validate generated lookup bundle contract: {exc}")
+    elif lookup_contract != "external_legacy_v0":
+        errors.append(f"Unsupported lookup contract: {lookup_contract}")
+    return build_validation_report(
+        errors=errors,
+        warnings=warnings,
+        summary={
+            "unit": args.unit,
+            "assembly": args.assembly,
+            "hemizygote_model": settings["hemizygote"],
+            "include_indels": settings["include_indels"],
+            "lookup_contract": lookup_contract,
+            "lookup_files_checked": checked,
+            "lookup_testing_unit_overlap": overlap,
+        },
+        sections=("model",),
+    )

@@ -24,7 +24,12 @@ def main() -> None:
     output = Path(snakemake.output.data)
     kind = str(snakemake.params.kind)
     if kind == "vcf":
-        prepare_vcf(source, output)
+        source_index = (
+            Path(snakemake.input.source_index[0])
+            if snakemake.input.source_index
+            else None
+        )
+        prepare_vcf(source, output, source_index)
         return
     # Tabular chromosome labels must agree with the cohort before joins, whereas
     # a staged VCF preserves its native contig metadata.

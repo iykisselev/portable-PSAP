@@ -1,0 +1,24 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Portable PSAP validation report
+type: object
+additionalProperties: false
+required:
+  - schema_version
+  - status
+  - errors
+  - warnings
+  - summary
+  - validation_sections
+properties:
+  schema_version: {const: 1}
+  status: {enum: [ok, failed]}
+  errors:
+    type: array
+    items: {type: string}
+  warnings:
+    type: array
+    items: {type: string}
+  summary: {type: object}
+  validation_sections:
+    type: array
+    items: {type: string}

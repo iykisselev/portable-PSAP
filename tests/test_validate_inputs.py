@@ -146,7 +146,7 @@ class ValidationTests(unittest.TestCase):
             ],
         )
 
-    def test_hemizygote_model_requires_x_and_y(self) -> None:
+    def test_hemizygote_model_requires_x(self) -> None:
         errors: list[str] = []
 
         validate_hemizygote_chromosomes(True, {"1": "1"}, errors)
@@ -154,7 +154,7 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(
             errors,
             [
-                "Hemizygote model requires sex chromosome(s) in the input VCF: X, Y"
+                "HEM chromosome-X model requires chromosome(s) in the input VCF: X"
             ],
         )
 
@@ -264,6 +264,30 @@ class ValidationTests(unittest.TestCase):
             self.assertFalse(resources.is_conventional_source_index(
                 temp_path / "resource.tsv.gz", declared_index
             ))
+
+    def test_staging_reuses_a_complete_indexed_vcf_without_resorting(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            source = temp_path / "cohort.vcf.gz"
+            source_index = Path(f"{source}.tbi")
+            output = temp_path / "prepared.vcf.gz"
+            source.write_bytes(b"placeholder")
+            source_index.write_text("index", encoding="utf-8")
+
+            with (
+                patch.object(resources, "is_bgzip", return_value=True),
+                patch.object(resources, "has_bgzf_eof", return_value=True),
+                patch.object(resources, "require_tool", return_value="bcftools"),
+                patch.object(resources, "run") as run,
+            ):
+                resources.prepare_vcf(source, output, source_index)
+
+            self.assertTrue(output.is_symlink())
+            self.assertEqual(source.resolve(), output.resolve())
+            self.assertEqual(
+                ["bcftools", "index", "--force", "--tbi", str(output)],
+                run.call_args.args[0],
+            )
 
     def test_preparing_a_table_sorts_rows_before_bgzip(self) -> None:
         with TemporaryDirectory() as temp_dir:
