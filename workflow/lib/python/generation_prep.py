@@ -12,26 +12,15 @@ from pathlib import Path
 import gzip
 import math
 
+try:
+    from genomic_contracts import allele_key, allele_key_text as key_text, canonical_chromosome
+except ModuleNotFoundError:
+    from .genomic_contracts import allele_key, allele_key_text as key_text, canonical_chromosome
+
 
 def _open(path: str | Path):
     file_path = Path(path)
     return gzip.open(file_path, "rt", encoding="utf-8") if file_path.suffix == ".gz" else file_path.open(encoding="utf-8")
-
-
-def canonical_chromosome(chromosome: str) -> str:
-    value = chromosome.strip()
-    if value.lower().startswith("chr"):
-        value = value[3:]
-    value = value.upper()
-    return "MT" if value == "M" else value
-
-
-def allele_key(chromosome: str, position: int, ref: str, alt: str) -> tuple[str, int, str, str]:
-    return (canonical_chromosome(chromosome), int(position), ref.upper(), alt.upper())
-
-
-def key_text(key: tuple[str, int, str, str]) -> str:
-    return f"{key[0]}:{key[1]}:{key[2]}:{key[3]}"
 
 
 def read_population_af(path: str | Path, info_tag: str):
@@ -139,15 +128,84 @@ def read_intervals(path: str | Path):
     return intervals
 
 
+def merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Return sorted, non-overlapping half-open intervals."""
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(intervals):
+        if not merged or start > merged[-1][1]:
+            merged.append((start, end))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+    return merged
+
+
+def intersect_intervals(
+    left: list[tuple[int, int]], right: list[tuple[int, int]]
+) -> list[tuple[int, int]]:
+    """Intersect two sets of half-open intervals."""
+    left_merged, right_merged = merge_intervals(left), merge_intervals(right)
+    result: list[tuple[int, int]] = []
+    left_index = right_index = 0
+    while left_index < len(left_merged) and right_index < len(right_merged):
+        left_start, left_end = left_merged[left_index]
+        right_start, right_end = right_merged[right_index]
+        start, end = max(left_start, right_start), min(left_end, right_end)
+        if start < end:
+            result.append((start, end))
+        if left_end <= right_end:
+            left_index += 1
+        else:
+            right_index += 1
+    return result
+
+
+def subtract_intervals(
+    intervals: list[tuple[int, int]], excluded: list[tuple[int, int]]
+) -> list[tuple[int, int]]:
+    """Subtract excluded half-open intervals from the supplied intervals."""
+    remaining = merge_intervals(intervals)
+    for excluded_start, excluded_end in merge_intervals(excluded):
+        next_remaining: list[tuple[int, int]] = []
+        for start, end in remaining:
+            if excluded_end <= start or excluded_start >= end:
+                next_remaining.append((start, end))
+                continue
+            if start < excluded_start:
+                next_remaining.append((start, excluded_start))
+            if excluded_end < end:
+                next_remaining.append((excluded_end, end))
+        remaining = next_remaining
+    return remaining
+
+
+def supported_scope_mask(
+    contig_lengths: dict[str, int],
+    excluded: dict[str, list[tuple[int, int]]],
+) -> dict[str, list[tuple[int, int]]]:
+    """Build supported contig intervals after all static interval exclusions."""
+    return {
+        chromosome: subtract_intervals([(0, length)], excluded.get(chromosome, []))
+        for chromosome, length in sorted(contig_lengths.items())
+        if length > 0
+    }
+
+
+def effective_calibration_mask(
+    coverage: dict[str, list[tuple[int, int]]],
+    supported_scope: dict[str, list[tuple[int, int]]],
+) -> dict[str, list[tuple[int, int]]]:
+    """Intersect callable coverage with supported, non-excluded sequence."""
+    return {
+        chromosome: intersect_intervals(
+            coverage.get(chromosome, []), supported_intervals
+        )
+        for chromosome, supported_intervals in sorted(supported_scope.items())
+        if coverage.get(chromosome)
+    }
+
+
 def merged_length(intervals: list[tuple[int, int]]) -> int:
-    total = 0
-    end = -1
-    for start, stop in sorted(intervals):
-        if stop <= end:
-            continue
-        total += stop - max(start, end)
-        end = stop
-    return total
+    return sum(end - start for start, end in merge_intervals(intervals))
 
 
 def overlap_length(intervals: list[tuple[int, int]], coverage: list[tuple[int, int]]) -> int:
@@ -160,51 +218,21 @@ def overlap_length(intervals: list[tuple[int, int]], coverage: list[tuple[int, i
     return merged_length(pieces)
 
 
-def coverage_rows(units, coverage, minimum: float):
+def coverage_rows(units, coverage, minimum: float, denominator_scope=None):
     rows = []
     for unit, intervals in sorted(units.items()):
         chrom = intervals[0][0]
         simple_intervals = [(start, end) for _, start, end in intervals]
-        total = merged_length(simple_intervals)
+        total = (
+            overlap_length(simple_intervals, denominator_scope.get(chrom, []))
+            if denominator_scope is not None
+            else merged_length(simple_intervals)
+        )
         covered = overlap_length(simple_intervals, coverage.get(chrom, []))
-        fraction = covered / total
-        rows.append((unit, chrom, total, covered, fraction, "eligible" if fraction >= minimum else "coverage_below_minimum"))
+        fraction = covered / total if total else 0.0
+        if total == 0:
+            status = "no_calibration_scope"
+        else:
+            status = "eligible" if fraction >= minimum else "coverage_below_minimum"
+        rows.append((unit, chrom, total, covered, fraction, status))
     return rows
-
-
-def read_fasta(path: str | Path):
-    sequences: dict[str, str] = {}
-    current: str | None = None
-    parts: list[str] = []
-    with _open(path) as handle:
-        for raw in handle:
-            if raw.startswith(">"):
-                if current is not None:
-                    sequences[current] = "".join(parts).upper()
-                current, parts = canonical_chromosome(raw[1:].split()[0]), []
-            else:
-                parts.append(raw.strip())
-    if current is not None:
-        sequences[current] = "".join(parts).upper()
-    return sequences
-
-
-def read_scores(path: str | Path):
-    scores = {}
-    with _open(path) as handle:
-        for number, raw in enumerate(handle, start=1):
-            if not raw.strip() or raw.startswith("#"):
-                continue
-            fields = raw.rstrip().split("\t")
-            if len(fields) < 6:
-                raise ValueError(f"Score line {number} needs six CADD columns")
-            key = allele_key(fields[0], int(fields[1]), fields[2], fields[3])
-            if len(key[2]) != 1 or len(key[3]) != 1:
-                continue
-            score = float(fields[5])
-            if not math.isfinite(score):
-                raise ValueError(f"Score line {number} has non-finite PHRED")
-            if key in scores and scores[key] != score:
-                raise ValueError(f"Conflicting score for {key_text(key)}")
-            scores[key] = score
-    return scores

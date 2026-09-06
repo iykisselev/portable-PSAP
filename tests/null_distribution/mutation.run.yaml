@@ -1,0 +1,31 @@
+outdir: /tmp/portable-psap-mutation-fixture
+
+workflow:
+  mode: generate
+
+run:
+  generation_prefix: mutation-fixture
+
+model:
+  include_indels: false
+
+generation_settings:
+  x_chromosome:
+    mutation_rate_policy: sex_averaged_proxy
+
+generation:
+  unobserved_policy: mutation_rate
+  population_vcf: {data: tests/null_distribution/population_af.vcf, index: null}
+  score_snv: {data: tests/null_distribution/mutation_scores.tsv, index: null}
+  coverage: {data: tests/null_distribution/coverage.bed, index: null}
+  testing_unit_bed: {data: tests/null_distribution/testing_units.bed, index: null}
+  par_regions: {data: tests/null_distribution/par_regions.bed, index: null}
+  fasta:
+    data: tests/smoke/data/reference.fa
+    fai: tests/smoke/data/reference.fa.fai
+    gzi: null
+  mutation_rate: {data: tests/null_distribution/mutation_rates.tsv, index: null}
+  af_source:
+    overall: AF_CUSTOM
+    female: AF_FEMALE
+    male: AF_MALE

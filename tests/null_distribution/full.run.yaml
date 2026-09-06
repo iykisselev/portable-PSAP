@@ -1,0 +1,39 @@
+outdir: /tmp/portable-psap-full-fixture
+
+workflow:
+  mode: full
+
+run:
+  apply_prefix: fixture
+  generation_prefix: fixture
+
+model:
+  include_indels: false
+  hemizygote: true
+
+inputs:
+  vcf: {data: tests/smoke/data/cohort.vcf, index: null}
+  ped: null
+  samples: tests/smoke/data/samples.tsv
+
+bindings:
+  reference:
+    fasta:
+      data: tests/smoke/data/reference.fa
+      fai: tests/smoke/data/reference.fa.fai
+      gzi: null
+    coverage: {data: tests/null_distribution/coverage.bed, index: null}
+    testing_unit_bed: {data: tests/null_distribution/testing_units.bed, index: null}
+    exclusions:
+      - {data: tests/smoke/data/exclude_full_span.bed, index: null}
+      - {data: tests/null_distribution/par_regions.bed, index: null}
+    cadd:
+      snv: {data: tests/null_distribution/generation_scores.tsv, index: null}
+
+generation:
+  unobserved_policy: zero
+  population_vcf: {data: tests/null_distribution/population_af.vcf, index: null}
+  af_source:
+    overall: AF_CUSTOM
+    female: AF_FEMALE
+    male: AF_MALE
