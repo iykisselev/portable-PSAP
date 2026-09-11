@@ -1,62 +1,76 @@
-"""Cohort-independent preparation for null-distribution generation."""
-
-GENERATION_OUTDIR = Path(config["outdir"]) / "generate" / config["run"]["generation_prefix"]
-GENERATION_PREPARED_DIR = GENERATION_OUTDIR / "prepared"
-GENERATION_LOG_DIR = Path(config["outdir"]) / "logs" / "generate" / config["run"]["generation_prefix"]
-GENERATION_ARTIFACTS = {
-    "report": str(GENERATION_OUTDIR / "validation.json"),
-    "observed_af": str(GENERATION_PREPARED_DIR / "observed_af.tsv"),
-    "excluded_alleles": str(GENERATION_PREPARED_DIR / "excluded_alleles.tsv"),
-    "units": str(GENERATION_PREPARED_DIR / "provisional_units.tsv"),
-    "score_universe": str(GENERATION_PREPARED_DIR / "score_universe.tsv"),
-    "score_gaps": str(GENERATION_PREPARED_DIR / "score_gaps.tsv"),
-}
+"""Rules that materialize generation preparation artifacts."""
 
 
-def generation_index(name):
-    index = config["generation"][name].get("index")
-    return [index] if index else []
-
-
-def generation_optional_data(name):
-    binding = config["generation"].get(name)
-    return [binding["data"]] if binding else []
-
-
-rule prepare_generation_inputs:
-    """Validate and normalize generation resources without cohort dependencies."""
+checkpoint prepare_generation_scope:
+    """Normalize masks and units once before bounded partition extraction."""
     input:
-        population_vcf=config["generation"]["population_vcf"]["data"],
-        population_vcf_index=lambda wc: generation_index("population_vcf"),
-        score_snv=config["generation"]["score_snv"]["data"],
-        score_snv_index=lambda wc: generation_index("score_snv"),
-        coverage=config["generation"]["coverage"]["data"],
-        coverage_index=lambda wc: generation_index("coverage"),
-        testing_units=config["generation"]["testing_unit_bed"]["data"],
-        testing_units_index=lambda wc: generation_index("testing_unit_bed"),
-        mutation_rate=lambda wc: generation_optional_data("mutation_rate"),
-        fasta=config["generation"]["fasta"]["data"],
-        fasta_fai=config["generation"]["fasta"]["fai"],
-        fasta_gzi=lambda wc: [config["generation"]["fasta"]["gzi"]] if config["generation"]["fasta"]["gzi"] else []
+        population_vcf=GENERATION_POPULATION_VCF_BINDING.data,
+        score_snv=GENERATION_SCORE_SNV_BINDING.data,
+        coverage=GENERATION_COVERAGE_BINDING.data,
+        testing_units=GENERATION_TESTING_UNIT_BINDING.data,
+        par_regions=GENERATION_PAR_REGIONS_BINDING.data,
+        exclusions=lambda wc: generation_exclusion_data(),
+        fasta=GENERATION_FASTA_BINDING.data,
+        fasta_fai=GENERATION_FASTA_BINDING.fai,
+        mutation_rate=lambda wc: generation_mutation_rate_data()
     output:
-        report=ensure(GENERATION_ARTIFACTS["report"], non_empty=True),
-        observed_af=ensure(GENERATION_ARTIFACTS["observed_af"], non_empty=True),
-        excluded_alleles=ensure(GENERATION_ARTIFACTS["excluded_alleles"], non_empty=True),
-        units=ensure(GENERATION_ARTIFACTS["units"], non_empty=True),
-        score_universe=ensure(GENERATION_ARTIFACTS["score_universe"], non_empty=True),
-        score_gaps=ensure(GENERATION_ARTIFACTS["score_gaps"], non_empty=True)
+        partitions=GENERATION_ARTIFACTS["partitions"],
+        buckets=GENERATION_ARTIFACTS["buckets"],
+        units=GENERATION_ARTIFACTS["units"],
+        unit_intervals=GENERATION_ARTIFACTS["unit_intervals"],
+        masked_unit_intervals=GENERATION_ARTIFACTS["masked_unit_intervals"],
+        mask=GENERATION_ARTIFACTS["effective_mask"],
+        resource_identities=GENERATION_ARTIFACTS["resource_identities"]
     params:
-        af_tag=config["generation"]["af_source"]["overall"],
-        coverage_minimum=config["generation_settings"]["coverage_minimum"]
+        coverage_minimum=WORKFLOW_PLAN.generation_settings.coverage_minimum,
+        partition_size=GENERATION_PARTITION_SIZE,
+        unit_bucket_size=GENERATION_UNIT_BUCKET_SIZE,
+        compression=GENERATION_PARQUET_COMPRESSION
     threads: 1
     resources:
-        mem_mb=2048,
-        runtime=60
+        mem_mb=4096,
+        runtime=120
     conda:
         str(Path(workflow.basedir) / "envs" / "validation.yaml")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
-        str(GENERATION_LOG_DIR / "prepare.log")
+        str(GENERATION_LOG_DIR / "prepare_scope.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "generate" / "prepare_generation.py")
+        str(Path(workflow.basedir) / "scripts" / "generate" / "prepare_generation_scope.py")
+
+
+rule prepare_generation_partition:
+    """Create allele states, memberships, and scores for one genomic window."""
+    input:
+        partitions=lambda wc: generation_scope_artifact(wc, "partitions"),
+        units=lambda wc: generation_scope_artifact(wc, "units"),
+        unit_intervals=lambda wc: generation_scope_artifact(wc, "unit_intervals"),
+        mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
+        population_vcf=GENERATION_POPULATION_VCF_BINDING.data,
+        population_vcf_index=lambda wc: generation_index(GENERATION_POPULATION_VCF_BINDING),
+        score_snv=GENERATION_SCORE_SNV_BINDING.data,
+        score_snv_index=lambda wc: generation_index(GENERATION_SCORE_SNV_BINDING),
+        fasta=GENERATION_FASTA_BINDING.data,
+        fasta_fai=GENERATION_FASTA_BINDING.fai
+    output:
+        allele_states=str(GENERATION_PARTITION_DIR / "{partition}.allele_states.parquet"),
+        allele_membership=str(GENERATION_PARTITION_DIR / "{partition}.allele_membership.parquet"),
+        allele_scores=str(GENERATION_PARTITION_DIR / "{partition}.allele_scores.parquet")
+    params:
+        af_tags=dict(GENERATION_PLAN.af_source),
+        x_af_policy=WORKFLOW_PLAN.generation_settings.x_af_policy,
+        hemizygote=WORKFLOW_PLAN.model.hemizygote,
+        compression=GENERATION_PARQUET_COMPRESSION
+    threads: 1
+    resources:
+        mem_mb=8192,
+        runtime=240
+    conda:
+        str(Path(workflow.basedir) / "envs" / "validation.yaml")
+    envmodules: *mod("validation")
+    container: sif("validation")
+    log:
+        str(GENERATION_LOG_DIR / "partitions" / "{partition}.prepare.log")
+    script:
+        str(Path(workflow.basedir) / "scripts" / "generate" / "prepare_generation_partition.py")

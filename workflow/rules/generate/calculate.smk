@@ -1,32 +1,72 @@
-"""Zero-policy event calculation; mutation conversion remains deliberately absent."""
-
-GENERATION_CALCULATED_DIR = GENERATION_OUTDIR / "calculated"
+"""Partition-local event aggregation and bounded unit-bucket reduction."""
 
 
-rule calculate_null_distribution:
-    """Calculate HET/HOM distributions from the selected, explicit absence policy."""
+rule calculate_partition_null_distribution:
+    """Aggregate events once within a genomic partition and write bucket partials."""
     input:
-        observed_af=rules.prepare_generation_inputs.output.observed_af,
-        score_universe=rules.prepare_generation_inputs.output.score_universe,
-        units=rules.prepare_generation_inputs.output.units,
-        mutation_rate=lambda wc: generation_optional_data("mutation_rate")
+        partitions=lambda wc: generation_scope_artifact(wc, "partitions"),
+        buckets=lambda wc: generation_scope_artifact(wc, "buckets"),
+        allele_states=str(GENERATION_PARTITION_DIR / "{partition}.allele_states.parquet"),
+        allele_membership=str(GENERATION_PARTITION_DIR / "{partition}.allele_membership.parquet"),
+        allele_scores=str(GENERATION_PARTITION_DIR / "{partition}.allele_scores.parquet"),
+        mutation_rate=lambda wc: generation_mutation_rate_data(),
+        mutation_rate_index=lambda wc: generation_mutation_rate_index()
     output:
-        lookup_het=ensure(str(GENERATION_CALCULATED_DIR / "lookup_het.long.tsv"), non_empty=True),
-        lookup_hom=ensure(str(GENERATION_CALCULATED_DIR / "lookup_hom.long.tsv"), non_empty=True),
-        diagnostics=ensure(str(GENERATION_CALCULATED_DIR / "distribution_diagnostics.tsv"), non_empty=True)
+        statistics=str(
+            GENERATION_STATISTICS_DIR / "{partition}.bucket-{bucket}.parquet"
+        )
     params:
-        score_max=config["model"]["score_max"],
-        bin_width=config["generation_settings"]["score_bin_width"],
-        unobserved_policy=config["generation"]["unobserved_policy"]
+        score_max=WORKFLOW_PLAN.model.score_max,
+        bin_width=WORKFLOW_PLAN.generation_settings.score_bin_width,
+        unobserved_policy=GENERATION_PLAN.unobserved_policy,
+        roles=GENERATION_ROLES,
+        x_af_policy=WORKFLOW_PLAN.generation_settings.x_af_policy,
+        x_mutation_rate_policy=WORKFLOW_PLAN.generation_settings.x_mutation_rate_policy,
+        compression=GENERATION_PARQUET_COMPRESSION
     threads: 1
     resources:
-        mem_mb=2048,
-        runtime=60
+        mem_mb=8192,
+        runtime=240
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
-    envmodules: *mod("r")
-    container: sif("r")
+        str(Path(workflow.basedir) / "envs" / "validation.yaml")
+    envmodules: *mod("validation")
+    container: sif("validation")
     log:
-        str(GENERATION_LOG_DIR / "calculate_zero.log")
+        str(
+            GENERATION_LOG_DIR
+            / "partitions"
+            / "{partition}.{bucket}.calculate.log"
+        )
     script:
-        str(Path(workflow.basedir) / "scripts" / "generate" / "calculate_null_distribution.R")
+        str(Path(workflow.basedir) / "scripts" / "generate" / "calculate_partition_statistics.py")
+
+
+rule reduce_null_distribution_bucket:
+    """Produce direct lookup rows for one bounded range of unit identifiers."""
+    input:
+        buckets=lambda wc: generation_scope_artifact(wc, "buckets"),
+        partition_statistics=generation_statistics_shards
+    output:
+        lookup_het=str(GENERATION_LOOKUP_BUCKET_DIR / "{bucket}.het.tsv"),
+        lookup_hom=str(GENERATION_LOOKUP_BUCKET_DIR / "{bucket}.hom.tsv"),
+        lookup_hem=(
+            str(GENERATION_LOOKUP_BUCKET_DIR / "{bucket}.hem_chrX.tsv")
+            if GENERATION_HEM_ENABLED
+            else []
+        ),
+        diagnostics=str(GENERATION_LOOKUP_BUCKET_DIR / "{bucket}.diagnostics.tsv")
+    params:
+        bin_count=GENERATION_BIN_COUNT,
+        roles=GENERATION_ROLES
+    threads: 1
+    resources:
+        mem_mb=4096,
+        runtime=120
+    conda:
+        str(Path(workflow.basedir) / "envs" / "validation.yaml")
+    envmodules: *mod("validation")
+    container: sif("validation")
+    log:
+        str(GENERATION_LOG_DIR / "buckets" / "{bucket}.reduce.log")
+    script:
+        str(Path(workflow.basedir) / "scripts" / "generate" / "reduce_partition_statistics.py")
