@@ -1,0 +1,75 @@
+{
+  "apply": {
+    "manifest": "tests/smoke/run.yaml",
+    "initial_dry_run_jobs": 33,
+    "terminal_outputs": [
+      "apply/smoke/cohort/cohort_candidates.tsv.gz",
+      "apply/smoke/cohort/cohort_summary.tsv.gz",
+      "apply/smoke/cohort/control_variants.tsv.gz"
+    ],
+    "important_outputs": [
+      "apply/smoke/validation.json",
+      "apply/smoke/validation.ok",
+      "apply/smoke/validation/model.json"
+    ],
+    "required_rules": [
+      "validate_cohort",
+      "validate_resources",
+      "validate_model",
+      "require_valid_inputs",
+      "build_cohort_report",
+      "all"
+    ]
+  },
+  "generate": {
+    "manifest": "tests/null_distribution/generate.run.yaml",
+    "initial_dry_run_jobs": 4,
+    "checkpoint_target": "prepare_generation_scope",
+    "resolved_dry_run_jobs": 8,
+    "terminal_outputs": [
+      "generate/fixture/bundle/validation.ok"
+    ],
+    "important_outputs": [
+      "generate/fixture/scalable/prepared/partitions.json",
+      "generate/fixture/scalable/prepared/unit_buckets.json",
+      "generate/fixture/bundle/metadata.json",
+      "generate/fixture/bundle/lookup_hem_chrX.tsv.gz"
+    ],
+    "required_rules": [
+      "prepare_generation_scope",
+      "calculate_partition_null_distribution",
+      "reduce_null_distribution_bucket",
+      "finalize_null_distribution_bundle",
+      "validate_null_distribution_bundle",
+      "null_distributions"
+    ]
+  },
+  "full": {
+    "manifest": "tests/null_distribution/full.run.yaml",
+    "initial_dry_run_jobs": 35,
+    "checkpoint_target": "prepare_generation_scope",
+    "resolved_dry_run_jobs": 39,
+    "fresh_execution_steps": 40,
+    "resume_dry_run_jobs": 0,
+    "terminal_outputs": [
+      "generate/fixture/bundle/validation.ok",
+      "apply/fixture/cohort/cohort_candidates.tsv.gz",
+      "apply/fixture/cohort/cohort_summary.tsv.gz",
+      "apply/fixture/cohort/control_variants.tsv.gz"
+    ],
+    "important_outputs": [
+      "generate/fixture/bundle/metadata.json",
+      "generate/fixture/bundle/validation.json",
+      "generate/fixture/scalable/prepared/unit_buckets.json",
+      "apply/fixture/validation/model.json"
+    ],
+    "required_rules": [
+      "prepare_generation_scope",
+      "reduce_null_distribution_bucket",
+      "validate_null_distribution_bundle",
+      "validate_model",
+      "build_cohort_report",
+      "full_results"
+    ]
+  }
+}
