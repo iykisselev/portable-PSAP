@@ -72,12 +72,13 @@ properties:
   generation_settings:
     type: object
     additionalProperties: false
-    required: [coverage_minimum, variant_classes]
+    required: [coverage_minimum, variant_classes, bin_count]
     properties:
       coverage_minimum: {type: number, minimum: 0, maximum: 1}
       variant_classes:
         type: array
         const: [snv]
+      bin_count: {type: integer, minimum: 1}
 $defs:
   resource_identity:
     type: object

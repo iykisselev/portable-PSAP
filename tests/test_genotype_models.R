@@ -9,6 +9,7 @@ repo_dir <- normalizePath(file.path(test_dir, ".."))
 source(file.path(repo_dir, "workflow", "lib", "r", "common.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "genotypes.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "lookup_contracts.R"))
+source(file.path(repo_dir, "workflow", "lib", "r", "null_distribution.R"))
 
 
 expect_error <- function(expression, pattern) {
@@ -28,6 +29,47 @@ standardized <- standardize_genotypes(copy(haploid), hemizygote_model = TRUE)
 stopifnot(
     identical(standardized$GT, "1"),
     identical(standardized$gt_class, "haploid")
+)
+
+events <- data.table(score = c(10, 20), q = c(0.18, 0.32))
+distribution <- conditional_maximum_distribution(events, score_max = 70, bin_count = 14)
+stopifnot(
+    identical(distribution$status, "ok"),
+    isTRUE(all.equal(distribution$event_mass, 0.4424, tolerance = 1e-14)),
+    isTRUE(all.equal(distribution$max_mass[c(3, 5)], c(0.1224, 0.32), tolerance = 1e-14)),
+    isTRUE(all.equal(distribution$survival[5], 0.32 / 0.4424, tolerance = 1e-14)),
+    all(diff(distribution$survival) <= 1e-14)
+)
+
+tied <- conditional_maximum_distribution(
+    data.table(score = c(10, 20, 20), q = c(0.3, 0.1, 0.2)),
+    score_max = 70,
+    bin_count = 14
+)
+stopifnot(
+    isTRUE(all.equal(tied$event_mass, 0.496, tolerance = 1e-14)),
+    isTRUE(all.equal(tied$max_mass[c(3, 5)], c(0.216, 0.28), tolerance = 1e-14))
+)
+
+tiny <- conditional_maximum_distribution(
+    data.table(score = 20, q = 1e-24), score_max = 70, bin_count = 14
+)
+stopifnot(
+    identical(tiny$status, "ok"),
+    isTRUE(all.equal(tiny$event_mass, 1e-24, tolerance = 1e-35)),
+    identical(tiny$survival[5], 1)
+)
+
+zero <- conditional_maximum_distribution(
+    data.table(score = 20, q = 0), score_max = 70, bin_count = 14
+)
+stopifnot(identical(zero$status, "zero_event_mass"), zero$event_mass == 0)
+
+af_events <- observed_af_events(c(0, 0.25))
+stopifnot(
+    identical(af_events$het, c(0, 0.375)),
+    identical(af_events$hom, c(0, 0.0625)),
+    identical(zero_unobserved_events(2)$het, c(0, 0))
 )
 
 classified <- apply_sex_classification(

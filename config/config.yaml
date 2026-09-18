@@ -50,3 +50,4 @@ report:
 generation_settings:
   coverage_minimum: 0.5  # fraction of unioned testing-unit bases in the callable resource
   variant_classes: [snv]  # initial preparation scope; indel generation is rejected
+  bin_count: 14  # provisional generated-grid count; D6 remains pending

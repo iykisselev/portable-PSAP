@@ -1,9 +1,16 @@
 # Locate the workflow R library when invoked by Snakemake
-PSAP_SCRIPT_DIR <- normalizePath(snakemake@scriptdir, mustWork = TRUE) 
-PSAP_R_LIB_DIR <- normalizePath(
-  file.path(PSAP_SCRIPT_DIR, "..", "lib", "r"),
-  mustWork = TRUE
-)
+PSAP_SCRIPT_DIR <- normalizePath(snakemake@scriptdir, mustWork = TRUE)
+psap_find_workflow_root <- function(script_dir) {
+  candidate <- script_dir
+  repeat {
+    if (dir.exists(file.path(candidate, "lib", "r"))) return(candidate)
+    parent <- dirname(candidate)
+    if (identical(parent, candidate)) break
+    candidate <- parent
+  }
+  stop("Could not find workflow/lib/r above script directory: ", script_dir)
+}
+PSAP_R_LIB_DIR <- file.path(psap_find_workflow_root(PSAP_SCRIPT_DIR), "lib", "r")
 
 source(file.path(PSAP_R_LIB_DIR, "common.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "table_contracts.R"), local = FALSE)
