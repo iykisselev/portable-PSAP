@@ -188,6 +188,12 @@ allOf:
     then: false
   - if:
       properties:
+        model: {properties: {hemizygote: {const: true}}, required: [hemizygote]}
+        workflow: {properties: {mode: {const: full}}, required: [mode]}
+      required: [model, workflow]
+    then: false
+  - if:
+      properties:
         generation:
           properties: {unobserved_policy: {const: mutation_rate}}
           required: [unobserved_policy]

@@ -44,7 +44,7 @@ if WORKFLOW_MODE == "apply":
     include: "rules/apply/scoring.smk"
     include: "rules/apply/cohort.smk"
 
-elif WORKFLOW_MODE in {"generate", "full"}:
+elif WORKFLOW_MODE == "generate":
     include: "rules/deployment.smk"
     include: "rules/generate/prepare.smk"
     include: "rules/generate/calculate.smk"
@@ -53,6 +53,39 @@ elif WORKFLOW_MODE in {"generate", "full"}:
     rule null_distributions:
         input:
             rules.finalize_null_distribution_bundle.output.marker
+
+elif WORKFLOW_MODE == "full":
+    include: "rules/deployment.smk"
+    include: "rules/generate/prepare.smk"
+    include: "rules/generate/calculate.smk"
+    include: "rules/generate/finalize.smk"
+
+    # Full manifests are forbidden from naming external lookup tables.  These
+    # internal bindings point only to outputs declared by the generation DAG.
+    config["bindings"]["reference"]["lookup_tables"] = {
+        "het": str(rules.finalize_null_distribution_bundle.output.lookup_het),
+        "hom": str(rules.finalize_null_distribution_bundle.output.lookup_hom),
+    }
+
+    include: "rules/common.smk"
+    include: "rules/resources.smk"
+    include: "rules/validation_helpers.smk"
+    localrules: validate_cohort, validate_resources, validate_model, merge_validation, require_valid_inputs, summarize_annotations, require_valid_annotations
+
+    include: "rules/apply/validate.smk"
+    include: "rules/apply/prepare.smk"
+    include: "rules/apply/variants.smk"
+    include: "rules/apply/annotation.smk"
+    include: "rules/apply/samples.smk"
+    include: "rules/apply/scoring.smk"
+    include: "rules/apply/cohort.smk"
+
+    rule full_results:
+        input:
+            rules.finalize_null_distribution_bundle.output.marker,
+            str(COHORT_DIR / "cohort_candidates.tsv.gz"),
+            str(COHORT_DIR / "cohort_summary.tsv.gz"),
+            str(COHORT_DIR / "control_variants.tsv.gz")
 
 else:
     raise ValueError(f"Unsupported workflow mode: {WORKFLOW_MODE!r}")

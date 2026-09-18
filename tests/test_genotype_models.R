@@ -32,7 +32,7 @@ stopifnot(
 )
 
 events <- data.table(score = c(10, 20), q = c(0.18, 0.32))
-distribution <- conditional_maximum_distribution(events, score_max = 70, bin_count = 14)
+distribution <- conditional_maximum_distribution(events, score_max = 70, bin_width = 5)
 stopifnot(
     identical(distribution$status, "ok"),
     isTRUE(all.equal(distribution$event_mass, 0.4424, tolerance = 1e-14)),
@@ -44,7 +44,7 @@ stopifnot(
 tied <- conditional_maximum_distribution(
     data.table(score = c(10, 20, 20), q = c(0.3, 0.1, 0.2)),
     score_max = 70,
-    bin_count = 14
+    bin_width = 5
 )
 stopifnot(
     isTRUE(all.equal(tied$event_mass, 0.496, tolerance = 1e-14)),
@@ -52,7 +52,7 @@ stopifnot(
 )
 
 tiny <- conditional_maximum_distribution(
-    data.table(score = 20, q = 1e-24), score_max = 70, bin_count = 14
+    data.table(score = 20, q = 1e-24), score_max = 70, bin_width = 5
 )
 stopifnot(
     identical(tiny$status, "ok"),
@@ -61,7 +61,7 @@ stopifnot(
 )
 
 zero <- conditional_maximum_distribution(
-    data.table(score = 20, q = 0), score_max = 70, bin_count = 14
+    data.table(score = 20, q = 0), score_max = 70, bin_width = 5
 )
 stopifnot(identical(zero$status, "zero_event_mass"), zero$event_mass == 0)
 
@@ -156,4 +156,33 @@ stopifnot(
         selected_scores[.testing_unit_id == "unit-2", Key],
         "variant-d"
     )
+)
+
+generated_path <- tempfile(fileext = ".tsv")
+fwrite(
+    data.table(testing_unit_id = "unit-1", `1` = 1, `2` = 0.75, `3` = 0.5),
+    generated_path,
+    sep = "\t"
+)
+metadata_path <- tempfile(fileext = ".json")
+jsonlite::write_json(
+    list(contract = "generated_bundle_v1", score_max = 6, bin_width = 2, bin_count = 3),
+    metadata_path,
+    auto_unbox = TRUE
+)
+generated_contract <- resolve_lookup_contract(
+    "generated_bundle_v1", list(het = generated_path), metadata_path
+)
+generated_lookup <- read_lookup(generated_path)
+generated_scores <- lookup_psap(
+    data.table(.testing_unit_id = "unit-1", CADD_PHRED = c(-1, 0, 1.999, 2, 6, 7)),
+    generated_lookup,
+    score_max = 6,
+    lookup_contract = generated_contract$type,
+    metadata = generated_contract$metadata
+)
+stopifnot(identical(generated_scores, c(1, 1, 1, 0.75, 0.5, 0.5)))
+expect_error(
+    resolve_lookup_contract("unknown", list(), NULL),
+    "Unsupported lookup contract"
 )
