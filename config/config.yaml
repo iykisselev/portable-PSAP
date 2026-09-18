@@ -44,3 +44,9 @@ report:
   candidate_id:
     separator: ":"  # text delimiter; separates patient, disease-model tag, and ordinal
     ordinal_width: 3  # decimal digits; zero-padded width of the per-model candidate ordinal
+
+# Provisional generator scope. Absence-policy and mutation conversion decisions
+# remain in the null-distribution contract and are not selected here.
+generation_settings:
+  coverage_minimum: 0.5  # fraction of unioned testing-unit bases in the callable resource
+  variant_classes: [snv]  # initial preparation scope; indel generation is rejected

@@ -4,7 +4,7 @@ description: >-
   Biology and analysis decisions only. Physical file locations, output roots,
   scheduler settings, and site-specific settings belong elsewhere.
 type: object
-required: [model, reference, report]
+required: [model, reference, report, generation_settings]
 properties:
   model:
     type: object
@@ -69,6 +69,15 @@ properties:
         properties:
           separator: {type: string, minLength: 1}
           ordinal_width: {type: integer, minimum: 1}
+  generation_settings:
+    type: object
+    additionalProperties: false
+    required: [coverage_minimum, variant_classes]
+    properties:
+      coverage_minimum: {type: number, minimum: 0, maximum: 1}
+      variant_classes:
+        type: array
+        const: [snv]
 $defs:
   resource_identity:
     type: object

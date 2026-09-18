@@ -36,12 +36,13 @@ properties:
   generation:
     type: object
     additionalProperties: false
-    required: [population_vcf, score_snv, coverage, testing_unit_bed, af_source]
+    required: [population_vcf, score_snv, coverage, testing_unit_bed, fasta, af_source]
     properties:
       population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
       score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
       coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
+      fasta: {$ref: "#/$defs/fasta_binding"}
       mutation_rate: {$ref: "#/$defs/indexed_genomic_binding"}
       af_source:
         type: object

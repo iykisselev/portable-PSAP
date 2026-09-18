@@ -44,11 +44,13 @@ if WORKFLOW_MODE == "apply":
     include: "rules/apply/scoring.smk"
     include: "rules/apply/cohort.smk"
 
+elif WORKFLOW_MODE in {"generate", "full"}:
+    include: "rules/deployment.smk"
+    include: "rules/generate/prepare.smk"
+
+    rule generate_preparation:
+        input:
+            rules.prepare_generation_inputs.output
+
 else:
-    rule null_distribution_mode_not_implemented:
-        message:
-            "Generation and full workflow modes are validated but are not runnable until their producers are implemented."
-        run:
-            raise ValueError(
-                f"workflow.mode={WORKFLOW_MODE!r} is not runnable before null-distribution generation rules are implemented."
-            )
+    raise ValueError(f"Unsupported workflow mode: {WORKFLOW_MODE!r}")

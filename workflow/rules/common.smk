@@ -3,7 +3,8 @@ import math
 import re
 
 import pandas as pd
-import yaml
+
+include: "deployment.smk"
 
 
 OUTPUT_ROOT = Path(config["outdir"])
@@ -14,32 +15,6 @@ INPUT_BINDINGS = config["inputs"]
 APPLY_SCRIPT_DIR = Path(workflow.basedir) / "scripts"
 PYTHON_LIBRARY_DIR = Path(workflow.basedir) / "lib" / "python"
 R_LIB_DIR = Path(workflow.basedir) / "lib" / "r"
-CONDA_ENV_DIR = Path(workflow.basedir) / "envs"
-DEPLOYMENT_DIR = Path(workflow.basedir)
-
-
-def _load_deployment_map(filename):
-    with (DEPLOYMENT_DIR / filename).open(encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
-
-
-ENVMODULES = _load_deployment_map("envmodules.yaml")
-CONTAINERS = _load_deployment_map("containers.yaml")
-
-
-def mod(*tools):
-    """Expand logical tool names into an ordered, de-duplicated module list."""
-    modules = []
-    for tool in tools:
-        for module in ENVMODULES[tool]:
-            if module not in modules:
-                modules.append(module)
-    return modules
-
-
-def sif(tool):
-    """Return the logical tool's pinned Apptainer/Singularity image reference."""
-    return CONTAINERS[tool]
 
 
 def _input_size_mb(input_files):
