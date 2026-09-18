@@ -36,7 +36,7 @@ properties:
   generation:
     type: object
     additionalProperties: false
-    required: [population_vcf, score_snv, coverage, testing_unit_bed, fasta, af_source]
+    required: [population_vcf, score_snv, coverage, testing_unit_bed, fasta, af_source, unobserved_policy]
     properties:
       population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
       score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
@@ -44,6 +44,7 @@ properties:
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
       fasta: {$ref: "#/$defs/fasta_binding"}
       mutation_rate: {$ref: "#/$defs/indexed_genomic_binding"}
+      unobserved_policy: {enum: [zero, mutation_rate]}
       af_source:
         type: object
         additionalProperties: false
@@ -184,3 +185,13 @@ allOf:
         workflow: {properties: {mode: {enum: [generate, full]}}, required: [mode]}
       required: [model, workflow]
     then: false
+  - if:
+      properties:
+        generation:
+          properties: {unobserved_policy: {const: mutation_rate}}
+          required: [unobserved_policy]
+      required: [generation]
+    then:
+      properties:
+        generation:
+          required: [mutation_rate]

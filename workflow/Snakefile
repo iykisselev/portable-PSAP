@@ -51,7 +51,7 @@ elif WORKFLOW_MODE in {"generate", "full"}:
 
     rule generate_zero_distribution:
         input:
-            rules.calculate_zero_null_distribution.output
+            rules.calculate_null_distribution.output
 
 else:
     raise ValueError(f"Unsupported workflow mode: {WORKFLOW_MODE!r}")

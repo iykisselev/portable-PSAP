@@ -24,9 +24,30 @@ scores <- merge(
   all.x = TRUE,
   sort = FALSE
 )
-# The only wired absence policy is the explicitly named zero adapter. Invalid
-# and excluded panel alleles never reach this input table as observed AF.
-scores[is.na(af), af := 0]
+policy <- as.character(snakemake@params[["unobserved_policy"]])
+if (identical(policy, "mutation_rate")) {
+  rate_paths <- snakemake@input[["mutation_rate"]]
+  if (length(rate_paths) != 1L) abort("mutation_rate policy requires one declared mutation-rate table")
+  rates <- fread(rate_paths[[1L]], header = FALSE, showProgress = FALSE)
+  if (ncol(rates) < 5L) abort("Mutation-rate table needs CHROM, POS, REF, ALT, and mu columns")
+  setnames(rates, names(rates)[1:5], c("CHROM", "POS", "REF", "ALT", "mu"))
+  rates[, CHROM := sub("^CHR", "", toupper(trimws(as.character(CHROM))))]
+  rates[, allele_key := paste(CHROM, POS, REF, ALT, sep = ":")]
+  rates[, mu := as.numeric(mu)]
+  if (any(!is.finite(rates$mu) | rates$mu < 0 | rates$mu > 1) || anyDuplicated(rates$allele_key)) {
+    abort("Mutation-rate table has invalid or duplicate allele-specific mu values")
+  }
+  scores <- merge(scores, rates[, .(allele_key, mu)], by = "allele_key", all.x = TRUE, sort = FALSE)
+  if (any(is.na(scores$af) & is.na(scores$mu))) {
+    abort("Mutation-rate table is missing an assigned mu for panel-absent scored allele(s)")
+  }
+  scores[is.na(af), af := mu]
+} else if (identical(policy, "zero")) {
+  # Invalid and excluded panel alleles never reach this input table as observed AF.
+  scores[is.na(af), af := 0]
+} else {
+  abort("Unsupported unobserved policy: ", policy)
+}
 probabilities <- observed_af_events(scores$af)
 score_max <- as.numeric(snakemake@params[["score_max"]])
 bin_count <- as.integer(snakemake@params[["bin_count"]])

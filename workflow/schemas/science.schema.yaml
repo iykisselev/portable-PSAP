@@ -72,13 +72,14 @@ properties:
   generation_settings:
     type: object
     additionalProperties: false
-    required: [coverage_minimum, variant_classes, bin_count]
+    required: [coverage_minimum, variant_classes, bin_count, mutation_conversion]
     properties:
       coverage_minimum: {type: number, minimum: 0, maximum: 1}
       variant_classes:
         type: array
         const: [snv]
       bin_count: {type: integer, minimum: 1}
+      mutation_conversion: {const: de_novo_proxy}
 $defs:
   resource_identity:
     type: object

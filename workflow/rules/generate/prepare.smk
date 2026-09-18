@@ -18,6 +18,11 @@ def generation_index(name):
     return [index] if index else []
 
 
+def generation_optional_data(name):
+    binding = config["generation"].get(name)
+    return [binding["data"]] if binding else []
+
+
 rule prepare_generation_inputs:
     """Validate and normalize generation resources without cohort dependencies."""
     input:
@@ -29,6 +34,7 @@ rule prepare_generation_inputs:
         coverage_index=lambda wc: generation_index("coverage"),
         testing_units=config["generation"]["testing_unit_bed"]["data"],
         testing_units_index=lambda wc: generation_index("testing_unit_bed"),
+        mutation_rate=lambda wc: generation_optional_data("mutation_rate"),
         fasta=config["generation"]["fasta"]["data"],
         fasta_fai=config["generation"]["fasta"]["fai"],
         fasta_gzi=lambda wc: [config["generation"]["fasta"]["gzi"]] if config["generation"]["fasta"]["gzi"] else []
