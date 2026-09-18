@@ -9,31 +9,46 @@ min_version("8.0")
 # user-owned run manifest with --configfile; it must satisfy the merged schema.
 configfile: str(Path(workflow.basedir).parent / "config" / "config.yaml")
 
+# Existing run manifests predate explicit workflow modes. Normalize them before
+# schema validation so they retain the established apply-only behavior.
+if "workflow" not in config:
+    config["workflow"] = {"mode": "apply"}
+
 validate(
     config,
     Path(workflow.basedir) / "schemas" / "config.schema.yaml",
 )
 
-include: "rules/common.smk"
-include: "rules/resources.smk"
-include: "rules/validation_helpers.smk"
+WORKFLOW_MODE = config["workflow"]["mode"]
 
-# Control-plane checks are fast and inspect small reports; keeping them local avoids
-# scheduler latency without moving any computational work into the submission host.
-localrules: validate_cohort, validate_resources, validate_model, merge_validation, require_valid_inputs, summarize_annotations, require_valid_annotations
+if WORKFLOW_MODE == "apply":
+    include: "rules/common.smk"
+    include: "rules/resources.smk"
+    include: "rules/validation_helpers.smk"
 
+    # Control-plane checks are fast and inspect small reports; keeping them local avoids
+    # scheduler latency without moving any computational work into the submission host.
+    localrules: validate_cohort, validate_resources, validate_model, merge_validation, require_valid_inputs, summarize_annotations, require_valid_annotations
 
-rule all:
-    input:
-        str(COHORT_DIR / "cohort_candidates.tsv.gz"),
-        str(COHORT_DIR / "cohort_summary.tsv.gz"),
-        str(COHORT_DIR / "control_variants.tsv.gz")
+    rule all:
+        input:
+            str(COHORT_DIR / "cohort_candidates.tsv.gz"),
+            str(COHORT_DIR / "cohort_summary.tsv.gz"),
+            str(COHORT_DIR / "control_variants.tsv.gz")
 
+    include: "rules/apply/validate.smk"
+    include: "rules/apply/prepare.smk"
+    include: "rules/apply/variants.smk"
+    include: "rules/apply/annotation.smk"
+    include: "rules/apply/samples.smk"
+    include: "rules/apply/scoring.smk"
+    include: "rules/apply/cohort.smk"
 
-include: "rules/apply/validate.smk"
-include: "rules/apply/prepare.smk"
-include: "rules/apply/variants.smk"
-include: "rules/apply/annotation.smk"
-include: "rules/apply/samples.smk"
-include: "rules/apply/scoring.smk"
-include: "rules/apply/cohort.smk"
+else:
+    rule null_distribution_mode_not_implemented:
+        message:
+            "Generation and full workflow modes are validated but are not runnable until their producers are implemented."
+        run:
+            raise ValueError(
+                f"workflow.mode={WORKFLOW_MODE!r} is not runnable before null-distribution generation rules are implemented."
+            )

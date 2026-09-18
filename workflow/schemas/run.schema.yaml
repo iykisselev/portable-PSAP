@@ -1,18 +1,21 @@
 $schema: "https://json-schema.org/draft/2020-12/schema"
-title: Portable PSAP run-binding configuration
-description: >-
-  Physical data bindings and output naming for one invocation. This schema is
-  intentionally separate from scientific configuration and scheduler profiles.
+title: Portable PSAP run configuration
 type: object
-required: [outdir, run, inputs, bindings]
+required: [outdir, workflow, run]
 properties:
   outdir: {type: string, minLength: 1}
+  workflow:
+    type: object
+    required: [mode]
+    properties:
+      mode: {enum: [generate, apply, full]}
+    additionalProperties: false
   run:
     type: object
-    additionalProperties: false
-    required: [apply_prefix]
     properties:
       apply_prefix: {type: string, minLength: 1, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
+      generation_prefix: {type: string, minLength: 1, pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"}
+    additionalProperties: false
   inputs:
     type: object
     additionalProperties: false
@@ -29,53 +32,31 @@ properties:
     additionalProperties: false
     required: [reference]
     properties:
-      reference:
+      reference: {type: object}
+  generation:
+    type: object
+    additionalProperties: false
+    required: [population_vcf, score_snv, coverage, testing_unit_bed, af_source]
+    properties:
+      population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
+      score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
+      coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+      testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
+      mutation_rate: {$ref: "#/$defs/indexed_genomic_binding"}
+      af_source:
         type: object
         additionalProperties: false
-        required: [fasta, coverage, testing_unit_bed, exclusions, lookup_tables, cadd]
+        required: [overall]
         properties:
-          fasta: {$ref: "#/$defs/fasta_binding"}
-          coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
-          testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
-          exclusions:
-            type: array
-            items: {$ref: "#/$defs/indexed_genomic_binding"}
-          lookup_tables:
-            type: object
-            additionalProperties: false
-            required: [het, hom, hem_chrX]
-            properties:
-              het: {type: string, minLength: 1}
-              hom: {type: string, minLength: 1}
-              hem_chrX: {type: string, minLength: 1}
-          cadd:
-            type: object
-            additionalProperties: false
-            required: [snv, indel]
-            properties:
-              snv: {$ref: "#/$defs/indexed_genomic_binding"}
-              indel: {$ref: "#/$defs/optional_indexed_genomic_binding"}
-allOf:
-  - if:
-      properties: {model: {properties: {include_indels: {const: true}}}}
-    then:
-      properties:
-        bindings:
-          properties:
-            reference:
-              properties:
-                cadd:
-                  properties: {indel: {$ref: "#/$defs/indexed_genomic_binding"}}
-  - if:
-      properties: {model: {properties: {hemizygote: {const: true}}}}
-    then:
-      properties:
-        bindings:
-          properties:
-            reference:
-              properties:
-                lookup_tables:
-                  properties: {hem_chrX: {type: string}}
+          overall: {type: string, minLength: 1}
+          female: {type: [string, "null"]}
+          male: {type: [string, "null"]}
+  model:
+    type: object
+    properties:
+      hemizygote: {type: boolean}
+      include_indels: {type: boolean}
+    additionalProperties: true
 $defs:
   indexed_genomic_binding:
     type: object
@@ -99,3 +80,106 @@ $defs:
       data: {type: string, minLength: 1}
       fai: {type: string, minLength: 1}
       gzi: {type: [string, "null"], minLength: 1}
+  apply_reference_binding:
+    type: object
+    additionalProperties: false
+    required: [fasta, coverage, testing_unit_bed, exclusions, lookup_tables, cadd]
+    properties:
+      fasta: {$ref: "#/$defs/fasta_binding"}
+      coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+      testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
+      exclusions:
+        type: array
+        items: {$ref: "#/$defs/indexed_genomic_binding"}
+      lookup_tables:
+        type: object
+        additionalProperties: false
+        required: [het, hom]
+        properties:
+          het: {type: string, minLength: 1}
+          hom: {type: string, minLength: 1}
+          hem_chrX: {type: string, minLength: 1}
+      cadd:
+        type: object
+        additionalProperties: false
+        required: [snv]
+        properties:
+          snv: {$ref: "#/$defs/indexed_genomic_binding"}
+          indel: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+  full_reference_binding:
+    type: object
+    additionalProperties: false
+    required: [fasta, coverage, testing_unit_bed, exclusions, cadd]
+    properties:
+      fasta: {$ref: "#/$defs/fasta_binding"}
+      coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+      testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
+      exclusions:
+        type: array
+        items: {$ref: "#/$defs/indexed_genomic_binding"}
+      cadd:
+        type: object
+        additionalProperties: false
+        required: [snv]
+        properties:
+          snv: {$ref: "#/$defs/indexed_genomic_binding"}
+          indel: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+allOf:
+  - if:
+      properties: {workflow: {properties: {mode: {const: apply}}, required: [mode]}}
+      required: [workflow]
+    then:
+      required: [inputs, bindings]
+      properties:
+        generation: false
+        run: {required: [apply_prefix]}
+        bindings:
+          properties:
+            reference: {$ref: "#/$defs/apply_reference_binding"}
+  - if:
+      properties: {workflow: {properties: {mode: {const: generate}}, required: [mode]}}
+      required: [workflow]
+    then:
+      required: [generation]
+      properties:
+        inputs: false
+        bindings: false
+        run: {required: [generation_prefix]}
+  - if:
+      properties: {workflow: {properties: {mode: {const: full}}, required: [mode]}}
+      required: [workflow]
+    then:
+      required: [inputs, bindings, generation]
+      properties:
+        run: {required: [apply_prefix, generation_prefix]}
+        bindings:
+          properties:
+            reference: {$ref: "#/$defs/full_reference_binding"}
+  - if:
+      properties:
+        model: {properties: {hemizygote: {const: true}}, required: [hemizygote]}
+        workflow: {properties: {mode: {const: apply}}, required: [mode]}
+      required: [model, workflow]
+    then:
+      properties:
+        bindings:
+          properties:
+            reference:
+              properties:
+                lookup_tables: {required: [hem_chrX]}
+  - if:
+      properties: {model: {properties: {include_indels: {const: true}}, required: [include_indels]}}
+      required: [model]
+    then:
+      properties:
+        bindings:
+          properties:
+            reference:
+              properties:
+                cadd: {required: [indel]}
+  - if:
+      properties:
+        model: {properties: {include_indels: {const: true}}, required: [include_indels]}
+        workflow: {properties: {mode: {enum: [generate, full]}}, required: [mode]}
+      required: [model, workflow]
+    then: false
