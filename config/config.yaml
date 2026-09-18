@@ -50,5 +50,5 @@ report:
 generation_settings:
   coverage_minimum: 0.5  # fraction of unioned testing-unit bases in the callable resource
   variant_classes: [snv]  # initial preparation scope; indel generation is rejected
-  bin_count: 14  # provisional generated-grid count; D6 remains pending
+  score_bin_width: 0.05  # generated-grid width; score_max is included in the final bin
   mutation_conversion: de_novo_proxy  # D2-selected proxy; p_effective = per-allele mu

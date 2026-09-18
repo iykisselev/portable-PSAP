@@ -16,7 +16,7 @@ rule calculate_null_distribution:
         diagnostics=ensure(str(GENERATION_CALCULATED_DIR / "distribution_diagnostics.tsv"), non_empty=True)
     params:
         score_max=config["model"]["score_max"],
-        bin_count=config["generation_settings"]["bin_count"],
+        bin_width=config["generation_settings"]["score_bin_width"],
         unobserved_policy=config["generation"]["unobserved_policy"]
     threads: 1
     resources:

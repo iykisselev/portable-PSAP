@@ -1,11 +1,12 @@
 # Pure event adapters and stable conditional maximum-score distributions.
 
-generated_bin_index <- function(score, score_max, bin_count) {
-  if (!is.finite(score_max) || score_max <= 0 || bin_count < 1L) {
-    abort("score_max must be positive and bin_count must be at least one")
+generated_bin_index <- function(score, score_max, bin_width) {
+  if (!is.finite(score_max) || score_max <= 0 || !is.finite(bin_width) || bin_width <= 0) {
+    abort("score_max and bin_width must be positive")
   }
+  bin_count <- ceiling(score_max / bin_width)
   clamped <- pmin(pmax(as.numeric(score), 0), score_max)
-  pmin(floor(clamped / (score_max / bin_count)) + 1L, bin_count)
+  pmin(floor(clamped / bin_width) + 1L, bin_count)
 }
 
 
@@ -25,7 +26,7 @@ zero_unobserved_events <- function(count = 1L) {
 }
 
 
-conditional_maximum_distribution <- function(events, score_max, bin_count) {
+conditional_maximum_distribution <- function(events, score_max, bin_width) {
   required <- c("score", "q")
   if (!all(required %chin% names(events))) {
     abort("Events need score and q columns")
@@ -35,7 +36,8 @@ conditional_maximum_distribution <- function(events, score_max, bin_count) {
   if (any(!is.finite(score)) || any(!is.finite(q) | q < 0 | q > 1)) {
     abort("Event scores must be finite and q values must be finite in [0, 1]")
   }
-  bins <- generated_bin_index(score, score_max, bin_count)
+  bin_count <- ceiling(score_max / bin_width)
+  bins <- generated_bin_index(score, score_max, bin_width)
   active <- q > 0
   if (!any(active)) {
     return(list(

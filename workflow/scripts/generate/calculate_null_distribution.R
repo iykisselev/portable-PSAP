@@ -50,20 +50,20 @@ if (identical(policy, "mutation_rate")) {
 }
 probabilities <- observed_af_events(scores$af)
 score_max <- as.numeric(snakemake@params[["score_max"]])
-bin_count <- as.integer(snakemake@params[["bin_count"]])
+bin_width <- as.numeric(snakemake@params[["bin_width"]])
 
 calculate_role <- function(role, q) {
   working <- copy(scores)
   working[, q := q]
   result <- lapply(sort(unique(eligible)), function(unit) {
     distribution <- conditional_maximum_distribution(
-      working[testing_unit_id == unit, .(score, q)], score_max, bin_count
+      working[testing_unit_id == unit, .(score, q)], score_max, bin_width
     )
     list(
       lookup = data.table(
         testing_unit_id = unit,
         role = role,
-        bin = seq_len(bin_count),
+        bin = seq_len(ceiling(score_max / bin_width)),
         survival = distribution$survival
       ),
       diagnostic = data.table(

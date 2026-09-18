@@ -48,10 +48,11 @@ elif WORKFLOW_MODE in {"generate", "full"}:
     include: "rules/deployment.smk"
     include: "rules/generate/prepare.smk"
     include: "rules/generate/calculate.smk"
+    include: "rules/generate/finalize.smk"
 
-    rule generate_zero_distribution:
+    rule null_distributions:
         input:
-            rules.calculate_null_distribution.output
+            rules.finalize_null_distribution_bundle.output.marker
 
 else:
     raise ValueError(f"Unsupported workflow mode: {WORKFLOW_MODE!r}")
