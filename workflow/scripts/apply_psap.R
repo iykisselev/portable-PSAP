@@ -103,7 +103,10 @@ read_lookup <- function(path) {
 
   # Accept an optional header row while keeping the normal headerless format.
   invalid_rows <- apply(value_matrix, 1, function(row) any(is.na(row)))
-  if (invalid_rows[1] && any(!invalid_rows[-1])) {
+  if (
+    identical(tolower(ids[[1L]]), "testing_unit_id") ||
+    (invalid_rows[1] && any(!invalid_rows[-1]))
+  ) {
     ids <- ids[-1]
     value_matrix <- value_matrix[-1, , drop = FALSE]
   }
@@ -124,21 +127,22 @@ read_lookup <- function(path) {
 
 
 # Map CADD scores to a lookup grid for the corresponding testing-unit IDs.
-lookup_psap <- function(variants, lookup, score_max, score_column = "CADD_PHRED") {
+lookup_psap <- function(variants, lookup, score_max, score_column = "CADD_PHRED", lookup_contract = "external_legacy_v0", metadata = NULL) {
   score <- pmin(
     pmax(variants[[score_column]], 0),
     score_max
   )
-  score_grid <- seq(
-    0,
-    score_max,
-    length.out = ncol(lookup$values)
-  )
-  # findInterval returns zero below the first bin, while the upper bound may
-  # equal the final grid edge; clamp both cases to valid matrix columns.
-  score_bin <- findInterval(score, score_grid)
-  score_bin[score_bin < 1] <- 1
-  score_bin[score_bin > ncol(lookup$values)] <- ncol(lookup$values)
+  if (identical(lookup_contract, "external_legacy_v0")) {
+    score_grid <- seq(0, score_max, length.out = ncol(lookup$values))
+    score_bin <- findInterval(score, score_grid)
+    score_bin[score_bin < 1] <- 1
+    score_bin[score_bin > ncol(lookup$values)] <- ncol(lookup$values)
+  } else if (identical(lookup_contract, "generated_bundle_v1")) {
+    validate_generated_lookup(lookup, metadata, "selected")
+    score_bin <- generated_lookup_bin(score, metadata$score_max, metadata$bin_width)
+  } else {
+    abort("Unsupported lookup contract: %s", lookup_contract)
+  }
 
   row_index <- match(variants$.testing_unit_id, lookup$ids)
 
