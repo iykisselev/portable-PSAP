@@ -17,8 +17,8 @@ jobs:
           activate-environment: portable-psap-ci
           environment-file: workflow/envs/ci.yaml
           auto-activate-base: false
-      - run: python tests/run_tier.py unit
-      - run: python tests/run_tier.py schema
+      - run: conda run --no-capture-output --name portable-psap-ci python tests/run_tier.py unit
+      - run: conda run --no-capture-output --name portable-psap-ci python tests/run_tier.py schema
 
   workflow-graph:
     runs-on: ubuntu-latest
@@ -29,7 +29,7 @@ jobs:
           activate-environment: portable-psap-ci
           environment-file: workflow/envs/ci.yaml
           auto-activate-base: false
-      - run: python tests/run_tier.py workflow
+      - run: conda run --no-capture-output --name portable-psap-ci python tests/run_tier.py workflow
 
   end-to-end:
     runs-on: ubuntu-latest
@@ -40,7 +40,7 @@ jobs:
           activate-environment: portable-psap-ci
           environment-file: workflow/envs/ci.yaml
           auto-activate-base: false
-      - run: python tests/run_tier.py e2e
+      - run: conda run --no-capture-output --name portable-psap-ci python tests/run_tier.py e2e
 
   resilience:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -52,4 +52,4 @@ jobs:
           activate-environment: portable-psap-ci
           environment-file: workflow/envs/ci.yaml
           auto-activate-base: false
-      - run: python tests/run_tier.py resilience
+      - run: conda run --no-capture-output --name portable-psap-ci python tests/run_tier.py resilience
