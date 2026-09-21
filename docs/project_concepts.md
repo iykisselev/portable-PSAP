@@ -1,24 +1,25 @@
 # Portable PSAP: concepts and scientific logic
 
-Portable PSAP prioritizes rare variants in a cohort by comparing their
-deleteriousness with a population-derived expectation for the genomic region in
-which they occur. It implements the single-case PSAP framework and a
-testing-unit (for example, gene) extension. It does not establish that a
-variant causes disease: it produces reproducible, model-aware evidence for
-prioritization.
+Portable PSAP helps prioritize rare variants in a cohort. It compares the
+severity of an observed variant with what would be expected from population
+variation in the same genomic region. The workflow implements the single-case
+PSAP framework and extends it to testing units such as genes.
 
-## The question the workflow answers
+The result is reproducible, model-aware evidence for prioritization—not a
+claim that a variant causes disease.
 
-For a candidate variant in a testing unit, the workflow asks: *under a chosen
-inheritance model and the population variation represented by the lookup
-table, how unusual is an event at least this deleterious in this unit?*
+## What the workflow is asking
 
-The answer is a PSAP value. Lower values indicate a more unusual event under
-the selected null model. A value is meaningful only with the assembly,
-testing-unit definition, coverage scope, exclusion policy, CADD release, and
-genotype model that were used to construct its lookup table.
+For each candidate, the workflow asks: *under the chosen inheritance model and
+the population variation represented by the lookup table, how unusual is an
+event at least this deleterious in this testing unit?*
 
-The workflow supports three ways to obtain these values:
+The answer is a PSAP value. Smaller values mean that the event is less expected
+under the selected null model. A value only makes sense alongside the
+assembly, testing-unit definition, coverage scope, exclusions, CADD release,
+and genotype model used to build its lookup table.
+
+There are three ways to use the workflow:
 
 | Mode | Purpose |
 | --- | --- |
@@ -26,27 +27,27 @@ The workflow supports three ways to obtain these values:
 | `generate` | Build and certify a lookup bundle from population allele frequencies and score resources. |
 | `full` | Generate a bundle and immediately apply that same bundle to a cohort. |
 
-## Scientific objects
+## The main scientific pieces
 
 ### Testing units
 
-A testing unit is the entity over which rare-variant events are evaluated.
-The default unit type is a gene, but the workflow treats the BED's fourth
-column as an opaque, stable identifier. The same identifiers must appear in
-the lookup tables. A variant may belong to more than one unit and is then
-evaluated once for every unit membership.
+A testing unit is the thing over which rare-variant events are evaluated. The
+default unit is a gene, but the workflow treats the BED's fourth column as a
+stable identifier and does not assume what it means. Those same identifiers
+must appear in the lookup tables. If a variant overlaps several units, it is
+evaluated once for each membership.
 
 ### Scores
 
-CADD-PHRED is used as the variant-level severity score. During application,
-the score is clipped to the lookup grid's configured range and mapped to a
-fixed score bin. When a sample has several compatible variants in one unit and
-model, all variants tied for the highest score are retained. This avoids an
-arbitrary choice among equal best variants.
+CADD-PHRED supplies the variant-level severity score. During application, the
+score is clipped to the lookup grid's range and mapped to a fixed bin. If a
+sample has several compatible variants with the same highest score in one unit
+and model, all of them are kept. That avoids making an arbitrary choice among
+equally strong candidates.
 
 ### Inheritance roles
 
-The lookup roles correspond to genotype-event probabilities:
+The lookup tables are split into genotype roles. Their null probabilities are:
 
 | Role | Compatible genotype event | Null probability at allele frequency `f` |
 | --- | --- | --- |
@@ -54,27 +55,28 @@ The lookup roles correspond to genotype-event probabilities:
 | `hom` | Diploid homozygous alternate | `f²` |
 | `hem_chrX` | Male non-PAR chromosome-X alternate | `f` |
 
-The hemizygous role is enabled only when `model.hemizygote` is true. It is
-restricted to non-pseudoautosomal chromosome X. With the sex-specific
-frequency policy, female frequencies serve the X `het`/`hom` roles and male
-frequencies serve `hem_chrX`.
+The hemizygous role is enabled only when `model.hemizygote` is true, and only
+for non-pseudoautosomal chromosome X. With sex-specific frequencies, female
+frequencies are used for X `het`/`hom`, while male frequencies are used for
+`hem_chrX`.
 
 ### The null distribution
 
-Generation creates a score-bin survival row for each testing unit and role.
-For the alleles assigned to a unit, their compatible genotype-event
-probabilities are treated as independent. The workflow aggregates the
-probability of at least one event in each score-bin tail, conditional on there
-being at least one compatible event in the unit. The resulting row maps a
-score bin to the null probability of an event at least that severe.
+Generation builds one score-bin survival row for each testing unit and role.
+For the alleles assigned to a unit, compatible genotype-event probabilities are
+treated as independent. The workflow then combines them into the probability
+of seeing at least one event in each score-bin tail, conditional on seeing at
+least one compatible event in the unit. Each row therefore maps a score bin to
+the null probability of an event at least that severe.
 
-This is the quantity subsequently looked up as `PSAP`; it is not recalculated
-from the cohort. Consequently, a cohort run is deterministic for a fixed VCF,
-bundle, and configuration.
+That conditional tail probability is what application looks up as `PSAP`; it
+is not recalculated from the cohort. For a fixed VCF, bundle, and configuration,
+the cohort result is therefore deterministic.
 
-## Defining the scientific scope
+## How the calibration scope is defined
 
-The calibration scope is deliberately narrower than a raw testing-unit BED:
+The raw testing-unit BED is not used as-is. The calibration scope is built in
+four steps:
 
 1. The workflow starts with autosomes 1–22 and chromosome X represented by the
    FASTA index.
@@ -85,55 +87,54 @@ The calibration scope is deliberately narrower than a raw testing-unit BED:
    bases and retains it only when it meets
    `generation_settings.coverage_minimum`.
 
-The generated bundle publishes the surviving unit intervals, the exact
-calibration mask, alleles rejected during generation, and units excluded for
-coverage or zero event mass. Those artifacts make the lookup's scope
-inspectable rather than implicit.
+The generated bundle records the surviving unit intervals, the exact
+calibration mask, rejected alleles, and units excluded for low coverage or zero
+event mass. These artifacts make the lookup's scope visible and reviewable.
 
-For alleles absent from the population panel, generation uses the explicit
-`generation.unobserved_policy`:
+For an allele missing from the population panel, generation follows the
+explicit `generation.unobserved_policy`:
 
 - `zero` assigns an event probability of zero; or
 - `mutation_rate` substitutes a supplied per-allele mutation rate, subject to
   the configured chromosome-X mutation-rate policy.
 
-The policy is recorded in bundle metadata. It is a scientific choice, not a
-performance option.
+The policy is written to the bundle metadata. It is a scientific assumption,
+not a performance setting.
 
 ## Applying a lookup to a cohort
 
-The apply workflow first verifies that cohort metadata, reference sequence,
-resource formats, testing-unit IDs, and model settings are compatible. It then
-stages resources, filters the VCF to callable regions, removes excluded
-records, and attaches CADD and testing-unit annotations.
+When applying a lookup, the workflow first checks the cohort metadata, reference
+sequence, resource formats, testing-unit IDs, and model settings. It stages the
+resources, keeps variants in callable regions, removes excluded records, and
+adds CADD and testing-unit annotations.
 
-For every selected sample, the workflow extracts genotypes, standardizes their
+For each selected sample, it extracts genotypes, standardizes their
 representation, and applies sex-aware genotype classification. Compatible
-genotypes are joined to testing-unit/CADD annotations and scored against the
-role-specific lookup table.
+genotypes are joined to their testing-unit and CADD annotations, then scored
+against the appropriate role-specific lookup table.
 
-Affected participants produce candidate records. Unaffected participants
-produce control-evidence records. The final report compares an affected
-candidate only with controls that carry the identical allele in the same
-testing unit; dominant heterozygous candidates may use evidence from any
-configured control model, while the other models require a model match.
+Affected participants produce candidate records; unaffected participants
+produce control evidence. The final report compares a candidate only with
+controls carrying the identical allele in the same testing unit. Dominant
+heterozygous candidates may use evidence from any configured control model,
+while the other models require a matching model.
 
 ## Why bundles are certified
 
-A generated bundle contains more than lookup tables. It also includes a
-metadata record, component checksums, scope artifacts, excluded units and
-alleles, a validation report, and a `validation.ok` marker. The marker is
-created only after structural and semantic validation succeeds. Apply mode
-uses that certificate to reject incomplete or incompatible bundles before
-expensive cohort processing begins.
+A generated bundle is more than a set of lookup tables. It also contains
+metadata, component checksums, scope artifacts, excluded units and alleles, a
+validation report, and a `validation.ok` marker. The marker is written only
+after structural and semantic checks pass. Apply mode uses that certificate to
+reject incomplete or incompatible bundles before expensive cohort processing
+starts.
 
-In `full` mode, this guarantee is stronger: the generated lookup tables,
-eligible testing units, calibration regions, and excluded alleles become the
-effective apply resources. The configured FASTA and CADD score resource remain
-the shared physical bindings. This prevents the generation and application
-halves from silently using different scopes.
+In `full` mode, the guarantee extends across both halves of the DAG. The
+generated lookup tables, eligible units, calibration regions, and excluded
+alleles become the effective apply resources. The configured FASTA and CADD
+score resource remain the shared physical bindings, so generation and
+application cannot silently drift to different scopes.
 
-## Important interpretation limits
+## Keep these interpretation limits in mind
 
 - PSAP ranks statistical rarity under the chosen population model; it is not a
   clinical classification or a replacement for segregation, phenotype, or

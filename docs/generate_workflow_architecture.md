@@ -1,14 +1,14 @@
 # Generate workflow architecture
 
-This guide describes the developer-facing architecture of `workflow.mode:
-generate` and the generation half of `workflow.mode: full`. For the scientific
-model and interpretation, read [project concepts](project_concepts.md) first.
+This is the developer guide to `workflow.mode: generate` and to the generation
+half of `workflow.mode: full`. Start with [project concepts](project_concepts.md)
+if you want the scientific reasoning before the implementation details.
 
 ## Entry point and module ownership
 
-`workflow/Snakefile` normalizes and schema-validates the merged configuration,
-then builds one immutable `WorkflowPlan` in
-`workflow/lib/python/workflow_plan.py`. Generation rules are included only for
+The `workflow/Snakefile` first normalizes and validates the merged
+configuration. It then builds one immutable `WorkflowPlan` in
+`workflow/lib/python/workflow_plan.py`. Generation rules are loaded only in
 `generate` and `full` modes.
 
 | Layer | Location | Responsibility |
@@ -20,13 +20,13 @@ then builds one immutable `WorkflowPlan` in
 | Domain library | `workflow/lib/python/generation_*.py` | Scope construction, population parsing, probability reduction, lookup rendering, and bundle finalization. |
 | Shared adapter support | `workflow/shared/_library.py` | Add the workflow Python library to adapter import paths. |
 
-Keep scientific and file-format logic in `workflow/lib/python`; scripts should
-remain thin Snakemake adapters. This makes logic unit-testable without a live
-Snakemake object.
+Keep scientific and file-format logic in `workflow/lib/python`. The scripts
+should stay thin: they decode Snakemake inputs and call library functions. That
+keeps the useful logic testable without constructing a live Snakemake object.
 
 ## Inputs
 
-In standalone `generate` mode, these bindings are under `generation`:
+In standalone `generate` mode, the following bindings live under `generation`:
 
 | Input | Required | Used for |
 | --- | --- | --- |
@@ -40,23 +40,25 @@ In standalone `generate` mode, these bindings are under `generation`:
 | `mutation_rate` and optional index | Conditional | Required for an unobserved `mutation_rate` policy. |
 | `af_source` | Yes | Names the overall, and when configured female/male, AF INFO tags. |
 
-The generation scope currently supports SNVs on contigs `1`–`22` and `X`.
-Every candidate calibration allele must have exactly one score row. Invalid
-selected AF values, duplicate population states, duplicate scores, or absent
-mutation rates when needed are hard failures.
+The current scope supports SNVs on contigs `1`–`22` and `X`. Every calibration
+allele must have exactly one score row. Invalid selected AF values, duplicate
+population states, duplicate scores, and missing mutation rates when they are
+needed are all hard failures.
 
 ### Full-mode binding behavior
 
-Full mode does not duplicate the reference scope under `generation`. It takes
-FASTA, coverage, testing units, CADD SNVs, and ordinary variant exclusions
-from `bindings.reference`. Exactly one configured exclusion must have the
-`par_regions` role; all `variants_exclude` bindings become generation
-exclusions. This is enforced while creating the `WorkflowPlan`.
+Full mode deliberately does not define a second reference scope under
+`generation`. It reuses FASTA, coverage, testing units, CADD SNVs, and ordinary
+variant exclusions from `bindings.reference`. Exactly one configured exclusion
+must have the `par_regions` role; every `variants_exclude` binding becomes a
+generation exclusion. `WorkflowPlan` enforces this while the DAG is being
+built.
 
 ## DAG and transformations
 
-The scope checkpoint discovers the partition and bucket wildcards. Subsequent
-rules read its JSON manifests rather than independently rediscovering work.
+The scope checkpoint discovers the partition and bucket wildcards. Every later
+rule reads those JSON manifests instead of trying to rediscover work from the
+filesystem.
 
 | Rule | Inputs | Transformation | Outputs |
 | --- | --- | --- | --- |
@@ -67,14 +69,14 @@ rules read its JSON manifests rather than independently rediscovering work.
 | `finalize_null_distribution_bundle` | All bucket rows/diagnostics plus scope and state artifacts | Retain only units with positive mass for every applicable role; stream public bundle components and metadata. | Gzipped lookup, scope, exclusion, and metadata files. |
 | `validate_null_distribution_bundle` | Finalized bundle and schema | Validate component checksums, row coverage, contracts, and semantics. | `validation.json` and `validation.ok`. |
 
-The default target `null_distributions` exposes both the certificate and the
-recoverable generation intermediates. `generate_results` is an equivalent
-explicit target. Full mode exposes these intermediates through `full_results`
-as well as applying the certified bundle.
+The default `null_distributions` target exposes the certificate and the
+recoverable generation intermediates. `generate_results` is the equivalent
+explicit target. In full mode, `full_results` exposes those generation outputs
+and the downstream apply reports together.
 
 ## Intermediate-data contracts
 
-The checkpoint artifacts are part of the internal DAG contract:
+These checkpoint artifacts are part of the internal DAG contract:
 
 - `provisional_units.parquet` has one row per unit with union bases, covered
   bases, coverage fraction, chromosome, and eligibility status.
@@ -90,27 +92,27 @@ The checkpoint artifacts are part of the internal DAG contract:
   They store `certain_count`, `log_none_sum`, and event count so global event
   tables never need to be materialized.
 
-Do not make downstream rules glob these files or infer wildcard names from
-directories. Use the callbacks in `rules/generate/context.smk`, which wait for
-the checkpoint and validate the manifests.
+Downstream rules should not glob these files or infer wildcard names from
+directory contents. Use the callbacks in `rules/generate/context.smk`; they
+wait for the checkpoint and validate the manifests before returning paths.
 
 ## Bundle contract
 
-The public bundle directory is `<outdir>/generate/<generation_prefix>/bundle/`.
-Its filenames are centrally defined by `bundle_contract.py`. Required public
-components are:
+The public bundle lives at
+`<outdir>/generate/<generation_prefix>/bundle/`. Its filenames are defined in
+one place, `bundle_contract.py`. The public components are:
 
 - HET and HOM lookup tables; HEM chromosome-X lookup table when enabled;
 - eligible testing-unit BED and calibration-region BED;
 - excluded alleles and excluded units;
 - `metadata.json`, `validation.json`, and `validation.ok`.
 
-`metadata.json` records contract/schema versions, assembly, score-grid
-parameters, roles, absent-allele policy, X policies, source identities and
-checksums, component checksums, and counts. The `validation.ok` marker is the
-completion boundary that downstream apply rules should depend on.
+`metadata.json` records contract and schema versions, assembly, score-grid
+parameters, roles, absent-allele and X policies, source and component
+checksums, and counts. Downstream apply rules should use `validation.ok` as the
+completion boundary.
 
-## Invariants to preserve when changing generation
+## Rules worth protecting when changing generation
 
 1. **One binding set per full run.** In full mode, do not add a second
    generation-only reference source. Change the plan resolver if a new shared
@@ -130,7 +132,7 @@ completion boundary that downstream apply rules should depend on.
    it has valid positive event mass. HEM applies only to surviving chromosome-X
    units.
 
-## Typical changes
+## Where common changes belong
 
 | Change | Main implementation points | Required follow-through |
 | --- | --- | --- |
@@ -139,7 +141,7 @@ completion boundary that downstream apply rules should depend on.
 | Change binning | `generation_probability.py` and contract constants | Version the contract if compatibility changes; update apply lookup validation. |
 | Change a public artifact | `bundle_contract.py`, finalization, validation schema/library | Preserve backward compatibility or deliberately version the contract. |
 
-Run the small generation fixture after changes:
+After a generation change, run the small fixture:
 
 ```bash
 python -m unittest discover -s tests -p 'test_generate_workflow.py'
