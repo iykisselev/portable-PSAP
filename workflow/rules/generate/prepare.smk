@@ -2,7 +2,7 @@
 
 
 checkpoint prepare_generation_scope:
-    """Normalize masks and units once before bounded partition extraction."""
+    """Prepare the shared mask and testing units before partition work begins."""
     input:
         population_vcf=GENERATION_POPULATION_VCF_BINDING.data,
         score_snv=GENERATION_SCORE_SNV_BINDING.data,
@@ -14,13 +14,13 @@ checkpoint prepare_generation_scope:
         fasta_fai=GENERATION_FASTA_BINDING.fai,
         mutation_rate=lambda wc: generation_mutation_rate_data()
     output:
-        partitions=GENERATION_ARTIFACTS["partitions"],
-        buckets=GENERATION_ARTIFACTS["buckets"],
-        units=GENERATION_ARTIFACTS["units"],
-        unit_intervals=GENERATION_ARTIFACTS["unit_intervals"],
-        masked_unit_intervals=GENERATION_ARTIFACTS["masked_unit_intervals"],
-        mask=GENERATION_ARTIFACTS["effective_mask"],
-        resource_identities=GENERATION_ARTIFACTS["resource_identities"]
+        partitions=GENERATION_SCOPE_PATHS["partitions"],
+        buckets=GENERATION_SCOPE_PATHS["buckets"],
+        units=GENERATION_SCOPE_PATHS["units"],
+        unit_intervals=GENERATION_SCOPE_PATHS["unit_intervals"],
+        masked_unit_intervals=GENERATION_SCOPE_PATHS["masked_unit_intervals"],
+        mask=GENERATION_SCOPE_PATHS["effective_mask"],
+        resource_identities=GENERATION_SCOPE_PATHS["resource_identities"]
     params:
         coverage_minimum=WORKFLOW_PLAN.generation_settings.coverage_minimum,
         partition_size=GENERATION_PARTITION_SIZE,
@@ -41,7 +41,7 @@ checkpoint prepare_generation_scope:
 
 
 rule prepare_generation_partition:
-    """Create allele states, memberships, and scores for one genomic window."""
+    """Create allele states, unit memberships, and scores for one genomic window."""
     input:
         partitions=lambda wc: generation_scope_artifact(wc, "partitions"),
         units=lambda wc: generation_scope_artifact(wc, "units"),

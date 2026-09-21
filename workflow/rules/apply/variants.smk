@@ -1,6 +1,6 @@
-VARIANT_DIR = APPLY_OUTDIR / "variants"
-FILTERED_BCF = VARIANT_DIR / f"{APPLY_OUTDIR.name}.covered.bcf"
-FILTERED_VCF = VARIANT_DIR / f"{APPLY_OUTDIR.name}.filtered_pass.vcf.gz"
+VARIANT_DIR = APPLY_OUTPUT_DIR / "variants"
+FILTERED_BCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.covered.bcf"
+FILTERED_VCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.filtered_pass.vcf.gz"
 
 
 rule filter_low_coverage:

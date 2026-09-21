@@ -1,7 +1,7 @@
-"""Snakemake adapters for the immutable apply resource registry.
+"""Expose the run's shared resource catalog to apply rules.
 
-Requires: ``WORKFLOW_PLAN`` plus ``PREPARED_DIR`` and the sample-validation
-marker from preceding apply adapters. Registry construction is pure Python.
+The catalog is built once from ``WORKFLOW_PLAN``. Validation and staging then
+use the same paths instead of resolving a resource independently.
 """
 
 from apply_resources import build_apply_resource_registry
@@ -10,7 +10,6 @@ from execution_policy import resource_mem_mb, resource_runtime_minutes
 
 APPLY_RESOURCE_REGISTRY = build_apply_resource_registry(WORKFLOW_PLAN, PREPARED_DIR)
 RESOURCE_SPECS = APPLY_RESOURCE_REGISTRY.resources
-INPUT_VCF_BINDING = APPLY_RESOURCE_REGISTRY.input_vcf_binding
 INPUT_VCF_SOURCE = APPLY_RESOURCE_REGISTRY.input_vcf_source
 PREPARED_INPUT_VCF = APPLY_RESOURCE_REGISTRY.prepared_input_vcf
 WORKFLOW_INPUT_VCF = PREPARED_INPUT_VCF
@@ -54,13 +53,13 @@ def table_resource_source_index(wildcards):
 
 
 def table_resource_cohort(wildcards):
-    spec = TABLE_RESOURCE_SPECS[wildcards.resource]
-    return [WORKFLOW_INPUT_VCF] if spec.requires_chromosome_normalization else []
+    resource_spec = TABLE_RESOURCE_SPECS[wildcards.resource]
+    return [WORKFLOW_INPUT_VCF] if resource_spec.requires_chromosome_normalization else []
 
 
 def table_resource_cohort_index(wildcards):
-    spec = TABLE_RESOURCE_SPECS[wildcards.resource]
-    return [WORKFLOW_INPUT_VCF_INDEX] if spec.requires_chromosome_normalization else []
+    resource_spec = TABLE_RESOURCE_SPECS[wildcards.resource]
+    return [WORKFLOW_INPUT_VCF_INDEX] if resource_spec.requires_chromosome_normalization else []
 
 
 def table_resource_mem_mb(wildcards, input, attempt):

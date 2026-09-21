@@ -1,4 +1,4 @@
-"""Static generation paths and policy derived without inspecting inputs."""
+"""Derive generation paths and work layout without opening input files."""
 
 from __future__ import annotations
 
@@ -18,14 +18,14 @@ from workflow_plan import (
 
 @dataclass(frozen=True)
 class GenerationScopeArtifacts:
-    """Deterministic outputs of the data-dependent scope checkpoint."""
+    """Files produced by the scope-discovery checkpoint."""
 
     artifacts: Mapping[str, str]
 
 
 @dataclass(frozen=True)
 class GenerationExecutionLayout:
-    """Derived generation paths, buckets, and enabled model roles."""
+    """Output directories, score bins, and enabled model roles for one run."""
 
     calculated_dir: Path
     statistics_dir: Path
@@ -36,7 +36,7 @@ class GenerationExecutionLayout:
 
 
 def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArtifacts:
-    """Return scope-checkpoint paths without reading genomic resource files."""
+    """Choose the scope-checkpoint file paths without reading genomic inputs."""
     scalable_dir = plan.scalable_dir
     prepared_dir = scalable_dir / "prepared"
     return GenerationScopeArtifacts(
@@ -63,7 +63,7 @@ def build_generation_execution_layout(
     model: ModelPlan,
     settings: GenerationSettings,
 ) -> GenerationExecutionLayout:
-    """Derive deterministic paths and work buckets from immutable plans."""
+    """Choose reproducible output paths and work buckets from the run plan."""
     calculated_dir = plan.scalable_dir / "calculated"
     statistics_dir = calculated_dir / "partition_statistics"
     lookup_bucket_dir = calculated_dir / "lookup_buckets"

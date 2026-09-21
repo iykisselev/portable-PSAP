@@ -10,7 +10,7 @@ rule validate_cohort:
         libraries=VALIDATION_LIBRARIES,
         schema=VALIDATION_REPORT_SCHEMA
     output:
-        report=ensure(str(COHORT_VALIDATION), non_empty=True),
+        report=ensure(str(COHORT_VALIDATION_REPORT), non_empty=True),
         manifest=protected(ensure(str(SAMPLE_MANIFEST_PATH), non_empty=True))
     params:
         hemizygote_model=str(WORKFLOW_PLAN.model.hemizygote),
@@ -48,7 +48,7 @@ rule validate_resources:
         libraries=VALIDATION_LIBRARIES,
         schema=VALIDATION_REPORT_SCHEMA
     output:
-        report=ensure(str(RESOURCE_VALIDATION), non_empty=True)
+        report=ensure(str(RESOURCE_VALIDATION_REPORT), non_empty=True)
     params:
         unit=WORKFLOW_PLAN.model.unit,
         include_indels=str(WORKFLOW_PLAN.model.include_indels),
@@ -89,7 +89,7 @@ rule validate_model:
         libraries=VALIDATION_LIBRARIES,
         schema=VALIDATION_REPORT_SCHEMA
     output:
-        report=ensure(str(MODEL_VALIDATION), non_empty=True)
+        report=ensure(str(MODEL_VALIDATION_REPORT), non_empty=True)
     params:
         score_max=str(WORKFLOW_PLAN.model.score_max),
         assembly=WORKFLOW_PLAN.reference.assembly,
@@ -119,7 +119,7 @@ rule merge_validation:
         resources=rules.validate_resources.output.report,
         model=rules.validate_model.output.report
     output:
-        report=protected(ensure(str(VALIDATION_REPORT), non_empty=True))
+        report=protected(ensure(str(COMBINED_VALIDATION_REPORT), non_empty=True))
     threads: 1
     resources:
         mem_mb=512,
@@ -140,7 +140,7 @@ rule require_valid_inputs:
         report=rules.merge_validation.output.report,
         manifest=rules.validate_cohort.output.manifest
     output:
-        ok=ensure(str(Path(APPLY_OUTDIR) / "validation.ok"), non_empty=True)
+        ok=ensure(str(Path(APPLY_OUTPUT_DIR) / "validation.ok"), non_empty=True)
     params:
         failure_message="Input validation failed",
         include_errors=True,

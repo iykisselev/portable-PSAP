@@ -1,8 +1,7 @@
-"""Static sample-index adapters for apply rules.
+"""Read the configured sample list early enough to build a safe DAG.
 
-The configured PED/sample sheet determines safe wildcard values before DAG
-construction. The ordinary validation marker still blocks every expensive rule
-until the physical canonical manifest and cohort metadata have been validated.
+The validation rules still publish the canonical sample manifest and block
+expensive work until the cohort metadata has been checked.
 """
 
 from sample_manifest import (

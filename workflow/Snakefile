@@ -4,31 +4,30 @@ import sys
 from snakemake.utils import validate
 from snakemake.utils import min_version
 
-PYTHON_LIBRARY_DIR = Path(workflow.basedir) / "lib" / "python"
-sys.path.insert(0, str(PYTHON_LIBRARY_DIR))
+WORKFLOW_PYTHON_DIR = Path(workflow.basedir) / "lib" / "python"
+sys.path.insert(0, str(WORKFLOW_PYTHON_DIR))
 from workflow_plan import build_workflow_plan, normalize_run_config
 
 min_version("8.0")
 
-# Scientific settings are versioned separately from site/run bindings. Supply a
-# user-owned run manifest with --configfile; it must satisfy the merged schema.
+# The versioned scientific defaults live in config/config.yaml. Each run adds
+# its site-specific paths and settings through --configfile.
 configfile: str(Path(workflow.basedir).parent / "config" / "config.yaml")
 
-# Existing run manifests predate explicit workflow modes. Normalization returns
-# a private copy, warns about the pending migration, and never alters Snakemake's
-# configuration object.
-NORMALIZED_CONFIG = normalize_run_config(config)
+# Older run manifests did not name a workflow mode. Normalize a copy so they
+# still work, while leaving Snakemake's original configuration untouched.
+RUN_CONFIG = normalize_run_config(config)
 
 validate(
-    NORMALIZED_CONFIG,
+    RUN_CONFIG,
     Path(workflow.basedir) / "schemas" / "config.schema.yaml",
 )
 
-WORKFLOW_PLAN = build_workflow_plan(NORMALIZED_CONFIG)
+WORKFLOW_PLAN = build_workflow_plan(RUN_CONFIG)
 WORKFLOW_MODE = WORKFLOW_PLAN.mode
 
-# Deployment bindings are a dependency of every mode. Keep this single include
-# outside the branches so mode-specific modules only define workflow behavior.
+# All modes use the same deployment settings, so load them once before choosing
+# the mode-specific rules below.
 include: "rules/deployment.smk"
 
 if WORKFLOW_MODE in {"generate", "full"}:
@@ -38,8 +37,8 @@ if WORKFLOW_MODE in {"generate", "full"}:
     include: "rules/generate/finalize.smk"
 
 if WORKFLOW_MODE == "generate":
-    # Keep the historical default target stable; generate_results is the
-    # explicit public alias for callers that select a mode-specific target.
+    # Preserve the original default target and offer generate_results as the
+    # clearer mode-specific target.
     rule null_distributions:
         input:
             marker=rules.validate_null_distribution_bundle.output.marker,
@@ -74,8 +73,8 @@ elif WORKFLOW_MODE in {"apply", "full"}:
     include: "rules/apply/resources.smk"
     include: "rules/apply/validation_helpers.smk"
 
-    # Control-plane checks are fast and inspect small reports; keeping them local avoids
-    # scheduler latency without moving any computational work into the submission host.
+    # These checks read small reports and finish quickly, so running them locally
+    # avoids scheduler overhead. Compute-heavy jobs still go to the scheduler.
     localrules: validate_cohort, validate_resources, validate_model, merge_validation, require_valid_inputs, summarize_annotations, require_valid_annotations
 
     include: "rules/apply/validate.smk"

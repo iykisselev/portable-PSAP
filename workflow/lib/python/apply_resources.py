@@ -1,9 +1,7 @@
-"""Immutable resource specifications for validation, staging, and provenance.
+"""Describe the files used to validate, stage, and record one apply run.
 
-The apply workflow must not independently choose a validation source and a
-staging source for the same scientific resource. This module creates one
-``ResourceSpec`` catalog from the effective ``WorkflowPlan`` bindings; rule
-adapters only select named records from that catalog.
+One resource catalog is built from the effective ``WorkflowPlan``. That keeps
+validation and staging pointed at the same file for each scientific resource.
 """
 
 from __future__ import annotations
@@ -67,9 +65,9 @@ class ApplyResourceRegistry:
     def table_resources(self) -> Mapping[str, ResourceSpec]:
         return MappingProxyType(
             {
-                name: spec
-                for name, spec in self.resources.items()
-                if spec.stage and spec.kind in {"bed", "tsv"}
+                name: resource_spec
+                for name, resource_spec in self.resources.items()
+                if resource_spec.stage and resource_spec.kind in {"bed", "tsv"}
             }
         )
 
@@ -84,21 +82,27 @@ class ApplyResourceRegistry:
     @property
     def table_resource_data(self) -> Mapping[str, str]:
         return MappingProxyType(
-            {name: spec.staged_data for name, spec in self.table_resources.items()}
+            {
+                name: resource_spec.staged_data
+                for name, resource_spec in self.table_resources.items()
+            }
         )
 
     @property
     def table_resource_index(self) -> Mapping[str, str]:
         return MappingProxyType(
-            {name: spec.staged_index for name, spec in self.table_resources.items()}
+            {
+                name: resource_spec.staged_index
+                for name, resource_spec in self.table_resources.items()
+            }
         )
 
     @property
     def exclusion_ids(self) -> tuple[str, ...]:
         return tuple(
             name
-            for name, spec in self.table_resources.items()
-            if spec.scientific_role in {"variants_exclude", "par_regions"}
+            for name, resource_spec in self.table_resources.items()
+            if resource_spec.scientific_role in {"variants_exclude", "par_regions"}
         )
 
     @property
@@ -137,34 +141,36 @@ class ApplyResourceRegistry:
 def build_apply_resource_registry(
     plan: WorkflowPlan, prepared_dir: Path
 ) -> ApplyResourceRegistry:
-    """Resolve every apply validation and staging path from one binding set."""
+    """Build the one resource catalog used by apply validation and staging."""
     if plan.apply is None:
         raise ValueError("Apply resource registry requires an apply or full WorkflowPlan")
 
-    apply = plan.apply
-    reference = apply.effective_reference
-    source_type = "generated_bundle" if apply.lookup_source.is_bundle else "configured"
-    resources: dict[str, ResourceSpec] = {}
+    apply_plan = plan.apply
+    effective_reference = apply_plan.effective_reference
+    resource_origin = (
+        "generated_bundle" if apply_plan.lookup_source.is_bundle else "configured"
+    )
+    resource_specs: dict[str, ResourceSpec] = {}
     prepared_table_dir = prepared_dir / "tables"
 
     def add_table_resource(
         logical_name: str,
-        binding: FileBinding | None,
+        resource_binding: FileBinding | None,
         kind: str,
         scientific_role: str,
         *,
         requires_chromosome_normalization: bool = False,
         tsv_layout: str | None = None,
-        origin: str = source_type,
+        origin: str = resource_origin,
     ) -> None:
-        source = binding_data(binding, required=False)
-        if not source:
+        source_path = binding_data(resource_binding, required=False)
+        if not source_path:
             return
         staged_data = str(prepared_table_dir / f"{logical_name}.{kind}.gz")
-        resources[logical_name] = ResourceSpec(
+        resource_specs[logical_name] = ResourceSpec(
             logical_name=logical_name,
-            source=source,
-            source_index=binding_index(binding),
+            source=source_path,
+            source_index=binding_index(resource_binding),
             kind=kind,
             scientific_role=scientific_role,
             requires_chromosome_normalization=requires_chromosome_normalization,
@@ -174,38 +180,38 @@ def build_apply_resource_registry(
             origin=origin,
         )
 
-    cohort_source = binding_data(apply.inputs.vcf)
-    cohort_staged = str(prepared_dir / "cohort.vcf.gz")
-    resources["cohort"] = ResourceSpec(
+    cohort_vcf_source = binding_data(apply_plan.inputs.vcf)
+    staged_cohort_vcf = str(prepared_dir / "cohort.vcf.gz")
+    resource_specs["cohort"] = ResourceSpec(
         logical_name="cohort",
-        source=cohort_source,
-        source_index=binding_index(apply.inputs.vcf),
+        source=cohort_vcf_source,
+        source_index=binding_index(apply_plan.inputs.vcf),
         kind="vcf",
         scientific_role="cohort_vcf",
         requires_chromosome_normalization=False,
-        staged_data=cohort_staged,
-        staged_index=f"{cohort_staged}.tbi",
+        staged_data=staged_cohort_vcf,
+        staged_index=f"{staged_cohort_vcf}.tbi",
         tsv_layout=None,
         origin="input",
     )
-    resources["fasta"] = _fasta_spec(reference.fasta)
+    resource_specs["fasta"] = _fasta_spec(effective_reference.fasta)
     add_table_resource(
         "coverage",
-        reference.coverage,
+        effective_reference.coverage,
         plan.reference.coverage_kind,
         "coverage",
         requires_chromosome_normalization=True,
     )
     add_table_resource(
         "testing_units",
-        reference.testing_unit_bed,
+        effective_reference.testing_unit_bed,
         "bed",
         "testing_units",
         requires_chromosome_normalization=True,
     )
     add_table_resource(
         "cadd_snv",
-        reference.cadd_snv,
+        effective_reference.cadd_snv,
         "tsv",
         "cadd_snv",
         requires_chromosome_normalization=True,
@@ -215,7 +221,7 @@ def build_apply_resource_registry(
     if plan.model.include_indels:
         add_table_resource(
             "cadd_indel",
-            reference.cadd_indel,
+            effective_reference.cadd_indel,
             "tsv",
             "cadd_indel",
             requires_chromosome_normalization=True,
@@ -223,57 +229,57 @@ def build_apply_resource_registry(
             origin="configured",
         )
 
-    if len(apply.effective_exclusion_metadata) != len(reference.exclusions):
+    if len(apply_plan.effective_exclusion_metadata) != len(effective_reference.exclusions):
         raise ValueError(
             "reference.exclusions and bindings.reference.exclusions must have the same length"
         )
-    for position, (metadata, binding) in enumerate(
-        zip(apply.effective_exclusion_metadata, reference.exclusions)
+    for position, (exclusion_metadata, exclusion_binding) in enumerate(
+        zip(apply_plan.effective_exclusion_metadata, effective_reference.exclusions)
     ):
         add_table_resource(
             f"exclusion_{position:03d}",
-            binding,
-            metadata.kind,
-            metadata.role,
-            origin=source_type,
+            exclusion_binding,
+            exclusion_metadata.kind,
+            exclusion_metadata.role,
+            origin=resource_origin,
         )
 
     combined_exclusions_vcf = str(prepared_dir / "combined_exclusions.vcf")
-    combined_staged = f"{combined_exclusions_vcf}.gz"
-    resources["combined_exclusions"] = ResourceSpec(
+    staged_combined_exclusions_vcf = f"{combined_exclusions_vcf}.gz"
+    resource_specs["combined_exclusions"] = ResourceSpec(
         logical_name="combined_exclusions",
         source=combined_exclusions_vcf,
         source_index="",
         kind="vcf",
         scientific_role="combined_exclusions",
         requires_chromosome_normalization=False,
-        staged_data=combined_staged,
-        staged_index=f"{combined_staged}.tbi",
+        staged_data=staged_combined_exclusions_vcf,
+        staged_index=f"{staged_combined_exclusions_vcf}.tbi",
         tsv_layout=None,
         origin="run_derived",
     )
     return ApplyResourceRegistry(
-        input_vcf_binding=apply.inputs.vcf,
-        resources=MappingProxyType(dict(resources)),
+        input_vcf_binding=apply_plan.inputs.vcf,
+        resources=MappingProxyType(dict(resource_specs)),
         prepared_dir=prepared_dir,
         combined_exclusions_vcf=combined_exclusions_vcf,
     )
 
 
-def _fasta_spec(binding: FastaBinding) -> ResourceSpec:
-    """Represent a FASTA and its declared indexes without staging it."""
-    companions = (binding.gzi,) if binding.gzi else ()
+def _fasta_spec(fasta_binding: FastaBinding) -> ResourceSpec:
+    """Keep the configured FASTA and its declared indexes in the catalog."""
+    companion_indexes = (fasta_binding.gzi,) if fasta_binding.gzi else ()
     return ResourceSpec(
         logical_name="fasta",
-        source=binding.data,
-        source_index=binding.fai,
+        source=fasta_binding.data,
+        source_index=fasta_binding.fai,
         kind="fasta",
         scientific_role="reference_fasta",
         requires_chromosome_normalization=False,
-        staged_data=binding.data,
-        staged_index=binding.fai,
+        staged_data=fasta_binding.data,
+        staged_index=fasta_binding.fai,
         tsv_layout=None,
         origin="configured",
-        companion_indexes=companions,
+        companion_indexes=companion_indexes,
         stage=False,
     )

@@ -1,19 +1,19 @@
-"""Plan-derived validation inputs for apply rules.
+"""Inputs shared by the apply-validation rules.
 
-Requires: apply paths and resolved bindings from the preceding apply context
-adapters.  Validation rules only consume the stable constants declared here.
+The earlier apply files have already resolved every path. Keeping those values
+here lets each validation rule use the same sources as the downstream rules.
 """
 
 from pathlib import Path
 
 
-VALIDATION_DIR = Path(APPLY_OUTDIR) / "validation"
-COHORT_VALIDATION = VALIDATION_DIR / "cohort.json"
-RESOURCE_VALIDATION = VALIDATION_DIR / "resources.json"
-MODEL_VALIDATION = VALIDATION_DIR / "model.json"
-VALIDATION_REPORT = Path(APPLY_OUTDIR) / "validation.json"
+VALIDATION_DIR = Path(APPLY_OUTPUT_DIR) / "validation"
+COHORT_VALIDATION_REPORT = VALIDATION_DIR / "cohort.json"
+RESOURCE_VALIDATION_REPORT = VALIDATION_DIR / "resources.json"
+MODEL_VALIDATION_REPORT = VALIDATION_DIR / "model.json"
+COMBINED_VALIDATION_REPORT = Path(APPLY_OUTPUT_DIR) / "validation.json"
 VALIDATION_LIBRARIES = [
-    str(PYTHON_LIBRARY_DIR / filename)
+    str(WORKFLOW_PYTHON_DIR / filename)
     for filename in (
         "validation.py",
         "validation_cohort.py",
@@ -28,29 +28,29 @@ VALIDATION_REPORT_SCHEMA = str(
     Path(workflow.basedir) / "schemas" / "validation_report.schema.yaml"
 )
 
-def _resource(name):
+def required_resource(name):
     return RESOURCE_SPECS[name]
 
 
-def _optional_resource(name):
+def optional_resource(name):
     return RESOURCE_SPECS.get(name)
 
 
-VALIDATION_VCF = _resource("cohort").source
-VALIDATION_VCF_INDEX = _resource("cohort").source_index
+VALIDATION_VCF = required_resource("cohort").source
+VALIDATION_VCF_INDEX = required_resource("cohort").source_index
 VALIDATION_VCF_INDEX_INPUT = [VALIDATION_VCF_INDEX] if VALIDATION_VCF_INDEX else []
 VALIDATION_PED = INPUT_BINDINGS.ped or ""
 VALIDATION_SAMPLES = INPUT_BINDINGS.samples or ""
-VALIDATION_FASTA = _resource("fasta").source
-VALIDATION_FASTA_INDEX = _resource("fasta").source_index
+VALIDATION_FASTA = required_resource("fasta").source
+VALIDATION_FASTA_INDEX = required_resource("fasta").source_index
 VALIDATION_FASTA_GZI = (
-    _resource("fasta").companion_indexes[0]
-    if _resource("fasta").companion_indexes
+    required_resource("fasta").companion_indexes[0]
+    if required_resource("fasta").companion_indexes
     else ""
 )
 VALIDATION_FASTA_GZI_INPUT = [VALIDATION_FASTA_GZI] if VALIDATION_FASTA_GZI else []
 
-VALIDATION_COVERAGE_SPEC = _optional_resource("coverage")
+VALIDATION_COVERAGE_SPEC = optional_resource("coverage")
 VALIDATION_COVERAGE = (
     VALIDATION_COVERAGE_SPEC.source if VALIDATION_COVERAGE_SPEC else ""
 )
@@ -59,8 +59,8 @@ VALIDATION_COVERAGE_INDEX = (
     VALIDATION_COVERAGE_SPEC.source_index if VALIDATION_COVERAGE_SPEC else ""
 )
 VALIDATION_COVERAGE_INDEX_INPUT = [VALIDATION_COVERAGE_INDEX] if VALIDATION_COVERAGE_INDEX else []
-VALIDATION_TESTING_UNIT_BED = _resource("testing_units").source
-VALIDATION_TESTING_UNIT_INDEX = _resource("testing_units").source_index
+VALIDATION_TESTING_UNIT_BED = required_resource("testing_units").source
+VALIDATION_TESTING_UNIT_INDEX = required_resource("testing_units").source_index
 VALIDATION_TESTING_UNIT_INDEX_INPUT = [VALIDATION_TESTING_UNIT_INDEX] if VALIDATION_TESTING_UNIT_INDEX else []
 
 
@@ -79,10 +79,10 @@ VALIDATION_PAR_REGION_SPECS = _exclusion_resources("par_regions")
 VALIDATION_PAR_REGIONS = [spec.source for spec in VALIDATION_PAR_REGION_SPECS]
 VALIDATION_PAR_REGION_INDEXES = [spec.source_index for spec in VALIDATION_PAR_REGION_SPECS]
 
-VALIDATION_CADD_SNV = _resource("cadd_snv").source
-VALIDATION_CADD_SNV_INDEX = _resource("cadd_snv").source_index
+VALIDATION_CADD_SNV = required_resource("cadd_snv").source
+VALIDATION_CADD_SNV_INDEX = required_resource("cadd_snv").source_index
 VALIDATION_CADD_SNV_INDEX_INPUT = [VALIDATION_CADD_SNV_INDEX] if VALIDATION_CADD_SNV_INDEX else []
-VALIDATION_CADD_INDEL_SPEC = _optional_resource("cadd_indel")
+VALIDATION_CADD_INDEL_SPEC = optional_resource("cadd_indel")
 VALIDATION_CADD_INDEL = (
     VALIDATION_CADD_INDEL_SPEC.source if VALIDATION_CADD_INDEL_SPEC else ""
 )
