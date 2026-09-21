@@ -8,8 +8,8 @@ from types import SimpleNamespace
 if "snakemake" in globals():
     os.environ.setdefault("POLARS_MAX_THREADS", str(snakemake.threads))
 
-SCRIPTS_ROOT = Path(snakemake.scriptdir).parent
-sys.path.insert(0, str(SCRIPTS_ROOT))
+SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
+sys.path.insert(0, str(SHARED_SCRIPT_DIR))
 from _library import add_library_path
 
 add_library_path(snakemake.scriptdir)

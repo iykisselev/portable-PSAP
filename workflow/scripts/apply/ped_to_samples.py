@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert the first six PED columns to the Stage 1 sample-sheet contract."""
+"""Convert the first six PED columns into the workflow sample-sheet format."""
 
 import argparse
 import csv

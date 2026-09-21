@@ -1,4 +1,4 @@
-"""Annotate a filtered VCF with CADD and testing units via injected Snakemake I/O."""
+"""Add CADD scores and testing-unit labels to the filtered cohort VCF."""
 
 import shlex
 import subprocess

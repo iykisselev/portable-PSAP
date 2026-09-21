@@ -3,7 +3,9 @@
 # Snakemake adapter for affected-sample candidate construction.
 
 suppressPackageStartupMessages(library(data.table))
-if (exists("snakemake", inherits = FALSE)) source(file.path(snakemake@scriptdir, "bootstrap.R"))
+if (exists("snakemake", inherits = FALSE)) {
+  source(file.path(snakemake@scriptdir, "..", "..", "shared", "bootstrap.R"))
+}
 options(scipen = 999)
 
 

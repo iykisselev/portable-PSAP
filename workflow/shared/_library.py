@@ -1,4 +1,4 @@
-"""Make the workflow's reusable Python library importable to script adapters."""
+"""Make the workflow's Python library available to script adapters."""
 
 from pathlib import Path
 import sys

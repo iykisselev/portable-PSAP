@@ -4,8 +4,8 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 
-SCRIPTS_ROOT = Path(snakemake.scriptdir).parent
-sys.path.insert(0, str(SCRIPTS_ROOT))
+SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
+sys.path.insert(0, str(SHARED_SCRIPT_DIR))
 from _library import add_library_path
 
 add_library_path(snakemake.scriptdir)

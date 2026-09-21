@@ -20,7 +20,7 @@ if WORKFLOW_PLAN.apply is None:
 APPLY_PLAN = WORKFLOW_PLAN.apply
 APPLY_OUTPUT_DIR = APPLY_PLAN.output_dir
 APPLY_LOG_DIR = APPLY_PLAN.log_dir
-APPLY_SCRIPT_DIR = Path(workflow.basedir) / "scripts"
+APPLY_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "apply"
 
 ANNOTATION_DIR = APPLY_OUTPUT_DIR / "annotations"
 SAMPLE_MANIFEST_PATH = APPLY_OUTPUT_DIR / "sample_manifest.tsv"

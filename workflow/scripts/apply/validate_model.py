@@ -1,7 +1,11 @@
 """Validate model resources through injected Snakemake inputs and parameters."""
 
 from types import SimpleNamespace
+from pathlib import Path
+import sys
 
+SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
+sys.path.insert(0, str(SHARED_SCRIPT_DIR))
 from _library import add_library_path
 
 add_library_path(snakemake.scriptdir)

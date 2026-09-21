@@ -6,7 +6,7 @@ suppressPackageStartupMessages({
 })
 
 if (exists("snakemake", inherits = FALSE)) {
-  source(file.path(snakemake@scriptdir, "bootstrap.R"))
+  source(file.path(snakemake@scriptdir, "..", "..", "shared", "bootstrap.R"))
 }
 
 options(scipen = 999)

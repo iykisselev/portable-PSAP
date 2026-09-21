@@ -27,7 +27,7 @@ rule prepare_vcf_resource:
     log:
         str(APPLY_LOG_DIR / "prepare" / "vcf_{resource}.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "prepare_resource.py")
+        str(APPLY_SCRIPT_DIR / "prepare_resource.py")
 
 
 rule prepare_table_resource:
@@ -60,7 +60,7 @@ rule prepare_table_resource:
     log:
         str(APPLY_LOG_DIR / "prepare" / "table_{resource}_{extension}.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "prepare_resource.py")
+        str(APPLY_SCRIPT_DIR / "prepare_resource.py")
 
 
 rule combine_exclusions:
@@ -88,4 +88,4 @@ rule combine_exclusions:
     log:
         str(APPLY_LOG_DIR / "prepare" / "combine_exclusions.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "combine_exclusions.py")
+        str(APPLY_SCRIPT_DIR / "combine_exclusions.py")

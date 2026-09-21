@@ -9,8 +9,8 @@ if "snakemake" in globals():
     os.environ.setdefault("POLARS_MAX_THREADS", str(snakemake.threads))
 
 SCRIPT_DIR = Path(snakemake.scriptdir) if "snakemake" in globals() else Path(__file__).resolve().parent
-SCRIPTS_ROOT = SCRIPT_DIR.parent
-sys.path.insert(0, str(SCRIPTS_ROOT))
+SHARED_SCRIPT_DIR = SCRIPT_DIR.parents[1] / "shared"
+sys.path.insert(0, str(SHARED_SCRIPT_DIR))
 from _library import add_library_path
 
 add_library_path(SCRIPT_DIR)

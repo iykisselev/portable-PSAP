@@ -26,7 +26,7 @@ rule validate_cohort:
     log:
         str(APPLY_LOG_DIR / "validation" / "cohort.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "validate_cohort.py")
+        str(APPLY_SCRIPT_DIR / "validate_cohort.py")
 
 
 rule validate_resources:
@@ -69,7 +69,7 @@ rule validate_resources:
     log:
         str(APPLY_LOG_DIR / "validation" / "resources.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "validate_resources.py")
+        str(APPLY_SCRIPT_DIR / "validate_resources.py")
 
 
 rule validate_model:
@@ -109,7 +109,7 @@ rule validate_model:
     log:
         str(APPLY_LOG_DIR / "validation" / "model.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "validate_model.py")
+        str(APPLY_SCRIPT_DIR / "validate_model.py")
 
 
 rule merge_validation:
@@ -131,7 +131,7 @@ rule merge_validation:
     log:
         str(APPLY_LOG_DIR / "validation" / "merge.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "merge_validation.py")
+        str(APPLY_SCRIPT_DIR / "merge_validation.py")
 
 
 rule require_valid_inputs:
@@ -156,4 +156,4 @@ rule require_valid_inputs:
     log:
         str(APPLY_LOG_DIR / "validation" / "require_valid_inputs.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "require_valid_report.py")
+        str(APPLY_SCRIPT_DIR / "require_valid_report.py")

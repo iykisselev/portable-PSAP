@@ -1,5 +1,10 @@
-"""Write annotation completeness QC using injected Snakemake inputs and outputs."""
+"""Summarize annotation completeness for the apply workflow."""
 
+from pathlib import Path
+import sys
+
+SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
+sys.path.insert(0, str(SHARED_SCRIPT_DIR))
 from _library import add_library_path
 
 add_library_path(snakemake.scriptdir)

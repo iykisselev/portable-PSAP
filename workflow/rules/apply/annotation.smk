@@ -51,7 +51,7 @@ rule annotate_variants:
             "annotation" / "annotate_variants.log"
         )
     script:
-        str(Path(workflow.basedir) / "scripts" / "annotate_variants.py")
+        str(APPLY_SCRIPT_DIR / "annotate_variants.py")
 
 
 rule summarize_annotations:
@@ -76,7 +76,7 @@ rule summarize_annotations:
             "annotation" / "summarize_annotations.log"
         )
     script:
-        str(Path(workflow.basedir) / "scripts" / "summarize_annotations.py")
+        str(APPLY_SCRIPT_DIR / "summarize_annotations.py")
 
 
 rule require_valid_annotations:
@@ -103,7 +103,7 @@ rule require_valid_annotations:
             "annotation" / "require_valid_annotations.log"
         )
     script:
-        str(Path(workflow.basedir) / "scripts" / "require_valid_report.py")
+        str(APPLY_SCRIPT_DIR / "require_valid_report.py")
 
 
 rule prepare_testing_units:

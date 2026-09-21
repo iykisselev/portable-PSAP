@@ -1,4 +1,4 @@
-# Locate the workflow R library when invoked by Snakemake
+# Load the workflow R library when a Snakemake script starts.
 PSAP_SCRIPT_DIR <- normalizePath(snakemake@scriptdir, mustWork = TRUE)
 psap_find_workflow_root <- function(script_dir) {
   candidate <- script_dir
