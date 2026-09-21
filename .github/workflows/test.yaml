@@ -1,0 +1,55 @@
+name: workflow tests
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+jobs:
+  unit-and-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: portable-psap-ci
+          environment-file: workflow/envs/ci.yaml
+          auto-activate-base: false
+      - run: python tests/run_tier.py unit
+      - run: python tests/run_tier.py schema
+
+  workflow-graph:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: portable-psap-ci
+          environment-file: workflow/envs/ci.yaml
+          auto-activate-base: false
+      - run: python tests/run_tier.py workflow
+
+  end-to-end:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: portable-psap-ci
+          environment-file: workflow/envs/ci.yaml
+          auto-activate-base: false
+      - run: python tests/run_tier.py e2e
+
+  resilience:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: portable-psap-ci
+          environment-file: workflow/envs/ci.yaml
+          auto-activate-base: false
+      - run: python tests/run_tier.py resilience
