@@ -146,6 +146,7 @@ application cannot silently drift to different scopes.
 - Coverage and exclusions change the scientific denominator. Replacing either
   requires generating a new compatible bundle rather than reusing an old one.
 
-For implementation-level details, see
-[the generation architecture](generate_workflow_architecture.md) and
-[the apply architecture](apply_workflow_architecture.md).
+For an end-to-end operational reference, see the
+[pipeline guide](pipeline.md). For implementation-level details, see the
+[generation architecture](generate_workflow_architecture.md) and
+[apply architecture](apply_workflow_architecture.md).
