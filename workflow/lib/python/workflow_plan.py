@@ -16,6 +16,11 @@ from typing import Any, Mapping
 import warnings
 
 try:
+    from generation_resource_policy import check_generation_index_binding
+except ModuleNotFoundError:
+    from .generation_resource_policy import check_generation_index_binding
+
+try:
     from bundle_contract import (
         BUNDLE_COMPONENT_FILENAMES,
         CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
@@ -470,24 +475,38 @@ def _generation_plan(
     )
     if "overall" not in af_source:
         raise WorkflowPlanError("generation.af_source.overall is required")
-    mutation_rate = generation.get("mutation_rate")
+    population_vcf = FileBinding.from_config(generation.get("population_vcf"), "generation.population_vcf")
+    mutation_rate = (
+        FileBinding.from_config(generation["mutation_rate"], "generation.mutation_rate")
+        if generation.get("mutation_rate") is not None else None
+    )
+    allow_unindexed_fixtures = execution.get("allow_unindexed_fixture_inputs", False)
+    if not isinstance(allow_unindexed_fixtures, bool):
+        raise WorkflowPlanError("generation.execution.allow_unindexed_fixture_inputs must be a boolean")
+    partition_resources = [
+        ("generation.population_vcf", population_vcf),
+        ("bindings.reference.cadd.snv" if mode == "full" else "generation.score_snv", resources.cadd_snv),
+    ]
+    if mutation_rate is not None:
+        partition_resources.append(("generation.mutation_rate", mutation_rate))
+    for key, resource in partition_resources:
+        try:
+            check_generation_index_binding(
+                resource.data, resource.index, key=key, allow_unindexed_fixtures=allow_unindexed_fixtures,
+            )
+        except ValueError as exc:
+            raise WorkflowPlanError(str(exc)) from exc
     return GenerationPlan(
         output_dir=output_root / "generate" / prefix,
         log_dir=output_root / "logs" / "generate" / prefix,
-        population_vcf=FileBinding.from_config(
-            generation.get("population_vcf"), "generation.population_vcf"
-        ),
+        population_vcf=population_vcf,
         score_snv=resources.cadd_snv,
         coverage=resources.coverage,
         testing_unit_bed=resources.testing_unit_bed,
         fasta=resources.fasta,
         par_regions=par_regions,
         exclusions=exclusions,
-        mutation_rate=(
-            FileBinding.from_config(mutation_rate, "generation.mutation_rate")
-            if mutation_rate is not None
-            else None
-        ),
+        mutation_rate=mutation_rate,
         unobserved_policy=_required(
             generation.get("unobserved_policy"), "generation.unobserved_policy"
         ),

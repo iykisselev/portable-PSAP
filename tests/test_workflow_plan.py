@@ -140,6 +140,43 @@ class WorkflowPlanTests(unittest.TestCase):
         self.assertIsNone(plan.apply.effective_reference.coverage.data)
         self.assertIsNone(plan.apply.lookup_source.calibration_mask)
 
+    def test_production_generation_requires_each_partition_resource_index(self) -> None:
+        for mode in ("generate", "full"):
+            for missing in ("population", "scores", "mutation"):
+                with self.subTest(mode=mode, missing=missing):
+                    manifest = self.manifest(f"tests/null_distribution/{mode}.run.yaml")
+                    manifest["generation"]["execution"].pop("allow_unindexed_fixture_inputs")
+                    population = manifest["generation"]["population_vcf"]
+                    scores = (manifest["generation"]["score_snv"] if mode == "generate"
+                              else manifest["bindings"]["reference"]["cadd"]["snv"])
+                    mutation = {"data": "/production/rates.tsv.gz", "index": "/production/rates.tsv.gz.csi"}
+                    manifest["generation"]["mutation_rate"] = mutation
+                    manifest["generation"]["unobserved_policy"] = "mutation_rate"
+                    population["index"] = "/production/population.vcf.gz.tbi"
+                    scores["index"] = "/production/scores.tsv.gz.csi"
+                    resources = {"population": population, "scores": scores, "mutation": mutation}
+                    # Indexed resources need not exist at plan construction time.
+                    build_workflow_plan(manifest)
+                    resources[missing]["index"] = None
+                    key = {"population": "generation.population_vcf", "mutation": "generation.mutation_rate",
+                           "scores": "generation.score_snv" if mode == "generate" else "bindings.reference.cadd.snv"}[missing]
+                    with self.assertRaises(WorkflowPlanError) as raised:
+                        build_workflow_plan(manifest)
+                    self.assertIn(f"{key}.index is required", str(raised.exception))
+                    self.assertIn("each partition scans the entire file", str(raised.exception))
+
+    def test_fixture_exception_never_allows_unindexed_compressed_inputs(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["generation"]["population_vcf"]["data"] = "/production/gnomad.vcf.gz"
+        with self.assertRaisesRegex(WorkflowPlanError, "generation.population_vcf.index is required"):
+            build_workflow_plan(manifest)
+
+    def test_fixture_exception_requires_boolean_not_truthy_text(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["generation"]["execution"]["allow_unindexed_fixture_inputs"] = "false"
+        with self.assertRaisesRegex(WorkflowPlanError, "must be a boolean"):
+            build_workflow_plan(manifest)
+
     def test_full_plan_requires_one_shared_par_role(self) -> None:
         manifest = self.manifest("tests/null_distribution/full.run.yaml")
         manifest["reference"]["exclusions"][1]["role"] = "variants_exclude"

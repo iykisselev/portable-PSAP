@@ -23,6 +23,7 @@ try:
         supported_scope_mask,
     )
     from generation_probability import unit_bucket_frame
+    from generation_resource_policy import check_unindexed_fixture
     from io_contracts import resource_inventory, write_json_atomic, write_parquet_atomic
 except ModuleNotFoundError:
     from .generation_manifests import (
@@ -40,6 +41,7 @@ except ModuleNotFoundError:
         supported_scope_mask,
     )
     from .generation_probability import unit_bucket_frame
+    from .generation_resource_policy import check_unindexed_fixture
     from .io_contracts import resource_inventory, write_json_atomic, write_parquet_atomic
 
 
@@ -47,6 +49,14 @@ def prepare_generation_scope(
     inputs: SimpleNamespace, outputs: SimpleNamespace, params: SimpleNamespace
 ) -> None:
     """Prepare the shared scope once so partition jobs only read their slice."""
+    # Check the fixture exception before hashing resources or scheduling partitions.
+    for resource_name in ("population_vcf", "score_snv", "mutation_rate"):
+        if not getattr(inputs, f"{resource_name}_index", None):
+            paths = getattr(inputs, resource_name)
+            if isinstance(paths, (str, Path)):
+                paths = [paths]
+            for path in paths:
+                check_unindexed_fixture(path)
     units_by_id = read_bed_units(inputs.testing_units)
     coverage_intervals = read_intervals(inputs.coverage)
     excluded_intervals = read_intervals(inputs.par_regions)

@@ -14,6 +14,8 @@ generation_settings:
     mutation_rate_policy: sex_averaged_proxy
 
 generation:
+  execution:
+    allow_unindexed_fixture_inputs: true  # Small, uncompressed test resources only.
   unobserved_policy: mutation_rate
   population_vcf: {data: tests/null_distribution/population_af.vcf, index: null}
   score_snv: {data: tests/null_distribution/mutation_scores.tsv, index: null}

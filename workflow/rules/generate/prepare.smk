@@ -5,14 +5,17 @@ checkpoint prepare_generation_scope:
     """Prepare the shared mask and testing units before partition work begins."""
     input:
         population_vcf=GENERATION_POPULATION_VCF_BINDING.data,
+        population_vcf_index=lambda wc: generation_index(GENERATION_POPULATION_VCF_BINDING),
         score_snv=GENERATION_SCORE_SNV_BINDING.data,
+        score_snv_index=lambda wc: generation_index(GENERATION_SCORE_SNV_BINDING),
         coverage=GENERATION_COVERAGE_BINDING.data,
         testing_units=GENERATION_TESTING_UNIT_BINDING.data,
         par_regions=GENERATION_PAR_REGIONS_BINDING.data,
         exclusions=lambda wc: generation_exclusion_data(),
         fasta=GENERATION_FASTA_BINDING.data,
         fasta_fai=GENERATION_FASTA_BINDING.fai,
-        mutation_rate=lambda wc: generation_mutation_rate_data()
+        mutation_rate=lambda wc: generation_mutation_rate_data(),
+        mutation_rate_index=lambda wc: generation_mutation_rate_index()
     output:
         partitions=GENERATION_SCOPE_PATHS["partitions"],
         buckets=GENERATION_SCOPE_PATHS["buckets"],

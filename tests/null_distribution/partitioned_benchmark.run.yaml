@@ -28,5 +28,6 @@ generation:
     female: AF_FEMALE
     male: AF_MALE
   execution:
+    allow_unindexed_fixture_inputs: true  # Small, uncompressed test resources only.
     partition_size_bp: 10
     unit_bucket_size: 1

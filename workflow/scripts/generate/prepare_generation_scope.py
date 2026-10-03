@@ -22,7 +22,9 @@ def main() -> None:
     prepare_generation_scope(
         SimpleNamespace(
             population_vcf=str(snakemake.input.population_vcf),
+            population_vcf_index=list(snakemake.input.population_vcf_index),
             score_snv=str(snakemake.input.score_snv),
+            score_snv_index=list(snakemake.input.score_snv_index),
             coverage=str(snakemake.input.coverage),
             testing_units=str(snakemake.input.testing_units),
             par_regions=str(snakemake.input.par_regions),
@@ -30,6 +32,7 @@ def main() -> None:
             fasta=str(snakemake.input.fasta),
             fasta_fai=str(snakemake.input.fasta_fai),
             mutation_rate=[str(path) for path in snakemake.input.mutation_rate],
+            mutation_rate_index=list(snakemake.input.mutation_rate_index),
         ),
         SimpleNamespace(**{name: str(snakemake.output[name]) for name in snakemake.output.keys()}),
         SimpleNamespace(

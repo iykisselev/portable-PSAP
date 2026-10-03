@@ -61,6 +61,7 @@ properties:
         additionalProperties: false
         properties:
           partition_size_bp: {type: integer, minimum: 1}
+          allow_unindexed_fixture_inputs: {type: boolean, default: false}
           unit_bucket_size: {type: integer, minimum: 1}
           parquet_compression: {enum: [zstd, lz4, snappy, gzip, uncompressed]}
   model:
@@ -158,6 +159,7 @@ $defs:
         additionalProperties: false
         properties:
           partition_size_bp: {type: integer, minimum: 1}
+          allow_unindexed_fixture_inputs: {type: boolean, default: false}
           unit_bucket_size: {type: integer, minimum: 1}
           parquet_compression: {enum: [zstd, lz4, snappy, gzip, uncompressed]}
   full_generation_binding:
@@ -181,6 +183,7 @@ $defs:
         additionalProperties: false
         properties:
           partition_size_bp: {type: integer, minimum: 1}
+          allow_unindexed_fixture_inputs: {type: boolean, default: false}
           unit_bucket_size: {type: integer, minimum: 1}
           parquet_compression: {enum: [zstd, lz4, snappy, gzip, uncompressed]}
   lookup_source:

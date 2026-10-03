@@ -12,6 +12,8 @@ model:
   include_indels: false
 
 generation:
+  execution:
+    allow_unindexed_fixture_inputs: true  # Small, uncompressed test resources only.
   unobserved_policy: zero
   population_vcf: {data: tests/null_distribution/population_af.vcf, index: null}
   score_snv: {data: tests/null_distribution/generation_scores.tsv, index: null}

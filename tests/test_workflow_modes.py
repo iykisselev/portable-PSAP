@@ -59,7 +59,7 @@ class WorkflowModeSchemaTests(unittest.TestCase):
         config = self.merged_manifest("tests/null_distribution/full.run.yaml")
         self.assertNotIn("lookup_source", config["bindings"]["reference"])
         self.assertEqual(
-            {"population_vcf", "af_source", "unobserved_policy"},
+            {"population_vcf", "af_source", "unobserved_policy", "execution"},
             set(config["generation"]),
         )
         self.assertEqual([], validate_run_config(config))

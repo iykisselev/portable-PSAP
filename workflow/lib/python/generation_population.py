@@ -11,8 +11,10 @@ import polars as pl
 
 try:
     from genomic_contracts import allele_key, canonical_chromosome
+    from generation_resource_policy import check_unindexed_fixture
 except ModuleNotFoundError:
     from .genomic_contracts import allele_key, canonical_chromosome
+    from .generation_resource_policy import check_unindexed_fixture
 
 try:
     import pysam
@@ -63,6 +65,7 @@ def indexed_lines(
                     yield from reader.fetch(source_chromosome, region_start, region_end)
         return
 
+    check_unindexed_fixture(path)
     with open_text(path) as handle:
         yield from handle
 

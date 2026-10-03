@@ -6,6 +6,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import yaml
+
 from workflow_test_utils import ROOT, SNAKEMAKE, command_output, run_workflow
 
 
@@ -18,6 +20,19 @@ EXAMPLES = {
 
 @unittest.skipUnless(SNAKEMAKE, "Snakemake is required for example-manifest tests")
 class RunExampleTests(unittest.TestCase):
+    def test_unindexed_production_generation_fails_during_dag_construction(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="portable-psap-index-required-") as temporary:
+            directory = Path(temporary)
+            manifest = yaml.safe_load((ROOT / "runs/generate.example.yaml").read_text())
+            manifest["generation"]["execution"].pop("allow_unindexed_fixture_inputs")
+            manifest_path = directory / "run.yaml"
+            manifest_path.write_text(yaml.safe_dump(manifest))
+            result = run_workflow(manifest_path, directory / "output", dry_run=True)
+            output = command_output(result)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("generation.population_vcf.index is required", output)
+            self.assertNotIn("Job stats:", output)
+
     def test_every_documented_example_constructs_its_mode_dag(self) -> None:
         for mode, manifest in EXAMPLES.items():
             with self.subTest(mode=mode), tempfile.TemporaryDirectory(

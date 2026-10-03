@@ -24,6 +24,7 @@ TIERS: dict[str, tuple[str, ...]] = {
         "test_generation_partition.py",
         "test_generation_prep.py",
         "test_generation_probability.py",
+        "test_generation_resource_policy.py",
         "test_generation_topology.py",
         "test_genomic_contracts.py",
         "test_io_contracts.py",
