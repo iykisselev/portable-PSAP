@@ -65,7 +65,7 @@ rule prepare_generation_partition:
     threads: 1
     resources:
         mem_mb=16384,
-        runtime=240
+        runtime=360
     conda:
         str(Path(workflow.basedir) / "envs" / "validation.yaml")
     envmodules: *mod("validation")

@@ -162,19 +162,25 @@ def intersect_intervals(
 def subtract_intervals(
     intervals: list[tuple[int, int]], excluded: list[tuple[int, int]]
 ) -> list[tuple[int, int]]:
-    """Subtract excluded half-open intervals from the supplied intervals."""
-    remaining = merge_intervals(intervals)
-    for excluded_start, excluded_end in merge_intervals(excluded):
-        next_remaining: list[tuple[int, int]] = []
-        for start, end in remaining:
-            if excluded_end <= start or excluded_start >= end:
-                next_remaining.append((start, end))
-                continue
-            if start < excluded_start:
-                next_remaining.append((start, excluded_start))
-            if excluded_end < end:
-                next_remaining.append((excluded_end, end))
-        remaining = next_remaining
+    """Subtract exclusions in a linear pass after sorting and merging both sets."""
+    exclusions = merge_intervals(excluded)
+    remaining: list[tuple[int, int]] = []
+    exclusion_index = 0
+    for start, end in merge_intervals(intervals):
+        while exclusion_index < len(exclusions) and exclusions[exclusion_index][1] <= start:
+            exclusion_index += 1
+        position = start
+        while exclusion_index < len(exclusions) and exclusions[exclusion_index][0] < end:
+            excluded_start, excluded_end = exclusions[exclusion_index]
+            if excluded_start > position:
+                remaining.append((position, excluded_start))
+            position = max(position, excluded_end)
+            if position >= end:
+                # This exclusion may also overlap the next input interval.
+                break
+            exclusion_index += 1
+        if position < end:
+            remaining.append((position, end))
     return remaining
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 import sys
 import unittest
 from pathlib import Path
@@ -19,11 +20,28 @@ from generation_prep import (  # noqa: E402
     read_intervals,
     read_population_af,
     supported_scope_mask,
+    subtract_intervals,
 )
 from scalable_generation import population_rows, role_probability_expression  # noqa: E402
 
 
 class GenerationPreparationTests(unittest.TestCase):
+    def test_subtraction_matches_independent_base_sets(self):
+        rng = random.Random(42)
+        for _ in range(100):
+            regions = [tuple(sorted(rng.sample(range(40), 2))) for _ in range(5)]
+            exclusions = [tuple(sorted(rng.sample(range(40), 2))) for _ in range(5)]
+            expected = {p for start, end in regions for p in range(start, end)} - {p for start, end in exclusions for p in range(start, end)}
+            result = subtract_intervals(regions, exclusions)
+            self.assertEqual({p for start, end in result for p in range(start, end)}, expected)
+            self.assertEqual(sum(end - start for start, end in result), len(expected))
+
+    def test_subtraction_handles_many_disjoint_exclusions(self):
+        exclusions = [(position, position + 1) for position in range(1, 30000, 3)]
+        retained = subtract_intervals([(0, 30000)], exclusions)
+        self.assertEqual(sum(end - start for start, end in retained), 20000)
+        self.assertEqual(len(retained), 10001)
+
     def test_configured_info_tag_preserves_zero_and_rejects_other_states(self) -> None:
         observed, rejected = read_population_af(
             ROOT / "tests/null_distribution/population_af.vcf", "AF_CUSTOM"
