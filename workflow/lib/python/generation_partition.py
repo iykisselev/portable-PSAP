@@ -8,15 +8,17 @@ import polars as pl
 
 try:
     from generation_partitions import partition_from_manifest
-    from generation_population import population_rows
+    from generation_population import POPULATION_SCHEMA, population_rows
+    from generation_prep import intersect_intervals
     from generation_reference import ReferenceReader, membership_rows
-    from generation_scores import ALLELE_COLUMNS, score_rows
+    from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
     from io_contracts import write_parquet_atomic
 except ModuleNotFoundError:
     from .generation_partitions import partition_from_manifest
-    from .generation_population import population_rows
+    from .generation_population import POPULATION_SCHEMA, population_rows
+    from .generation_prep import intersect_intervals
     from .generation_reference import ReferenceReader, membership_rows
-    from .generation_scores import ALLELE_COLUMNS, score_rows
+    from .generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
     from .io_contracts import write_parquet_atomic
 
 
@@ -32,21 +34,31 @@ def prepare_generation_partition(
         .filter((pl.col("CHROM") == partition.chromosome) & (pl.col("START") < partition.end) & (pl.col("END") > partition.start))
         .join(eligible_units, on="testing_unit_id", how="inner")
         .select("testing_unit_id", "START", "END")
-        .iter_rows()
+        .rows()
     )
     mask = (
         pl.read_parquet(inputs.mask)
         .filter((pl.col("CHROM") == partition.chromosome) & (pl.col("START") < partition.end) & (pl.col("END") > partition.start))
         .select(pl.max_horizontal("START", pl.lit(partition.start)).alias("START"), pl.min_horizontal("END", pl.lit(partition.end)).alias("END"))
-        .iter_rows()
+        .rows()
     )
     reference = ReferenceReader(inputs.fasta, inputs.fasta_fai)
     try:
-        memberships = membership_rows(partition, list(mask), list(intervals), reference)
+        memberships = membership_rows(partition, mask, intervals, reference)
     finally:
         reference.close()
     candidates = memberships.select(ALLELE_COLUMNS).unique(maintain_order=True)
-    scores = score_rows(inputs.score_snv, inputs.score_snv_index, partition.chromosome, partition.start, partition.end)
+    if candidates.is_empty():
+        # Keep the same artifact contract without opening either large resource.
+        write_parquet_atomic(pl.DataFrame(schema=POPULATION_SCHEMA), outputs.allele_states, params.compression)
+        write_parquet_atomic(memberships, outputs.allele_membership, params.compression)
+        write_parquet_atomic(pl.DataFrame(schema=SCORE_SCHEMA), outputs.allele_scores, params.compression)
+        return
+    candidate_intervals = intersect_intervals([(start, end) for _, start, end in intervals], mask)
+    scores = score_rows(
+        inputs.score_snv, inputs.score_snv_index, partition.chromosome, partition.start, partition.end,
+        intervals=candidate_intervals,
+    )
     matched_score_keys = candidates.join(scores.select(ALLELE_COLUMNS), on=ALLELE_COLUMNS, how="inner")
     if matched_score_keys.select(ALLELE_COLUMNS).is_duplicated().any():
         raise ValueError(f"Score resource has duplicate calibration alleles in {partition.identifier}")

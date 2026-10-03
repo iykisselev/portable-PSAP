@@ -20,6 +20,13 @@ except ImportError:  # The fixture reader supports plain, unindexed text files.
     pysam = None
 
 
+POPULATION_SCHEMA = {
+    "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String,
+    "allele_state": pl.String, "af": pl.Float64, "af_overall": pl.Float64,
+    "af_female": pl.Float64, "af_male": pl.Float64, "state_reason": pl.String,
+}
+
+
 def open_text(path: str | Path):
     """Open plain or gzip-compressed text resources with the same iterator API."""
     resource = Path(path)
@@ -34,8 +41,17 @@ def indexed_lines(
     chromosome: str,
     start: int,
     end: int,
+    *,
+    intervals: list[tuple[int, int]] | None = None,
 ) -> Iterator[str]:
-    """Yield one indexed region, with a plain-text fallback for fixtures."""
+    """Read a window or disjoint subintervals using one open indexed reader.
+
+    Callers supplying intervals must merge overlaps first. Unindexed fixtures
+    are scanned once; callers remain responsible for filtering their rows.
+    """
+    regions = [(start, end)] if intervals is None else intervals
+    if not regions:
+        return
     if index:
         if pysam is None:
             raise RuntimeError("Indexed generation resources require pysam in the generation environment")
@@ -43,7 +59,8 @@ def indexed_lines(
             names = {canonical_chromosome(name): name for name in reader.contigs}
             source_chromosome = names.get(chromosome)
             if source_chromosome is not None:
-                yield from reader.fetch(source_chromosome, start, end)
+                for region_start, region_end in regions:
+                    yield from reader.fetch(source_chromosome, region_start, region_end)
         return
 
     with open_text(path) as handle:
@@ -199,9 +216,4 @@ def population_rows(
                     "state_reason": "valid_selected_af",
                 }
             )
-    schema = {
-        "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String,
-        "allele_state": pl.String, "af": pl.Float64, "af_overall": pl.Float64,
-        "af_female": pl.Float64, "af_male": pl.Float64, "state_reason": pl.String,
-    }
-    return pl.DataFrame(records, schema=schema, strict=False)
+    return pl.DataFrame(records, schema=POPULATION_SCHEMA, strict=False)

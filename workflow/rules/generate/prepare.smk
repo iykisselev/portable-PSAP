@@ -64,7 +64,7 @@ rule prepare_generation_partition:
         compression=GENERATION_PARQUET_COMPRESSION
     threads: 1
     resources:
-        mem_mb=8192,
+        mem_mb=16384,
         runtime=240
     conda:
         str(Path(workflow.basedir) / "envs" / "validation.yaml")
