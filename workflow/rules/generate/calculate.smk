@@ -6,23 +6,23 @@ rule calculate_partition_null_distribution:
     input:
         partitions=lambda wc: generation_scope_artifact(wc, "partitions"),
         buckets=lambda wc: generation_scope_artifact(wc, "buckets"),
-        allele_states=str(GENERATION_PARTITION_DIR / "{partition}.allele_states.parquet"),
-        allele_membership=str(GENERATION_PARTITION_DIR / "{partition}.allele_membership.parquet"),
-        allele_scores=str(GENERATION_PARTITION_DIR / "{partition}.allele_scores.parquet"),
+        allele_states=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_states.parquet"),
+        allele_membership=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_membership.parquet"),
+        allele_scores=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_scores.parquet"),
         mutation_rate=lambda wc: generation_mutation_rate_data(),
         mutation_rate_index=lambda wc: generation_mutation_rate_index()
     output:
         statistics=str(
-            GENERATION_STATISTICS_DIR / "{partition}.bucket-{bucket}.parquet"
+            GENERATION_CONTEXT.statistics_dir / "{partition}.bucket-{bucket}.parquet"
         )
     params:
         score_max=WORKFLOW_PLAN.model.score_max,
         bin_width=WORKFLOW_PLAN.generation_settings.score_bin_width,
-        unobserved_policy=GENERATION_PLAN.unobserved_policy,
-        roles=GENERATION_ROLES,
+        unobserved_policy=GENERATION_CONTEXT.plan.unobserved_policy,
+        roles=GENERATION_CONTEXT.roles,
         x_af_policy=WORKFLOW_PLAN.generation_settings.x_af_policy,
         x_mutation_rate_policy=WORKFLOW_PLAN.generation_settings.x_mutation_rate_policy,
-        compression=GENERATION_PARQUET_COMPRESSION
+        compression=GENERATION_CONTEXT.plan.parquet_compression
     threads: 1
     resources:
         mem_mb=policy_resources("calculate_partition_null_distribution").mem_mb,
@@ -32,11 +32,7 @@ rule calculate_partition_null_distribution:
     envmodules: *mod("validation")
     container: sif("validation")
     log:
-        str(
-            GENERATION_LOG_DIR
-            / "partitions"
-            / "{partition}.{bucket}.calculate.log"
-        )
+        str(GENERATION_CONTEXT.log_dir / "partitions" / "{partition}.{bucket}.calculate.log")
     script:
         str(GENERATION_SCRIPT_DIR / "calculate_partition_statistics.py")
 
@@ -47,17 +43,17 @@ rule reduce_null_distribution_bucket:
         buckets=lambda wc: generation_scope_artifact(wc, "buckets"),
         partition_statistics=generation_statistics_shards
     output:
-        lookup_het=str(GENERATION_LOOKUP_BUCKET_DIR / "{bucket}.het.tsv"),
-        lookup_hom=str(GENERATION_LOOKUP_BUCKET_DIR / "{bucket}.hom.tsv"),
+        lookup_het=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.het.tsv"),
+        lookup_hom=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.hom.tsv"),
         lookup_hem=(
-            str(GENERATION_LOOKUP_BUCKET_DIR / "{bucket}.hem_chrX.tsv")
-            if GENERATION_HEM_ENABLED
+            str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.hem_chrX.tsv")
+            if GENERATION_CONTEXT.hem_enabled
             else []
         ),
-        diagnostics=str(GENERATION_LOOKUP_BUCKET_DIR / "{bucket}.diagnostics.tsv")
+        diagnostics=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.diagnostics.tsv")
     params:
-        bin_count=GENERATION_BIN_COUNT,
-        roles=GENERATION_ROLES
+        bin_count=GENERATION_CONTEXT.bin_count,
+        roles=GENERATION_CONTEXT.roles
     threads: 1
     resources:
         mem_mb=policy_resources("reduce_null_distribution_bucket").mem_mb,
@@ -67,6 +63,6 @@ rule reduce_null_distribution_bucket:
     envmodules: *mod("validation")
     container: sif("validation")
     log:
-        str(GENERATION_LOG_DIR / "buckets" / "{bucket}.reduce.log")
+        str(GENERATION_CONTEXT.log_dir / "buckets" / "{bucket}.reduce.log")
     script:
         str(GENERATION_SCRIPT_DIR / "reduce_partition_statistics.py")

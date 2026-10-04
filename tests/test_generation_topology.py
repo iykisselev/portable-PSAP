@@ -17,6 +17,7 @@ from generation_topology import (  # noqa: E402
     build_generation_execution_layout,
     build_generation_scope_artifacts,
 )
+from generation_context import GenerationRuleContext  # noqa: E402
 from workflow_plan import build_workflow_plan  # noqa: E402
 
 
@@ -64,6 +65,44 @@ class GenerationTopologyTests(unittest.TestCase):
         self.assertEqual(
             str(plan.generation.bundle_dir / "lookup_het.tsv.gz"),
             layout.bundle_paths["lookup_het"],
+        )
+
+    def test_rule_context_keeps_generation_layout_and_inputs_together(self) -> None:
+        configuration = merge(
+            load_yaml(ROOT / "config" / "config.yaml"),
+            load_yaml(ROOT / "tests" / "null_distribution" / "generate.run.yaml"),
+        )
+        plan = build_workflow_plan(configuration)
+        context = GenerationRuleContext.from_workflow_plan(plan)
+
+        self.assertEqual(plan.generation, context.plan)
+        self.assertEqual(
+            str(plan.generation.scalable_dir / "partitions"),
+            str(context.partition_dir),
+        )
+        self.assertEqual(
+            str(plan.generation.scalable_dir / "calculated" / "partition_statistics"),
+            str(context.statistics_dir),
+        )
+        self.assertEqual(
+            str(
+                plan.generation.scalable_dir
+                / "partitions"
+                / "1_000000000001_000000005000.allele_states.parquet"
+            ),
+            context.partition_artifact(
+                "1_000000000001_000000005000",
+                "allele_states",
+            ),
+        )
+        self.assertEqual(
+            str(
+                plan.generation.scalable_dir
+                / "calculated"
+                / "lookup_buckets"
+                / "000000.het.tsv"
+            ),
+            context.bucket_artifact("000000", "lookup_het"),
         )
 
 

@@ -4,31 +4,35 @@
 checkpoint prepare_generation_scope:
     """Prepare the shared mask and testing units before partition work begins."""
     input:
-        population_vcf=GENERATION_POPULATION_VCF_BINDING.data,
-        population_vcf_index=lambda wc: generation_index(GENERATION_POPULATION_VCF_BINDING),
-        score_snv=GENERATION_SCORE_SNV_BINDING.data,
-        score_snv_index=lambda wc: generation_index(GENERATION_SCORE_SNV_BINDING),
-        exclusion=[GENERATION_EXCLUSION_BINDING.data] if GENERATION_EXCLUSION_BINDING.data else [],
-        testing_units=GENERATION_TESTING_UNIT_BINDING.data,
-        par_regions=GENERATION_PAR_REGIONS_BINDING.data,
+        population_vcf=GENERATION_CONTEXT.plan.population_vcf.data,
+        population_vcf_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.population_vcf),
+        score_snv=GENERATION_CONTEXT.plan.score_snv.data,
+        score_snv_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.score_snv),
+        exclusion=(
+            [GENERATION_CONTEXT.plan.exclusion.data]
+            if GENERATION_CONTEXT.plan.exclusion.data
+            else []
+        ),
+        testing_units=GENERATION_CONTEXT.plan.testing_unit_bed.data,
+        par_regions=GENERATION_CONTEXT.plan.par_regions.data,
         exclusions=lambda wc: generation_exclusion_data(),
-        fasta=GENERATION_FASTA_BINDING.data,
-        fasta_fai=GENERATION_FASTA_BINDING.fai,
+        fasta=GENERATION_CONTEXT.plan.fasta.data,
+        fasta_fai=GENERATION_CONTEXT.plan.fasta.fai,
         mutation_rate=lambda wc: generation_mutation_rate_data(),
         mutation_rate_index=lambda wc: generation_mutation_rate_index()
     output:
-        partitions=GENERATION_SCOPE_PATHS["partitions"],
-        buckets=GENERATION_SCOPE_PATHS["buckets"],
-        units=GENERATION_SCOPE_PATHS["units"],
-        unit_intervals=GENERATION_SCOPE_PATHS["unit_intervals"],
-        masked_unit_intervals=GENERATION_SCOPE_PATHS["masked_unit_intervals"],
-        mask=GENERATION_SCOPE_PATHS["effective_mask"],
-        resource_identities=GENERATION_SCOPE_PATHS["resource_identities"]
+        partitions=GENERATION_CONTEXT.scope_paths["partitions"],
+        buckets=GENERATION_CONTEXT.scope_paths["buckets"],
+        units=GENERATION_CONTEXT.scope_paths["units"],
+        unit_intervals=GENERATION_CONTEXT.scope_paths["unit_intervals"],
+        masked_unit_intervals=GENERATION_CONTEXT.scope_paths["masked_unit_intervals"],
+        mask=GENERATION_CONTEXT.scope_paths["effective_mask"],
+        resource_identities=GENERATION_CONTEXT.scope_paths["resource_identities"]
     params:
         minimum_retained_fraction=WORKFLOW_PLAN.generation_settings.minimum_retained_fraction,
-        partition_size=GENERATION_PARTITION_SIZE,
-        unit_bucket_size=GENERATION_UNIT_BUCKET_SIZE,
-        compression=GENERATION_PARQUET_COMPRESSION
+        partition_size=GENERATION_CONTEXT.plan.partition_size_bp,
+        unit_bucket_size=GENERATION_CONTEXT.plan.unit_bucket_size,
+        compression=GENERATION_CONTEXT.plan.parquet_compression
     threads: 1
     resources:
         mem_mb=policy_resources("prepare_generation_scope").mem_mb,
@@ -38,7 +42,7 @@ checkpoint prepare_generation_scope:
     envmodules: *mod("validation")
     container: sif("validation")
     log:
-        str(GENERATION_LOG_DIR / "prepare_scope.log")
+        str(GENERATION_CONTEXT.log_dir / "prepare_scope.log")
     script:
         str(GENERATION_SCRIPT_DIR / "prepare_generation_scope.py")
 
@@ -50,21 +54,21 @@ rule prepare_generation_partition:
         units=lambda wc: generation_scope_artifact(wc, "units"),
         unit_intervals=lambda wc: generation_scope_artifact(wc, "unit_intervals"),
         mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
-        population_vcf=GENERATION_POPULATION_VCF_BINDING.data,
-        population_vcf_index=lambda wc: generation_index(GENERATION_POPULATION_VCF_BINDING),
-        score_snv=GENERATION_SCORE_SNV_BINDING.data,
-        score_snv_index=lambda wc: generation_index(GENERATION_SCORE_SNV_BINDING),
-        fasta=GENERATION_FASTA_BINDING.data,
-        fasta_fai=GENERATION_FASTA_BINDING.fai
+        population_vcf=GENERATION_CONTEXT.plan.population_vcf.data,
+        population_vcf_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.population_vcf),
+        score_snv=GENERATION_CONTEXT.plan.score_snv.data,
+        score_snv_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.score_snv),
+        fasta=GENERATION_CONTEXT.plan.fasta.data,
+        fasta_fai=GENERATION_CONTEXT.plan.fasta.fai
     output:
-        allele_states=str(GENERATION_PARTITION_DIR / "{partition}.allele_states.parquet"),
-        allele_membership=str(GENERATION_PARTITION_DIR / "{partition}.allele_membership.parquet"),
-        allele_scores=str(GENERATION_PARTITION_DIR / "{partition}.allele_scores.parquet")
+        allele_states=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_states.parquet"),
+        allele_membership=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_membership.parquet"),
+        allele_scores=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_scores.parquet")
     params:
-        af_tags=dict(GENERATION_PLAN.af_source),
+        af_tags=dict(GENERATION_CONTEXT.plan.af_source),
         x_af_policy=WORKFLOW_PLAN.generation_settings.x_af_policy,
         hemizygote=WORKFLOW_PLAN.model.hemizygote,
-        compression=GENERATION_PARQUET_COMPRESSION
+        compression=GENERATION_CONTEXT.plan.parquet_compression
     threads: 1
     resources:
         mem_mb=policy_resources("prepare_generation_partition").mem_mb,
@@ -74,6 +78,6 @@ rule prepare_generation_partition:
     envmodules: *mod("validation")
     container: sif("validation")
     log:
-        str(GENERATION_LOG_DIR / "partitions" / "{partition}.prepare.log")
+        str(GENERATION_CONTEXT.log_dir / "partitions" / "{partition}.prepare.log")
     script:
         str(GENERATION_SCRIPT_DIR / "prepare_generation_partition.py")

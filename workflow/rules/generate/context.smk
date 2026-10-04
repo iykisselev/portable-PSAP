@@ -1,60 +1,27 @@
 """Shared paths and wildcard helpers for generation rules."""
 
-from generation_topology import (
-    build_generation_execution_layout,
-    build_generation_scope_artifacts,
-)
+from generation_context import GenerationRuleContext
 from generation_manifests import bucket_ids, partition_ids
 
 
-if WORKFLOW_PLAN.generation is None:
-    raise ValueError("Generation rules require a generate or full WorkflowPlan")
-
-GENERATION_PLAN = WORKFLOW_PLAN.generation
-GENERATION_SCOPE_LAYOUT = build_generation_scope_artifacts(GENERATION_PLAN)
-GENERATION_EXECUTION_LAYOUT = build_generation_execution_layout(
-    GENERATION_PLAN,
-    WORKFLOW_PLAN.model,
-    WORKFLOW_PLAN.generation_settings,
-)
-GENERATION_PARTITION_DIR = GENERATION_PLAN.scalable_dir / "partitions"
-GENERATION_LOG_DIR = GENERATION_PLAN.log_dir
-GENERATION_PARTITION_SIZE = GENERATION_PLAN.partition_size_bp
-GENERATION_UNIT_BUCKET_SIZE = GENERATION_PLAN.unit_bucket_size
-GENERATION_PARQUET_COMPRESSION = GENERATION_PLAN.parquet_compression
-GENERATION_POPULATION_VCF_BINDING = GENERATION_PLAN.population_vcf
-GENERATION_SCORE_SNV_BINDING = GENERATION_PLAN.score_snv
-GENERATION_EXCLUSION_BINDING = GENERATION_PLAN.exclusion
-GENERATION_TESTING_UNIT_BINDING = GENERATION_PLAN.testing_unit_bed
-GENERATION_FASTA_BINDING = GENERATION_PLAN.fasta
-GENERATION_PAR_REGIONS_BINDING = GENERATION_PLAN.par_regions
-GENERATION_EXCLUSION_BINDINGS = GENERATION_PLAN.exclusions
-GENERATION_SCOPE_PATHS = GENERATION_SCOPE_LAYOUT.artifacts
-GENERATION_STATISTICS_DIR = GENERATION_EXECUTION_LAYOUT.statistics_dir
-GENERATION_LOOKUP_BUCKET_DIR = GENERATION_EXECUTION_LAYOUT.lookup_bucket_dir
-GENERATION_BIN_COUNT = GENERATION_EXECUTION_LAYOUT.bin_count
-GENERATION_ROLES = GENERATION_EXECUTION_LAYOUT.roles
-GENERATION_HEM_ENABLED = WORKFLOW_PLAN.model.hemizygote
-GENERATION_BUNDLE_PATHS = GENERATION_EXECUTION_LAYOUT.bundle_paths
+GENERATION_CONTEXT = GenerationRuleContext.from_workflow_plan(WORKFLOW_PLAN)
 GENERATION_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "generate"
 
 
 def generation_index(resource_binding):
-    return [resource_binding.index] if resource_binding.index else []
+    return GENERATION_CONTEXT.index_input(resource_binding)
 
 
 def generation_mutation_rate_data():
-    return [GENERATION_PLAN.mutation_rate.data] if GENERATION_PLAN.mutation_rate else []
+    return GENERATION_CONTEXT.mutation_rate_data()
 
 
 def generation_mutation_rate_index():
-    if GENERATION_PLAN.mutation_rate and GENERATION_PLAN.mutation_rate.index:
-        return [GENERATION_PLAN.mutation_rate.index]
-    return []
+    return GENERATION_CONTEXT.mutation_rate_index()
 
 
 def generation_exclusion_data():
-    return [exclusion_binding.binding.data for exclusion_binding in GENERATION_EXCLUSION_BINDINGS]
+    return GENERATION_CONTEXT.exclusion_data()
 
 
 def generation_scope_artifact(wildcards, artifact_name):
@@ -76,27 +43,16 @@ def generation_bucket_ids(wildcards):
 
 def generation_partition_artifacts(wildcards, artifact_name):
     """Return the requested file for every discovered genomic partition."""
-    artifact_suffixes = {
-        "allele_states": "allele_states.parquet",
-        "allele_membership": "allele_membership.parquet",
-        "allele_scores": "allele_scores.parquet",
-    }
     return [
-        str(GENERATION_PARTITION_DIR / f"{partition_id}.{artifact_suffixes[artifact_name]}")
+        GENERATION_CONTEXT.partition_artifact(partition_id, artifact_name)
         for partition_id in generation_partition_ids(wildcards)
     ]
 
 
 def generation_bucket_artifacts(wildcards, artifact_name):
     """Return the requested lookup file for every discovered unit bucket."""
-    artifact_suffixes = {
-        "lookup_het": "het.tsv",
-        "lookup_hom": "hom.tsv",
-        "lookup_hem": "hem_chrX.tsv",
-        "diagnostics": "diagnostics.tsv",
-    }
     return [
-        str(GENERATION_LOOKUP_BUCKET_DIR / f"{bucket_id}.{artifact_suffixes[artifact_name]}")
+        GENERATION_CONTEXT.bucket_artifact(bucket_id, artifact_name)
         for bucket_id in generation_bucket_ids(wildcards)
     ]
 
@@ -107,7 +63,7 @@ def generation_statistics_shards(wildcards):
     if bucket_id not in generation_bucket_ids(wildcards):
         raise ValueError(f"Unknown generation bucket {bucket_id!r}")
     return [
-        str(GENERATION_STATISTICS_DIR / f"{partition_id}.bucket-{bucket_id}.parquet")
+        GENERATION_CONTEXT.statistics_artifact(partition_id, bucket_id)
         for partition_id in generation_partition_ids(wildcards)
     ]
 
@@ -115,7 +71,7 @@ def generation_statistics_shards(wildcards):
 def generation_statistics_artifacts(wildcards):
     """Return every partition-by-bucket statistic file needed for recovery."""
     return [
-        str(GENERATION_STATISTICS_DIR / f"{partition_id}.bucket-{bucket_id}.parquet")
+        GENERATION_CONTEXT.statistics_artifact(partition_id, bucket_id)
         for partition_id in generation_partition_ids(wildcards)
         for bucket_id in generation_bucket_ids(wildcards)
     ]
@@ -129,6 +85,6 @@ def generation_outputs(wildcards):
     outputs.extend(generation_statistics_artifacts(wildcards))
     for artifact_name in ("lookup_het", "lookup_hom", "diagnostics"):
         outputs.extend(generation_bucket_artifacts(wildcards, artifact_name))
-    if GENERATION_HEM_ENABLED:
+    if GENERATION_CONTEXT.hem_enabled:
         outputs.extend(generation_bucket_artifacts(wildcards, "lookup_hem"))
     return outputs
