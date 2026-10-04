@@ -63,6 +63,8 @@ properties:
       mutation_conversion: {type: [string, "null"]}
       allele_events_independent: {const: true}
       par_policy: {const: excluded_before_event_assignment}
+      minimum_retained_fraction: {type: number, minimum: 0, maximum: 1}
+      retention_denominator: {const: supported_non_PAR_unit_bases_before_interval_exclusions}
       hemizygote_role: {type: [string, "null"], minLength: 1}
       x_chromosome:
         type: object

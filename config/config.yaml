@@ -10,9 +10,9 @@ reference:
   # Immutable resource identities; physical locations belong in a user run manifest.
   fasta:
     id: GRCh38.p14  # reference sequence release identifier
-  coverage:
-    id: gnomad-genomes-r3-dp10  # callable-region resource identifier
-    optional: true  # boolean; allow this coverage filter to be absent
+  exclusion:
+    id: excluded-regions  # source-neutral identity for intervals to remove
+    optional: true  # boolean; allow this exclusion filter to be absent
     kind: bed  # file layout; BED intervals
   testing_unit_bed:
     id: biomart-grch38-107-gene  # testing-unit annotation release identifier
@@ -48,7 +48,7 @@ report:
 # Provisional generator scope. Absence-policy and mutation conversion decisions
 # remain in the null-distribution contract and are not selected here.
 generation_settings:
-  coverage_minimum: 0.5  # fraction of unioned testing-unit bases in the callable resource
+  minimum_retained_fraction: 0.5  # retained fraction of supported, non-PAR unit bases after all interval exclusions
   variant_classes: [snv]  # initial preparation scope; indel generation is rejected
   score_bin_width: 0.05  # generated-grid width; score_max is included in the final bin
   mutation_conversion: de_novo_proxy  # D2-selected proxy; p_effective = per-allele mu

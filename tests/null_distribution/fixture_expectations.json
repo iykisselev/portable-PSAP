@@ -24,10 +24,10 @@
     },
     "absent_eligible_key": "chr1:60:G:T"
   },
-  "coverage": {
-    "UNIT_OVERLAP": {"total_union_bases": 10, "covered_union_bases": 7, "fraction": "0.7"},
-    "UNIT_LOW_COVERAGE": {"total_union_bases": 10, "covered_union_bases": 4, "fraction": "0.4"},
-    "UNIT_X_MIXED_PAR": {"total_union_bases": 10, "covered_union_bases": 10, "par_union_bases": 2}
+  "retention": {
+    "UNIT_OVERLAP": {"supported_bases": 10, "retained_bases": 7, "fraction": "0.7"},
+    "UNIT_LOW_COVERAGE": {"supported_bases": 10, "retained_bases": 4, "fraction": "0.4"},
+    "UNIT_X_MIXED_PAR": {"supported_bases": 8, "retained_bases": 8, "fraction": "1.0", "par_union_bases": 2}
   },
   "pending_policy_cases": {
     "hem_disabled": "HET/HOM X fixtures remain applicable; HEM is absent",

@@ -14,7 +14,7 @@ try:
     )
     from generation_partitions import build_partitions, read_fasta_index
     from generation_prep import (
-        coverage_rows,
+        retention_rows,
         effective_calibration_mask,
         intersect_intervals,
         merge_intervals,
@@ -32,7 +32,7 @@ except ModuleNotFoundError:
     )
     from .generation_partitions import build_partitions, read_fasta_index
     from .generation_prep import (
-        coverage_rows,
+        retention_rows,
         effective_calibration_mask,
         intersect_intervals,
         merge_intervals,
@@ -58,11 +58,11 @@ def prepare_generation_scope(
             for path in paths:
                 check_unindexed_fixture(path)
     units_by_id = read_bed_units(inputs.testing_units)
-    coverage_intervals = read_intervals(inputs.coverage)
-    excluded_intervals = read_intervals(inputs.par_regions)
+    par_intervals = read_intervals(inputs.par_regions)
+    excluded_intervals = read_intervals(inputs.exclusion) if inputs.exclusion else {}
     for exclusion_path in inputs.exclusions:
         for chromosome, intervals in read_intervals(exclusion_path).items():
-            excluded_intervals[chromosome].extend(intervals)
+            excluded_intervals.setdefault(chromosome, []).extend(intervals)
 
     fasta_index = read_fasta_index(inputs.fasta_fai)
     supported_chromosomes = {str(value) for value in range(1, 23)} | {"X"}
@@ -79,13 +79,13 @@ def prepare_generation_scope(
             for chromosome, (_, length) in fasta_index.items()
             if chromosome in supported_chromosomes
         },
-        excluded_intervals,
+        par_intervals,
     )
-    calibration_mask = effective_calibration_mask(coverage_intervals, supported_scope)
-    unit_coverage_rows = coverage_rows(
+    calibration_mask = effective_calibration_mask(excluded_intervals, supported_scope)
+    unit_retention_rows = retention_rows(
         units_by_id,
         calibration_mask,
-        float(params.coverage_minimum),
+        float(params.minimum_retained_fraction),
         denominator_scope=supported_scope,
     )
     unit_intervals = []
@@ -107,19 +107,19 @@ def prepare_generation_scope(
         int(params.partition_size),
     )
 
-    unit_coverage_frame = pl.DataFrame(
-        unit_coverage_rows,
+    unit_retention_frame = pl.DataFrame(
+        unit_retention_rows,
         schema=[
             "testing_unit_id",
             "CHROM",
-            "union_bases",
-            "covered_bases",
-            "coverage_fraction",
+            "supported_bases",
+            "retained_bases",
+            "retained_fraction",
             "status",
         ],
         orient="row",
     )
-    write_parquet_atomic(unit_coverage_frame, outputs.units, params.compression)
+    write_parquet_atomic(unit_retention_frame, outputs.units, params.compression)
     write_parquet_atomic(
         pl.DataFrame(
             unit_intervals,
@@ -170,7 +170,7 @@ def prepare_generation_scope(
     )
     unit_ids_by_bucket: dict[int, list[str]] = {}
     for unit_id, bucket_id in unit_bucket_frame(
-        unit_coverage_frame, int(params.unit_bucket_size)
+        unit_retention_frame, int(params.unit_bucket_size)
     ).iter_rows():
         unit_ids_by_bucket.setdefault(int(bucket_id), []).append(str(unit_id))
     write_json_atomic(
@@ -192,11 +192,12 @@ def prepare_generation_scope(
     input_resource_paths = {
         "population_vcf": inputs.population_vcf,
         "score_snv": inputs.score_snv,
-        "coverage": inputs.coverage,
         "testing_units": inputs.testing_units,
         "par_regions": inputs.par_regions,
         "fasta": inputs.fasta,
     }
+    if inputs.exclusion:
+        input_resource_paths["exclusion"] = inputs.exclusion
     input_resource_paths.update(
         {
             f"interval_exclusion_{index:03d}": path

@@ -145,8 +145,8 @@ class ReferenceMetadata:
 
     assembly: str
     fasta_id: str
-    coverage_id: str
-    coverage_kind: str
+    exclusion_id: str
+    exclusion_kind: str
     testing_unit_id: str
     cadd_snv_id: str
     cadd_indel_id: str | None
@@ -158,11 +158,12 @@ class ReferenceBindings:
     """Immutable physical bindings used to execute one reference scope."""
 
     fasta: FastaBinding
-    coverage: FileBinding
+    exclusion: FileBinding
     testing_unit_bed: FileBinding
     exclusions: tuple[FileBinding, ...]
     cadd_snv: FileBinding
     cadd_indel: FileBinding | None
+    calibration_regions: FileBinding | None = None
 
 
 @dataclass(frozen=True)
@@ -197,7 +198,7 @@ class ModelPlan:
 
 @dataclass(frozen=True)
 class GenerationSettings:
-    coverage_minimum: float
+    minimum_retained_fraction: float
     score_bin_width: float
     mutation_conversion: str
     variant_classes: tuple[str, ...]
@@ -213,7 +214,7 @@ class GenerationPlan:
     log_dir: Path
     population_vcf: FileBinding
     score_snv: FileBinding
-    coverage: FileBinding
+    exclusion: FileBinding
     testing_unit_bed: FileBinding
     fasta: FastaBinding
     par_regions: FileBinding
@@ -304,8 +305,8 @@ def _reference_metadata(config: Mapping[str, Any]) -> ReferenceMetadata:
     return ReferenceMetadata(
         assembly=_required(reference.get("assembly"), "reference.assembly"),
         fasta_id=_required(_mapping(reference.get("fasta"), "reference.fasta").get("id"), "reference.fasta.id"),
-        coverage_id=_required(_mapping(reference.get("coverage"), "reference.coverage").get("id"), "reference.coverage.id"),
-        coverage_kind=_required(_mapping(reference.get("coverage"), "reference.coverage").get("kind"), "reference.coverage.kind"),
+        exclusion_id=_required(_mapping(reference.get("exclusion"), "reference.exclusion").get("id"), "reference.exclusion.id"),
+        exclusion_kind=_required(_mapping(reference.get("exclusion"), "reference.exclusion").get("kind"), "reference.exclusion.kind"),
         testing_unit_id=_required(_mapping(reference.get("testing_unit_bed"), "reference.testing_unit_bed").get("id"), "reference.testing_unit_bed.id"),
         cadd_snv_id=_required(_mapping(cadd.get("snv"), "reference.cadd.snv").get("id"), "reference.cadd.snv.id"),
         cadd_indel_id=(
@@ -325,8 +326,8 @@ def _reference_bindings(value: Any, key: str, *, require_lookup: bool) -> Refere
         _mapping(reference.get("lookup_source"), f"{key}.lookup_source")
     return ReferenceBindings(
         fasta=FastaBinding.from_config(reference.get("fasta"), f"{key}.fasta"),
-        coverage=FileBinding.from_config(
-            reference.get("coverage"), f"{key}.coverage", required=False
+        exclusion=FileBinding.from_config(
+            reference.get("exclusion"), f"{key}.exclusion", required=False
         ),
         testing_unit_bed=FileBinding.from_config(
             reference.get("testing_unit_bed"), f"{key}.testing_unit_bed"
@@ -381,7 +382,7 @@ def _lookup_source(
     calibration_mask = (
         _optional(source.get("calibration_mask"))
         if is_bundle
-        else binding_data(configured_reference.coverage, required=False) or None
+        else None
     )
     excluded_alleles = (
         (_required(source.get("excluded_alleles"), f"{key}.excluded_alleles"),)
@@ -451,8 +452,8 @@ def _generation_plan(
     else:
         resources = ReferenceBindings(
             fasta=FastaBinding.from_config(generation.get("fasta"), "generation.fasta"),
-            coverage=FileBinding.from_config(
-                generation.get("coverage"), "generation.coverage", required=False
+            exclusion=FileBinding.from_config(
+                generation.get("exclusion"), "generation.exclusion", required=False
             ),
             testing_unit_bed=FileBinding.from_config(
                 generation.get("testing_unit_bed"), "generation.testing_unit_bed"
@@ -501,7 +502,7 @@ def _generation_plan(
         log_dir=output_root / "logs" / "generate" / prefix,
         population_vcf=population_vcf,
         score_snv=resources.cadd_snv,
-        coverage=resources.coverage,
+        exclusion=resources.exclusion,
         testing_unit_bed=resources.testing_unit_bed,
         fasta=resources.fasta,
         par_regions=par_regions,
@@ -557,7 +558,8 @@ def _effective_bundle_reference(
     return (
         ReferenceBindings(
             fasta=configured_reference.fasta,
-            coverage=FileBinding(lookup_source.calibration_mask),
+            exclusion=FileBinding(None),
+            calibration_regions=FileBinding(lookup_source.calibration_mask),
             testing_unit_bed=FileBinding(lookup_source.eligible_units),
             exclusions=tuple(FileBinding(path) for path in lookup_source.excluded_alleles),
             cadd_snv=configured_reference.cadd_snv,
@@ -595,9 +597,9 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
         generation_settings_config.get("x_chromosome"), "generation_settings.x_chromosome"
     )
     settings = GenerationSettings(
-        coverage_minimum=_number(
-            generation_settings_config.get("coverage_minimum"),
-            "generation_settings.coverage_minimum",
+        minimum_retained_fraction=_number(
+            generation_settings_config.get("minimum_retained_fraction"),
+            "generation_settings.minimum_retained_fraction",
             float,
         ),
         score_bin_width=_number(

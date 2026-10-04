@@ -33,8 +33,8 @@ rule validate_resources:
     """Validate interval, exclusion, testing-unit, and CADD resources."""
     input:
         vcf=VALIDATION_VCF,
-        coverage=VALIDATION_COVERAGE_INPUT,
-        coverage_index=VALIDATION_COVERAGE_INDEX_INPUT,
+        calibration_regions=VALIDATION_CALIBRATION_REGIONS_INPUT,
+        calibration_regions_index=VALIDATION_CALIBRATION_REGIONS_INDEX_INPUT,
         variants_exclude=VALIDATION_VARIANT_EXCLUSIONS,
         variant_exclude_indexes=[index for index in VALIDATION_VARIANT_EXCLUSION_INDEXES if index],
         testing_unit_bed=VALIDATION_TESTING_UNIT_BED,
@@ -52,7 +52,7 @@ rule validate_resources:
     params:
         unit=WORKFLOW_PLAN.model.unit,
         include_indels=str(WORKFLOW_PLAN.model.include_indels),
-        coverage_index=VALIDATION_COVERAGE_INDEX,
+        calibration_regions_index=VALIDATION_CALIBRATION_REGIONS_INDEX,
         variant_exclude_indexes=VALIDATION_VARIANT_EXCLUSION_INDEXES,
         testing_unit_index=VALIDATION_TESTING_UNIT_INDEX,
         par_region_indexes=VALIDATION_PAR_REGION_INDEXES,

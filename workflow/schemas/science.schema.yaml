@@ -18,11 +18,11 @@ properties:
   reference:
     type: object
     additionalProperties: false
-    required: [assembly, fasta, coverage, testing_unit_bed, exclusions, lookup_tables, cadd]
+    required: [assembly, fasta, exclusion, testing_unit_bed, exclusions, lookup_tables, cadd]
     properties:
       assembly: {enum: [GRCh37, GRCh38]}
       fasta: {$ref: "#/$defs/resource_identity"}
-      coverage:
+      exclusion:
         allOf:
           - {$ref: "#/$defs/resource_identity"}
           - type: object
@@ -72,9 +72,9 @@ properties:
   generation_settings:
     type: object
     additionalProperties: false
-    required: [coverage_minimum, variant_classes, score_bin_width, mutation_conversion, x_chromosome]
+    required: [minimum_retained_fraction, variant_classes, score_bin_width, mutation_conversion, x_chromosome]
     properties:
-      coverage_minimum: {type: number, minimum: 0, maximum: 1}
+      minimum_retained_fraction: {type: number, minimum: 0, maximum: 1}
       variant_classes:
         type: array
         const: [snv]

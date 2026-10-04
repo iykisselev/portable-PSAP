@@ -1,19 +1,19 @@
 VARIANT_DIR = APPLY_OUTPUT_DIR / "variants"
-FILTERED_BCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.covered.bcf"
+FILTERED_BCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.in_scope.bcf"
 FILTERED_VCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.filtered_pass.vcf.gz"
 
 
-rule filter_low_coverage:
+rule filter_calibration_regions:
     """
-    Retain variants in configured coverage regions, or pass through when absent.
+    Retain variants in the generated bundle's calibration regions, if present.
     """
     input:
         vcf=WORKFLOW_INPUT_VCF,
         vcf_index=WORKFLOW_INPUT_VCF_INDEX,
         validated=validation_marker,
-        covered_regions=[WORKFLOW_COVERAGE] if WORKFLOW_COVERAGE else [],
-        covered_regions_index=(
-            [WORKFLOW_COVERAGE_INDEX] if WORKFLOW_COVERAGE else []
+        calibration_regions=[WORKFLOW_CALIBRATION_REGIONS] if WORKFLOW_CALIBRATION_REGIONS else [],
+        calibration_regions_index=(
+            [WORKFLOW_CALIBRATION_REGIONS_INDEX] if WORKFLOW_CALIBRATION_REGIONS else []
         )
     output:
         bcf=ensure(str(FILTERED_BCF), non_empty=True),
@@ -27,27 +27,27 @@ rule filter_low_coverage:
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
-        str(APPLY_LOG_DIR / "variants" / "filter_low_coverage.log")
+        str(APPLY_LOG_DIR / "variants" / "filter_calibration_regions.log")
     params:
-        coverage=(
-            lambda wc, input: str(input.covered_regions[0])
-            if input.covered_regions
+        calibration_regions=(
+            lambda wc, input: str(input.calibration_regions[0])
+            if input.calibration_regions
             else ""
         ),
-        coverage_enabled="true" if WORKFLOW_COVERAGE else "false"
+        calibration_regions_enabled="true" if WORKFLOW_CALIBRATION_REGIONS else "false"
     shell:
         """
-        if {params.coverage_enabled}; then
-            echo "Applying configured coverage-region filter" > {log:q}
+        if {params.calibration_regions_enabled}; then
+            echo "Restricting variants to generated calibration regions" > {log:q}
             bcftools view \
                 --threads {threads} \
-                --regions-file {params.coverage:q} \
+                --regions-file {params.calibration_regions:q} \
                 -Ob \
                 -o {output.bcf:q} \
                 {input.vcf:q} \
                 >> {log:q} 2>&1
         else
-            echo "Coverage resource not configured; retaining all variants" > {log:q}
+            echo "Calibration regions resource not configured; retaining all variants" > {log:q}
             bcftools view \
                 --threads {threads} \
                 -Ob \
@@ -65,8 +65,8 @@ rule filter_excluded_records:
     Apply all interval and allele exclusions from one combined variant set once.
     """
     input:
-        bcf=rules.filter_low_coverage.output.bcf,
-        bcf_csi=rules.filter_low_coverage.output.csi,
+        bcf=rules.filter_calibration_regions.output.bcf,
+        bcf_csi=rules.filter_calibration_regions.output.csi,
         exclusions=[COMBINED_EXCLUSIONS] if EXCLUSION_SOURCES else [],
         exclusions_index=[COMBINED_EXCLUSIONS_INDEX] if EXCLUSION_SOURCES else []
     output:
@@ -103,7 +103,7 @@ rule filter_excluded_records:
                 {params.exclusions:q} \
                 >> {log:q} 2>&1
         else
-            echo "No exclusions configured; retaining all covered variants" > {log:q}
+            echo "No exclusions configured; retaining all in-scope variants" > {log:q}
             bcftools view \
                 --threads {threads} \
                 -Oz \

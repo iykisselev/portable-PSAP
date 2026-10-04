@@ -8,7 +8,7 @@ checkpoint prepare_generation_scope:
         population_vcf_index=lambda wc: generation_index(GENERATION_POPULATION_VCF_BINDING),
         score_snv=GENERATION_SCORE_SNV_BINDING.data,
         score_snv_index=lambda wc: generation_index(GENERATION_SCORE_SNV_BINDING),
-        coverage=GENERATION_COVERAGE_BINDING.data,
+        exclusion=[GENERATION_EXCLUSION_BINDING.data] if GENERATION_EXCLUSION_BINDING.data else [],
         testing_units=GENERATION_TESTING_UNIT_BINDING.data,
         par_regions=GENERATION_PAR_REGIONS_BINDING.data,
         exclusions=lambda wc: generation_exclusion_data(),
@@ -25,7 +25,7 @@ checkpoint prepare_generation_scope:
         mask=GENERATION_SCOPE_PATHS["effective_mask"],
         resource_identities=GENERATION_SCOPE_PATHS["resource_identities"]
     params:
-        coverage_minimum=WORKFLOW_PLAN.generation_settings.coverage_minimum,
+        minimum_retained_fraction=WORKFLOW_PLAN.generation_settings.minimum_retained_fraction,
         partition_size=GENERATION_PARTITION_SIZE,
         unit_bucket_size=GENERATION_UNIT_BUCKET_SIZE,
         compression=GENERATION_PARQUET_COMPRESSION

@@ -1,4 +1,4 @@
-"""End-to-end execution coverage for the staged full workflow fixture."""
+"""End-to-end execution exclusion for the staged full workflow fixture."""
 
 from __future__ import annotations
 
@@ -87,8 +87,8 @@ class FullWorkflowFixtureTests(unittest.TestCase):
                 resource_paths["testing_units"]["path"],
             )
             self.assertEqual(
-                shared_reference["coverage"]["data"],
-                resource_paths["coverage"]["path"],
+                shared_reference["exclusion"]["data"],
+                resource_paths["exclusion"]["path"],
             )
             self.assertEqual(
                 shared_reference["exclusions"][0]["data"],

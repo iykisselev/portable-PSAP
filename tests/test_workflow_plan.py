@@ -1,4 +1,4 @@
-"""Unit coverage for immutable workflow mode and binding resolution."""
+"""Unit exclusion for immutable workflow mode and binding resolution."""
 
 from __future__ import annotations
 
@@ -81,12 +81,12 @@ class WorkflowPlanTests(unittest.TestCase):
             plan.apply.lookup_source.tables["hem_chrX"],
         )
         self.assertEqual(
-            "tests/null_distribution/coverage.bed",
-            plan.apply.configured_reference.coverage.data,
+            "tests/null_distribution/exclusion.bed",
+            plan.apply.configured_reference.exclusion.data,
         )
         self.assertEqual(
             str(plan.generation.bundle_dir / "calibration_regions.bed.gz"),
-            plan.apply.effective_reference.coverage.data,
+            plan.apply.effective_reference.calibration_regions.data,
         )
         self.assertEqual(
             "tests/null_distribution/par_regions.bed",
@@ -128,16 +128,17 @@ class WorkflowPlanTests(unittest.TestCase):
             plan.generation.mutation_rate.data,
         )
 
-    def test_optional_apply_coverage_remains_absent(self) -> None:
+    def test_optional_apply_exclusion_remains_absent(self) -> None:
         manifest = self.manifest("tests/smoke/run.yaml")
-        manifest["bindings"]["reference"]["coverage"] = {
+        manifest["bindings"]["reference"]["exclusion"] = {
             "data": None,
             "index": None,
         }
         plan = build_workflow_plan(manifest)
 
         assert plan.apply is not None
-        self.assertIsNone(plan.apply.effective_reference.coverage.data)
+        self.assertIsNone(plan.apply.effective_reference.exclusion.data)
+        self.assertIsNone(plan.apply.effective_reference.calibration_regions)
         self.assertIsNone(plan.apply.lookup_source.calibration_mask)
 
     def test_production_generation_requires_each_partition_resource_index(self) -> None:

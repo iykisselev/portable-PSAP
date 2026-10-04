@@ -179,6 +179,8 @@ def finalize_generated_bundle(
             "af_info_tags": dict(params.af_tags),
             "binning": {"algorithm": FIXED_WIDTH_BINNING_ALGORITHM, "score_max": params.score_max, "bin_width": params.bin_width, "bin_count": params.bin_count, "maximum_in_final_bin": True},
             "model_assumptions": {
+                "minimum_retained_fraction": params.minimum_retained_fraction,
+                "retention_denominator": "supported_non_PAR_unit_bases_before_interval_exclusions",
                 "roles": ["het", "hom"] + (["hem_chrX"] if params.hemizygote else []),
                 "variant_classes": list(params.variant_classes), "unobserved_policy": params.policy,
                 "mutation_conversion": params.conversion if params.policy == "mutation_rate" else None,

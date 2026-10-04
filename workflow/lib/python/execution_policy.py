@@ -28,7 +28,7 @@ EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
     {
         "stage_default": ExecutionPolicy(4096, 180),
         "stage_vcf": ExecutionPolicy(4096, 180),
-        "stage_coverage": ExecutionPolicy(2048, 60),
+        "stage_calibration_regions": ExecutionPolicy(2048, 60),
         "stage_testing_units": ExecutionPolicy(2048, 60),
         "stage_cadd_snv": ExecutionPolicy(2048, 360, 256, 20),
         "stage_cadd_indel": ExecutionPolicy(2048, 360, 256, 20),

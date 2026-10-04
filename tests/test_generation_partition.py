@@ -46,7 +46,7 @@ class GenerationPartitionTests(unittest.TestCase):
         }))
         self.inputs.fasta.write_text(">1\nAAAAAAAAAA\n")
         self.inputs.fasta_fai.write_text("1\t10\t3\t10\t11\n")
-        pl.DataFrame({"testing_unit_id": ["a", "b", "excluded"], "status": ["eligible", "eligible", "coverage_below_minimum"]}).write_parquet(self.inputs.units)
+        pl.DataFrame({"testing_unit_id": ["a", "b", "excluded"], "status": ["eligible", "eligible", "retained_fraction_below_minimum"]}).write_parquet(self.inputs.units)
         pl.DataFrame({
             "testing_unit_id": ["a", "b", "excluded"], "CHROM": ["1"] * 3,
             "START": [0, 1, 8], "END": [3, 6, 10],
@@ -164,7 +164,7 @@ class GenerationPartitionTests(unittest.TestCase):
                 self.write_mask([(8, 10)] if scenario == "no_overlap" else [(0, 10)])
                 self.inputs.fasta.write_text(">1\n" + ("N" if scenario == "all_n" else "A") * 10 + "\n")
                 if scenario == "no_eligible_units":
-                    pl.read_parquet(self.inputs.units).with_columns(pl.lit("coverage_below_minimum").alias("status")).write_parquet(self.inputs.units)
+                    pl.read_parquet(self.inputs.units).with_columns(pl.lit("retained_fraction_below_minimum").alias("status")).write_parquet(self.inputs.units)
                 with patch("generation_partition.score_rows") as scores, patch("generation_partition.population_rows") as population:
                     self.prepare()
                     scores.assert_not_called()

@@ -1144,24 +1144,24 @@ def validate_reference_tables(
     errors: list[str],
     warnings: list[str],
 ) -> dict[str, set[str]]:
-    if args.coverage.strip().lower() in MISSING_CONFIG_VALUES:
+    if args.calibration_regions.strip().lower() in MISSING_CONFIG_VALUES:
         warnings.append(
-            "reference.coverage was not provided; coverage filtering will be skipped"
+            "No generated calibration mask supplied; only configured exclusions will filter regions"
         )
     else:
-        coverage_kind = genomic_resource_kind(args.coverage)
-        if coverage_kind not in {"bed", "tsv"}:
+        calibration_regions_kind = genomic_resource_kind(args.calibration_regions)
+        if calibration_regions_kind not in {"bed", "tsv"}:
             errors.append(
-                "reference.coverage must be a BED or TSV file; received "
-                f"{args.coverage!r}"
+                "Generated calibration regions must be a BED or TSV file; received "
+                f"{args.calibration_regions!r}"
             )
         else:
             validate_indexed_table(
-                args.coverage,
-                "Coverage file",
+                args.calibration_regions,
+                "Calibration regions file",
                 errors,
                 warnings,
-                getattr(args, "coverage_index", None),
+                getattr(args, "calibration_regions_index", None),
             )
 
     unit_description = f"Configured {args.unit} testing-unit BED file"

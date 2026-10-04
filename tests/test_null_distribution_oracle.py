@@ -159,18 +159,18 @@ class NullDistributionOracleTests(unittest.TestCase):
             expected["scalar_tag_invalid"],
         )
 
-    def test_interval_fixture_uses_union_bases_and_keeps_mixed_x_scope_pending(self) -> None:
-        expected = load_json("fixture_expectations.json")["coverage"]
+    def test_interval_fixture_uses_nonpar_denominator_and_retained_bases(self) -> None:
+        expected = load_json("fixture_expectations.json")["retention"]
         units: dict[str, list[tuple[str, int, int]]] = {}
-        coverage: dict[str, list[tuple[int, int]]] = {}
+        exclusions: dict[str, list[tuple[int, int]]] = {}
         with (FIXTURE_DIR / "testing_units.bed").open(encoding="utf-8") as handle:
             for line in handle:
                 chrom, start, end, unit = line.rstrip("\n").split("\t")
                 units.setdefault(unit, []).append((chrom, int(start), int(end)))
-        with (FIXTURE_DIR / "coverage.bed").open(encoding="utf-8") as handle:
+        with (FIXTURE_DIR / "exclusion.bed").open(encoding="utf-8") as handle:
             for line in handle:
                 chrom, start, end = line.rstrip("\n").split("\t")
-                coverage.setdefault(chrom, []).append((int(start), int(end)))
+                exclusions.setdefault(chrom, []).append((int(start), int(end)))
         with (FIXTURE_DIR / "par_regions.bed").open(encoding="utf-8") as handle:
             par = [tuple(line.rstrip("\n").split("\t")) for line in handle]
 
@@ -180,12 +180,15 @@ class NullDistributionOracleTests(unittest.TestCase):
                 by_chrom.setdefault(chrom, []).append((start, end))
             self.assertEqual(len(by_chrom), 1)
             chrom, unit_intervals = next(iter(by_chrom.items()))
-            total = interval_length(unit_intervals)
-            covered = overlap_length(unit_intervals, coverage.get(chrom, []))
-            self.assertEqual(total, expected[unit]["total_union_bases"])
-            self.assertEqual(covered, expected[unit]["covered_union_bases"])
+            unit_bases = {position for start, end in unit_intervals for position in range(start, end)}
+            par_bases = {position for par_chrom, start, end in par if par_chrom == chrom for position in range(int(start), int(end))}
+            excluded_bases = {position for start, end in exclusions.get(chrom, []) for position in range(start, end)}
+            supported = unit_bases - par_bases
+            retained = supported - excluded_bases
+            self.assertEqual(len(supported), expected[unit]["supported_bases"])
+            self.assertEqual(len(retained), expected[unit]["retained_bases"])
             if "fraction" in expected[unit]:
-                self.assertEqual(Decimal(covered) / Decimal(total), Decimal(expected[unit]["fraction"]))
+                self.assertEqual(Decimal(len(retained)) / Decimal(len(supported)), Decimal(expected[unit]["fraction"]))
             if "par_union_bases" in expected[unit]:
                 par_intervals = [(int(start), int(end)) for par_chrom, start, end in par if par_chrom == chrom]
                 self.assertEqual(overlap_length(unit_intervals, par_intervals), expected[unit]["par_union_bases"])

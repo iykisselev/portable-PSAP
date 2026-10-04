@@ -8,13 +8,16 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+
+import polars as pl
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from generation_prep import (  # noqa: E402
-    coverage_rows,
+    retention_rows,
     effective_calibration_mask,
     read_bed_units,
     read_intervals,
@@ -23,6 +26,7 @@ from generation_prep import (  # noqa: E402
     subtract_intervals,
 )
 from scalable_generation import population_rows, role_probability_expression  # noqa: E402
+from generation_scope import prepare_generation_scope
 
 
 class GenerationPreparationTests(unittest.TestCase):
@@ -42,6 +46,32 @@ class GenerationPreparationTests(unittest.TestCase):
         self.assertEqual(sum(end - start for start, end in retained), 20000)
         self.assertEqual(len(retained), 10001)
 
+    def test_scope_unions_all_exclusions_without_shrinking_retention_denominator(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            extra = directory / "extra.bed"
+            extra.write_text("1\t0\t3\n1\t6\t9\n1\t20\t30\nX\t0\t4\n")
+            fixture = ROOT / "tests/null_distribution"
+            inputs = SimpleNamespace(
+                population_vcf=fixture / "population_af.vcf", score_snv=fixture / "generation_scores.tsv",
+                mutation_rate=[], exclusion=fixture / "exclusion.bed", exclusions=[extra],
+                testing_units=fixture / "testing_units.bed", par_regions=fixture / "par_regions.bed",
+                fasta=ROOT / "tests/smoke/data/reference.fa", fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
+            )
+            outputs = SimpleNamespace(**{name: directory / name for name in (
+                "partitions", "buckets", "units", "unit_intervals", "masked_unit_intervals", "mask", "resource_identities",
+            )})
+            params = SimpleNamespace(minimum_retained_fraction=0.5, partition_size=10, unit_bucket_size=250, compression="zstd")
+            prepare_generation_scope(inputs, outputs, params)
+            rows = {row["testing_unit_id"]: row for row in pl.read_parquet(outputs.units).to_dicts()}
+            self.assertEqual(rows["UNIT_OVERLAP"]["supported_bases"], 10)
+            self.assertEqual(rows["UNIT_OVERLAP"]["retained_bases"], 3)
+            self.assertEqual(rows["UNIT_OVERLAP"]["status"], "retained_fraction_below_minimum")
+            self.assertEqual(rows["UNIT_LOW_COVERAGE"]["status"], "fully_excluded")
+            self.assertEqual(rows["UNIT_X_MIXED_PAR"]["supported_bases"], 8)
+            self.assertEqual(rows["UNIT_X_MIXED_PAR"]["retained_fraction"], 0.5)
+            self.assertEqual(rows["UNIT_X_MIXED_PAR"]["status"], "eligible")
+
     def test_configured_info_tag_preserves_zero_and_rejects_other_states(self) -> None:
         observed, rejected = read_population_af(
             ROOT / "tests/null_distribution/population_af.vcf", "AF_CUSTOM"
@@ -54,12 +84,15 @@ class GenerationPreparationTests(unittest.TestCase):
         self.assertEqual(rejected[("1", 30, "G", "A")], "missing_configured_af")
         self.assertEqual(expected["af_assignment"]["configured_tag"], "AF_CUSTOM")
 
-    def test_union_coverage_does_not_double_count_overlapping_unit_intervals(self) -> None:
+    def test_union_retention_does_not_double_count_overlapping_unit_intervals(self) -> None:
         units = read_bed_units(ROOT / "tests/null_distribution/testing_units.bed")
-        coverage = read_intervals(ROOT / "tests/null_distribution/coverage.bed")
-        rows = {row[0]: row for row in coverage_rows(units, coverage, 0.5)}
+        exclusions = read_intervals(ROOT / "tests/null_distribution/exclusion.bed")
+        supported = supported_scope_mask({"1": 60, "X": 60}, read_intervals(ROOT / "tests/null_distribution/par_regions.bed"))
+        retained = effective_calibration_mask(exclusions, supported)
+        rows = {row[0]: row for row in retention_rows(units, retained, 0.5, supported)}
         self.assertEqual(rows["UNIT_OVERLAP"][2:6], (10, 7, 0.7, "eligible"))
-        self.assertEqual(rows["UNIT_LOW_COVERAGE"][2:6], (10, 4, 0.4, "coverage_below_minimum"))
+        self.assertEqual(rows["UNIT_LOW_COVERAGE"][2:6], (10, 4, 0.4, "retained_fraction_below_minimum"))
+        self.assertEqual(rows["UNIT_X_MIXED_PAR"][2:6], (8, 8, 1.0, "eligible"))
 
     def test_multiallelic_scalar_tag_is_not_split_into_alt_frequencies(self) -> None:
         _, rejected = read_population_af(
@@ -81,17 +114,28 @@ class GenerationPreparationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Duplicate/conflicting"):
                 read_population_af(path, "CUSTOM")
 
-    def test_effective_mask_intersects_coverage_with_supported_nonexcluded_scope(self) -> None:
+    def test_effective_mask_subtracts_exclusions_from_supported_nonpar_scope(self) -> None:
         scope = supported_scope_mask(
             {"1": 10},
             {"1": [(2, 4), (7, 8)], "UNSUPPORTED": [(0, 5)]},
         )
         mask = effective_calibration_mask(
-            {"1": [(-5, 6), (6, 15)], "2": [(0, 10)]},
+            {"1": [(1, 5), (4, 6)], "2": [(0, 10)]},
             scope,
         )
         self.assertEqual(scope, {"1": [(0, 2), (4, 7), (8, 10)]})
-        self.assertEqual(mask, {"1": [(0, 2), (4, 7), (8, 10)]})
+        self.assertEqual(mask, {"1": [(0, 1), (6, 7), (8, 10)]})
+
+    def test_retention_threshold_counts_exclusions_only_in_numerator(self) -> None:
+        units = {"half": [("X", 0, 12)], "low": [("1", 0, 10)],
+                 "removed": [("1", 20, 30)], "par": [("X", 4, 6)]}
+        supported = supported_scope_mask({"1": 40, "X": 12}, {"X": [(4, 6)]})
+        retained = effective_calibration_mask({"X": [(0, 4), (6, 7)], "1": [(4, 10), (20, 30)]}, supported)
+        rows = {row[0]: row for row in retention_rows(units, retained, 0.5, supported)}
+        self.assertEqual(rows["half"][2:], (10, 5, 0.5, "eligible"))
+        self.assertEqual(rows["low"][2:], (10, 4, 0.4, "retained_fraction_below_minimum"))
+        self.assertEqual(rows["removed"][2:], (10, 0, 0.0, "fully_excluded"))
+        self.assertEqual(rows["par"][2:], (0, 0, 0.0, "no_calibration_scope"))
 
     def test_x_population_rows_keep_sex_specific_frequencies_separate(self) -> None:
         rows = population_rows(

@@ -23,13 +23,13 @@ def main() -> None:
     """
     args = SimpleNamespace(
         vcf=str(snakemake.input.vcf),
-        coverage=str(snakemake.input.coverage[0]) if snakemake.input.coverage else "None",
+        calibration_regions=str(snakemake.input.calibration_regions[0]) if snakemake.input.calibration_regions else "None",
         variants_exclude=",".join(map(str, snakemake.input.variants_exclude)) or "None",
         testing_unit_bed=str(snakemake.input.testing_unit_bed),
         par_regions=",".join(map(str, snakemake.input.par_regions)) or "None",
         cadd_snv=str(snakemake.input.cadd_snv),
         cadd_indel=str(snakemake.input.cadd_indel[0]) if snakemake.input.cadd_indel else "None",
-        coverage_index=str(snakemake.params.coverage_index) or None,
+        calibration_regions_index=str(snakemake.params.calibration_regions_index) or None,
         variant_exclude_indexes=list(snakemake.params.variant_exclude_indexes),
         testing_unit_index=str(snakemake.params.testing_unit_index) or None,
         par_region_indexes=list(snakemake.params.par_region_indexes),

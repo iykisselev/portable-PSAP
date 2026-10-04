@@ -18,7 +18,7 @@ class BundleFinalizationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.units = [
             {"testing_unit_id": "ELIGIBLE", "status": "eligible"},
-            {"testing_unit_id": "LOW", "status": "coverage_below_minimum"},
+            {"testing_unit_id": "LOW", "status": "retained_fraction_below_minimum"},
         ]
 
     def diagnostics(self, het="ok", hom="ok"):
@@ -46,7 +46,7 @@ class BundleFinalizationTests(unittest.TestCase):
             excluded,
             [
                 ("ELIGIBLE", "zero_event_mass_het_hom"),
-                ("LOW", "coverage_below_minimum"),
+                ("LOW", "retained_fraction_below_minimum"),
             ],
         )
 

@@ -35,6 +35,7 @@ rule finalize_null_distribution_bundle:
         excluded_units=ensure(GENERATION_BUNDLE_PATHS["excluded_units"], non_empty=True),
         metadata=ensure(GENERATION_BUNDLE_PATHS["metadata"], non_empty=True)
     params:
+        minimum_retained_fraction=WORKFLOW_PLAN.generation_settings.minimum_retained_fraction,
         bin_count=GENERATION_BIN_COUNT,
         bin_width=WORKFLOW_PLAN.generation_settings.score_bin_width,
         score_max=WORKFLOW_PLAN.model.score_max,
@@ -49,7 +50,7 @@ rule finalize_null_distribution_bundle:
         variant_classes=list(WORKFLOW_PLAN.generation_settings.variant_classes),
         resource_ids={
             "fasta": WORKFLOW_PLAN.reference.fasta_id,
-            "coverage": WORKFLOW_PLAN.reference.coverage_id,
+            "exclusion": WORKFLOW_PLAN.reference.exclusion_id,
             "testing_units": WORKFLOW_PLAN.reference.testing_unit_id,
             "score_snv": WORKFLOW_PLAN.reference.cadd_snv_id,
             "population_vcf": f"population_vcf:{GENERATION_PLAN.af_source['overall']}",

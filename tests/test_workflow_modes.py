@@ -69,10 +69,10 @@ class WorkflowModeSchemaTests(unittest.TestCase):
         config["generation"]["score_snv"] = config["bindings"]["reference"]["cadd"]["snv"]
         self.assertTrue(validate_run_config(config))
 
-    def test_full_requires_callable_coverage_in_the_shared_reference_bindings(self) -> None:
+    def test_full_allows_no_exclusion_in_the_shared_reference_bindings(self) -> None:
         config = self.merged_manifest("tests/null_distribution/full.run.yaml")
-        config["bindings"]["reference"]["coverage"] = {"data": None, "index": None}
-        self.assertTrue(validate_run_config(config))
+        config["bindings"]["reference"]["exclusion"] = {"data": None, "index": None}
+        self.assertEqual([], validate_run_config(config))
 
     def test_sex_specific_hem_generation_requires_male_af_tag(self) -> None:
         config = self.merged_manifest("tests/null_distribution/generate.run.yaml")

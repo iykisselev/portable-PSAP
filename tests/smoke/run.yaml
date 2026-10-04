@@ -17,7 +17,7 @@ bindings:
       data: tests/smoke/data/reference.fa
       fai: tests/smoke/data/reference.fa.fai
       gzi: null
-    coverage: {data: null, index: null}
+    exclusion: {data: null, index: null}
     testing_unit_bed: {data: tests/smoke/data/testing_units.bed, index: null}
     exclusions:
       - {data: tests/smoke/data/exclude_full_span.bed, index: null}

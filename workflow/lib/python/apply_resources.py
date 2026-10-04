@@ -196,10 +196,17 @@ def build_apply_resource_registry(
     )
     resource_specs["fasta"] = _fasta_spec(effective_reference.fasta)
     add_table_resource(
-        "coverage",
-        effective_reference.coverage,
-        plan.reference.coverage_kind,
-        "coverage",
+        "calibration_regions",
+        effective_reference.calibration_regions,
+        "bed",
+        "calibration_regions",
+        requires_chromosome_normalization=True,
+    )
+    add_table_resource(
+        "exclusion",
+        effective_reference.exclusion,
+        plan.reference.exclusion_kind,
+        "variants_exclude",
         requires_chromosome_normalization=True,
     )
     add_table_resource(

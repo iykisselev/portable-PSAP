@@ -120,10 +120,10 @@ def read_intervals(path: str | Path):
                 continue
             fields = raw.rstrip().split("\t")
             if len(fields) < 3:
-                raise ValueError(f"Coverage BED line {number} needs three columns")
+                raise ValueError(f"Interval BED line {number} needs three columns")
             start, end = int(fields[1]), int(fields[2])
             if start < 0 or end <= start:
-                raise ValueError(f"Invalid coverage BED line {number}")
+                raise ValueError(f"Invalid interval BED line {number}")
             intervals[canonical_chromosome(fields[0])].append((start, end))
     return intervals
 
@@ -197,16 +197,15 @@ def supported_scope_mask(
 
 
 def effective_calibration_mask(
-    coverage: dict[str, list[tuple[int, int]]],
+    exclusions: dict[str, list[tuple[int, int]]],
     supported_scope: dict[str, list[tuple[int, int]]],
 ) -> dict[str, list[tuple[int, int]]]:
-    """Intersect callable coverage with supported, non-excluded sequence."""
+    """Subtract interval exclusions from supported, non-PAR sequence."""
     return {
-        chromosome: intersect_intervals(
-            coverage.get(chromosome, []), supported_intervals
+        chromosome: subtract_intervals(
+            supported_intervals, exclusions.get(chromosome, [])
         )
         for chromosome, supported_intervals in sorted(supported_scope.items())
-        if coverage.get(chromosome)
     }
 
 
@@ -214,17 +213,17 @@ def merged_length(intervals: list[tuple[int, int]]) -> int:
     return sum(end - start for start, end in merge_intervals(intervals))
 
 
-def overlap_length(intervals: list[tuple[int, int]], coverage: list[tuple[int, int]]) -> int:
+def overlap_length(intervals: list[tuple[int, int]], regions: list[tuple[int, int]]) -> int:
     pieces: list[tuple[int, int]] = []
     for start, end in intervals:
-        for covered_start, covered_end in coverage:
-            left, right = max(start, covered_start), min(end, covered_end)
+        for region_start, region_end in regions:
+            left, right = max(start, region_start), min(end, region_end)
             if left < right:
                 pieces.append((left, right))
     return merged_length(pieces)
 
 
-def coverage_rows(units, coverage, minimum: float, denominator_scope=None):
+def retention_rows(units, retained_regions, minimum: float, denominator_scope=None):
     rows = []
     for unit, intervals in sorted(units.items()):
         chrom = intervals[0][0]
@@ -234,11 +233,13 @@ def coverage_rows(units, coverage, minimum: float, denominator_scope=None):
             if denominator_scope is not None
             else merged_length(simple_intervals)
         )
-        covered = overlap_length(simple_intervals, coverage.get(chrom, []))
-        fraction = covered / total if total else 0.0
+        retained = overlap_length(simple_intervals, retained_regions.get(chrom, []))
+        fraction = retained / total if total else 0.0
         if total == 0:
             status = "no_calibration_scope"
+        elif retained == 0:
+            status = "fully_excluded"
         else:
-            status = "eligible" if fraction >= minimum else "coverage_below_minimum"
-        rows.append((unit, chrom, total, covered, fraction, status))
+            status = "eligible" if fraction >= minimum else "retained_fraction_below_minimum"
+        rows.append((unit, chrom, total, retained, fraction, status))
     return rows

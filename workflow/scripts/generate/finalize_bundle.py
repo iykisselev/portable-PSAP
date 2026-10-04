@@ -57,6 +57,7 @@ def main() -> None:
         ),
         SimpleNamespace(
             bin_count=int(snakemake.params.bin_count),
+            minimum_retained_fraction=float(snakemake.params.minimum_retained_fraction),
             bin_width=float(snakemake.params.bin_width),
             score_max=float(snakemake.params.score_max),
             policy=str(snakemake.params.policy),

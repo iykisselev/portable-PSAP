@@ -22,9 +22,9 @@ bindings:
       data: resources/reference.fa.gz
       fai: resources/reference.fa.gz.fai
       gzi: resources/reference.fa.gz.gzi
-    coverage:
-      data: resources/coverage.bed.gz
-      index: resources/coverage.bed.gz.tbi
+    exclusion:
+      data: resources/exclusion.bed.gz
+      index: resources/exclusion.bed.gz.tbi
     testing_unit_bed:
       data: resources/testing_units.bed.gz
       index: resources/testing_units.bed.gz.tbi

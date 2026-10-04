@@ -39,7 +39,7 @@ properties:
     properties:
       population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
       score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
-      coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+      exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
       par_regions: {$ref: "#/$defs/indexed_genomic_binding"}
       exclusions:
@@ -96,10 +96,10 @@ $defs:
   apply_reference_binding:
     type: object
     additionalProperties: false
-    required: [fasta, coverage, testing_unit_bed, exclusions, lookup_source, cadd]
+    required: [fasta, exclusion, testing_unit_bed, exclusions, lookup_source, cadd]
     properties:
       fasta: {$ref: "#/$defs/fasta_binding"}
-      coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+      exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
       exclusions:
         type: array
@@ -115,10 +115,10 @@ $defs:
   full_reference_binding:
     type: object
     additionalProperties: false
-    required: [fasta, coverage, testing_unit_bed, exclusions, cadd]
+    required: [fasta, exclusion, testing_unit_bed, exclusions, cadd]
     properties:
       fasta: {$ref: "#/$defs/fasta_binding"}
-      coverage: {$ref: "#/$defs/indexed_genomic_binding"}
+      exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
       exclusions:
         type: array
@@ -133,11 +133,11 @@ $defs:
   standalone_generation_binding:
     type: object
     additionalProperties: false
-    required: [population_vcf, score_snv, coverage, testing_unit_bed, par_regions, fasta, af_source, unobserved_policy]
+    required: [population_vcf, score_snv, exclusion, testing_unit_bed, par_regions, fasta, af_source, unobserved_policy]
     properties:
       population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
       score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
-      coverage: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+      exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
       par_regions: {$ref: "#/$defs/indexed_genomic_binding"}
       exclusions:

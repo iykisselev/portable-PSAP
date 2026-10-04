@@ -10,6 +10,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import yaml
+
 from workflow_test_utils import ROOT, SNAKEMAKE, command_output, run_workflow
 
 
@@ -40,7 +42,13 @@ class ApplyWorkflowFixtureTests(unittest.TestCase):
             prefix="portable-psap-apply-workflow-"
         ) as temporary_dir:
             outdir = Path(temporary_dir) / "output"
-            result = run_workflow("tests/smoke/run.yaml", outdir)
+            manifest = yaml.safe_load((ROOT / "tests/smoke/run.yaml").read_text())
+            # Repeated exclusions must be subtracted once, never treated as an
+            # inclusion mask by the renamed primary input.
+            manifest["bindings"]["reference"]["exclusion"] = dict(manifest["bindings"]["reference"]["exclusions"][0])
+            manifest_path = Path(temporary_dir) / "run.yaml"
+            manifest_path.write_text(yaml.safe_dump(manifest))
+            result = run_workflow(manifest_path, outdir)
             output = command_output(result)
             self.assertEqual(0, result.returncode, output[-6000:])
 

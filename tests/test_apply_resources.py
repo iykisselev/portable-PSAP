@@ -33,6 +33,14 @@ def merge(base: dict, override: dict) -> dict:
 
 
 class ApplyResourceRegistryTests(unittest.TestCase):
+    def test_primary_exclusion_is_subtracted_not_used_as_calibration_regions(self):
+        configuration = merge(load_yaml(ROOT / "config/config.yaml"), load_yaml(ROOT / "tests/smoke/run.yaml"))
+        configuration["bindings"]["reference"]["exclusion"] = {"data": "mask.bed", "index": None}
+        registry = build_apply_resource_registry(build_workflow_plan(configuration), Path("output/prepared"))
+        self.assertEqual(registry.resource("exclusion").scientific_role, "variants_exclude")
+        self.assertIn("exclusion", registry.exclusion_ids)
+        self.assertNotIn("calibration_regions", registry.resources)
+
     def test_registry_uses_one_effective_binding_set_and_is_immutable(self) -> None:
         configuration = merge(
             load_yaml(ROOT / "config" / "config.yaml"),
@@ -84,7 +92,7 @@ class ApplyResourceRegistryTests(unittest.TestCase):
             registry.resource("cadd_snv").source,
         )
         self.assertEqual("generated_bundle", registry.resource("testing_units").origin)
-        self.assertEqual("generated_bundle", registry.resource("coverage").origin)
+        self.assertEqual("generated_bundle", registry.resource("calibration_regions").origin)
         self.assertEqual("generated_bundle", registry.resource("exclusion_000").origin)
         self.assertEqual(
             str(plan.generation.bundle_dir / "eligible_testing_units.bed.gz"),
