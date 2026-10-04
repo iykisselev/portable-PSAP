@@ -4,15 +4,22 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
-from types import SimpleNamespace
 
+from generation_bindings import (
+    LookupReductionInputs,
+    LookupReductionOutputs,
+    LookupReductionParameters,
+)
 from generation_manifests import bucket_from_manifest
 from generation_probability import distribution, merge_statistics
 from io_contracts import write_tsv_atomic
 
 
 def reduce_partition_statistics(
-    inputs: SimpleNamespace, outputs: SimpleNamespace, params: SimpleNamespace, bucket_id: str
+    inputs: LookupReductionInputs,
+    outputs: LookupReductionOutputs,
+    params: LookupReductionParameters,
+    bucket_id: str,
 ) -> None:
     """Reduce one unit bucket without materializing genome-wide event tables."""
     units = list(bucket_from_manifest(inputs.buckets, bucket_id).unit_ids)

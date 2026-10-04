@@ -8,7 +8,6 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 
 import polars as pl
 
@@ -26,6 +25,11 @@ from generation_prep import (  # noqa: E402
 )
 from generation_population import population_rows  # noqa: E402
 from generation_probability import role_probability_expression  # noqa: E402
+from generation_bindings import (  # noqa: E402
+    GenerationScopeInputs,
+    GenerationScopeOutputs,
+    GenerationScopeParameters,
+)
 from generation_scope import prepare_generation_scope
 
 
@@ -52,16 +56,30 @@ class GenerationPreparationTests(unittest.TestCase):
             extra = directory / "extra.bed"
             extra.write_text("1\t0\t3\n1\t6\t9\n1\t20\t30\nX\t0\t4\n")
             fixture = ROOT / "tests/null_distribution"
-            inputs = SimpleNamespace(
-                population_vcf=fixture / "population_af.vcf", score_snv=fixture / "generation_scores.tsv",
-                mutation_rate=[], exclusion=fixture / "exclusion.bed", exclusions=[extra],
-                testing_units=fixture / "testing_units.bed", par_regions=fixture / "par_regions.bed",
-                fasta=ROOT / "tests/smoke/data/reference.fa", fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
+            inputs = GenerationScopeInputs(
+                population_vcf=fixture / "population_af.vcf",
+                population_vcf_index=None,
+                score_snv=fixture / "generation_scores.tsv",
+                score_snv_index=None,
+                mutation_rate=None,
+                mutation_rate_index=None,
+                exclusion=fixture / "exclusion.bed",
+                exclusions=(extra,),
+                testing_units=fixture / "testing_units.bed",
+                par_regions=fixture / "par_regions.bed",
+                fasta=ROOT / "tests/smoke/data/reference.fa",
+                fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
             )
-            outputs = SimpleNamespace(**{name: directory / name for name in (
-                "partitions", "buckets", "units", "unit_intervals", "masked_unit_intervals", "mask", "resource_identities",
-            )})
-            params = SimpleNamespace(minimum_retained_fraction=0.5, partition_size=10, unit_bucket_size=250, compression="zstd")
+            outputs = GenerationScopeOutputs(
+                partitions=directory / "partitions",
+                buckets=directory / "buckets",
+                units=directory / "units",
+                unit_intervals=directory / "unit_intervals",
+                masked_unit_intervals=directory / "masked_unit_intervals",
+                mask=directory / "mask",
+                resource_identities=directory / "resource_identities",
+            )
+            params = GenerationScopeParameters(0.5, 10, 250, "zstd")
             prepare_generation_scope(inputs, outputs, params)
             rows = {row["testing_unit_id"]: row for row in pl.read_parquet(outputs.units).to_dicts()}
             self.assertEqual(rows["UNIT_OVERLAP"]["supported_bases"], 10)

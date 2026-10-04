@@ -4,7 +4,6 @@ import gzip
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from generation_population import indexed_lines
+from generation_bindings import (
+    GenerationScopeInputs,
+    GenerationScopeOutputs,
+    GenerationScopeParameters,
+)
 from generation_resource_policy import MAX_UNINDEXED_FIXTURE_BYTES, check_unindexed_fixture
 from generation_scope import prepare_generation_scope
 
@@ -47,10 +51,33 @@ class GenerationResourcePolicyTests(unittest.TestCase):
     def test_scope_rejects_oversized_fixture_before_reading_units_or_hashing(self):
         with self.path.open("wb") as handle:
             handle.truncate(MAX_UNINDEXED_FIXTURE_BYTES + 1)
-        inputs = SimpleNamespace(population_vcf=self.path, population_vcf_index=[])
+        inputs = GenerationScopeInputs(
+            population_vcf=self.path,
+            population_vcf_index=None,
+            score_snv=self.path,
+            score_snv_index=None,
+            exclusion=None,
+            testing_units=self.path,
+            par_regions=self.path,
+            exclusions=(),
+            fasta=self.path,
+            fasta_fai=self.path,
+            mutation_rate=None,
+            mutation_rate_index=None,
+        )
+        outputs = GenerationScopeOutputs(
+            partitions=self.path,
+            buckets=self.path,
+            units=self.path,
+            unit_intervals=self.path,
+            masked_unit_intervals=self.path,
+            mask=self.path,
+            resource_identities=self.path,
+        )
+        params = GenerationScopeParameters(0.5, 10, 10, "zstd")
         with patch("generation_scope.read_bed_units") as read_units, patch("generation_scope.resource_inventory") as inventory:
             with self.assertRaisesRegex(ValueError, "up to 1 MiB"):
-                prepare_generation_scope(inputs, SimpleNamespace(), SimpleNamespace())
+                prepare_generation_scope(inputs, outputs, params)
             read_units.assert_not_called()
             inventory.assert_not_called()
 

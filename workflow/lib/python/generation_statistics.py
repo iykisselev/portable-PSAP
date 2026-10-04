@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import polars as pl
 
+from generation_bindings import (
+    PartitionStatisticsInputs,
+    PartitionStatisticsOutputs,
+    PartitionStatisticsParameters,
+)
 from generation_manifests import bucket_from_manifest
 from generation_partitions import partition_from_manifest
 from generation_probability import statistics_for_role
@@ -14,9 +17,9 @@ from io_contracts import write_parquet_atomic
 
 
 def calculate_partition_statistics(
-    inputs: SimpleNamespace,
-    outputs: SimpleNamespace,
-    params: SimpleNamespace,
+    inputs: PartitionStatisticsInputs,
+    outputs: PartitionStatisticsOutputs,
+    params: PartitionStatisticsParameters,
     partition_id: str,
     bucket_id: str,
 ) -> None:

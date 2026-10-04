@@ -8,11 +8,11 @@ import gzip
 import json
 import math
 from pathlib import Path
-from types import SimpleNamespace
 
 import jsonschema
 import yaml
 
+from generation_bindings import BundleValidationInputs, BundleValidationOutputs
 from bundle_certificate import BundleCertificateError, validate_bundle_component
 from bundle_contract import HEM_COMPONENT, VALIDATION_ARTIFACT_FILENAMES
 from io_contracts import sha256_file, write_text_atomic
@@ -61,7 +61,7 @@ def eligible_units(path: str | Path) -> dict[str, set[str]]:
 
 
 def validate_generated_bundle(
-    inputs: SimpleNamespace, outputs: SimpleNamespace
+    inputs: BundleValidationInputs, outputs: BundleValidationOutputs
 ) -> None:
     """Verify bytes and semantic row contracts before writing the marker last."""
     metadata_path = Path(inputs.metadata)

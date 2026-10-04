@@ -7,10 +7,14 @@ from collections import defaultdict
 import json
 import math
 from pathlib import Path
-from types import SimpleNamespace
 
 import polars as pl
 
+from generation_bindings import (
+    BundleFinalizationInputs,
+    BundleFinalizationOutputs,
+    BundleFinalizationParameters,
+)
 from bundle_contract import (
     CANONICAL_CONTIG_CONVENTION,
     CURRENT_GENERATED_BUNDLE_CONTRACT,
@@ -120,7 +124,9 @@ def rejected_rows(paths):
 
 
 def finalize_generated_bundle(
-    inputs: SimpleNamespace, outputs: SimpleNamespace, params: SimpleNamespace
+    inputs: BundleFinalizationInputs,
+    outputs: BundleFinalizationOutputs,
+    params: BundleFinalizationParameters,
 ) -> None:
     """Build a certified public bundle from bounded generation artifacts."""
     units = pl.read_parquet(inputs.units).to_dicts()

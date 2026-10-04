@@ -3,7 +3,6 @@
 import os
 from pathlib import Path
 import sys
-from types import SimpleNamespace
 
 if "snakemake" in globals():
     os.environ.setdefault("POLARS_MAX_THREADS", str(snakemake.threads))
@@ -15,12 +14,17 @@ from _library import add_library_path
 add_library_path(snakemake.scriptdir)
 
 from generation_partition import prepare_generation_partition
+from generation_bindings import (
+    GenerationPartitionInputs,
+    GenerationPartitionOutputs,
+    GenerationPartitionParameters,
+)
 
 
 def main() -> None:
     """Decode Snakemake bindings and delegate partition joins to the library."""
     prepare_generation_partition(
-        SimpleNamespace(
+        GenerationPartitionInputs(
             partitions=str(snakemake.input.partitions),
             units=str(snakemake.input.units),
             unit_intervals=str(snakemake.input.unit_intervals),
@@ -32,11 +36,15 @@ def main() -> None:
             fasta=str(snakemake.input.fasta),
             fasta_fai=str(snakemake.input.fasta_fai),
         ),
-        SimpleNamespace(**{name: str(snakemake.output[name]) for name in snakemake.output.keys()}),
-        SimpleNamespace(
+        GenerationPartitionOutputs(
+            allele_states=str(snakemake.output.allele_states),
+            allele_membership=str(snakemake.output.allele_membership),
+            allele_scores=str(snakemake.output.allele_scores),
+        ),
+        GenerationPartitionParameters(
             af_tags=dict(snakemake.params.af_tags),
             x_af_policy=str(snakemake.params.x_af_policy),
-            hemizygote=bool(snakemake.params.hemizygote),
+            hemizygote=snakemake.params.hemizygote,
             compression=str(snakemake.params.compression),
         ),
         str(snakemake.wildcards.partition),

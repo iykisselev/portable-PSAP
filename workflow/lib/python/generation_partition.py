@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import polars as pl
 
+from generation_bindings import (
+    GenerationPartitionInputs,
+    GenerationPartitionOutputs,
+    GenerationPartitionParameters,
+)
 from generation_partitions import partition_from_manifest
 from generation_population import POPULATION_SCHEMA, population_rows
 from generation_prep import intersect_intervals
@@ -15,7 +18,10 @@ from io_contracts import write_parquet_atomic
 
 
 def prepare_generation_partition(
-    inputs: SimpleNamespace, outputs: SimpleNamespace, params: SimpleNamespace, partition_id: str
+    inputs: GenerationPartitionInputs,
+    outputs: GenerationPartitionOutputs,
+    params: GenerationPartitionParameters,
+    partition_id: str,
 ) -> None:
     """Materialize canonical states, memberships, and scores for one partition."""
     partition = partition_from_manifest(inputs.partitions, partition_id)
@@ -61,7 +67,7 @@ def prepare_generation_partition(
         raise ValueError(f"Score resource is missing {missing.height} calibration alleles in {partition.identifier}: {examples}")
     panel = population_rows(
         inputs.population_vcf, inputs.population_vcf_index, partition.chromosome, partition.start,
-        partition.end, dict(params.af_tags), params.x_af_policy, bool(params.hemizygote),
+        partition.end, dict(params.af_tags), params.x_af_policy, params.hemizygote,
     )
     if panel.select(ALLELE_COLUMNS).is_duplicated().any():
         raise ValueError(f"Population VCF has duplicate allele states in {partition.identifier}")

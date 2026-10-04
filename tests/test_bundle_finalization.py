@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import importlib.util
 import unittest
 from pathlib import Path
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULE_PATH = ROOT / "workflow/scripts/generate/finalize_bundle.py"
-SPEC = importlib.util.spec_from_file_location("finalize_bundle", MODULE_PATH)
-MODULE = importlib.util.module_from_spec(SPEC)
-assert SPEC.loader is not None
-SPEC.loader.exec_module(MODULE)
+sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
+
+from bundle_finalization import classify_units  # noqa: E402
 
 class BundleFinalizationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -38,7 +36,7 @@ class BundleFinalizationTests(unittest.TestCase):
         ]
 
     def test_only_true_zero_mass_is_reported_as_biological_exclusion(self) -> None:
-        eligible, excluded = MODULE.classify_units(
+        eligible, excluded = classify_units(
             self.units, self.diagnostics("zero_event_mass", "zero_event_mass")
         )
         self.assertEqual(eligible, [])
@@ -52,22 +50,22 @@ class BundleFinalizationTests(unittest.TestCase):
 
     def test_numerical_failure_aborts_finalization(self) -> None:
         with self.assertRaisesRegex(ValueError, "Numerical distribution failure"):
-            MODULE.classify_units(self.units, self.diagnostics("numerical_failure"))
+            classify_units(self.units, self.diagnostics("numerical_failure"))
 
     def test_missing_diagnostic_aborts_finalization(self) -> None:
         with self.assertRaisesRegex(ValueError, "Missing distribution diagnostic"):
-            MODULE.classify_units(self.units, self.diagnostics()[:1])
+            classify_units(self.units, self.diagnostics()[:1])
 
     def test_duplicate_diagnostic_aborts_finalization(self) -> None:
         diagnostics = self.diagnostics()
         with self.assertRaisesRegex(ValueError, "Duplicate distribution diagnostic"):
-            MODULE.classify_units(self.units, diagnostics + diagnostics[:1])
+            classify_units(self.units, diagnostics + diagnostics[:1])
 
     def test_malformed_event_mass_aborts_finalization(self) -> None:
         diagnostics = self.diagnostics()
         diagnostics[0]["event_mass"] = "not-a-number"
         with self.assertRaisesRegex(ValueError, "Invalid event mass"):
-            MODULE.classify_units(self.units, diagnostics)
+            classify_units(self.units, diagnostics)
 
     def test_hem_role_is_required_only_for_chromosome_x_units(self) -> None:
         units = [
@@ -84,7 +82,7 @@ class BundleFinalizationTests(unittest.TestCase):
             for unit in ("AUTO", "X_UNIT")
             for role in ("het", "hom", "hem_chrX")
         ]
-        eligible, excluded = MODULE.classify_units(units, diagnostics, hemizygote=True)
+        eligible, excluded = classify_units(units, diagnostics, hemizygote=True)
         self.assertEqual(eligible, ["AUTO"])
         self.assertEqual(excluded, [("X_UNIT", "zero_event_mass_hem_chrX")])
 

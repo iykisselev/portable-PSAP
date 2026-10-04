@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
-from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
@@ -17,6 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 import generation_population
+from generation_bindings import (  # noqa: E402
+    GenerationPartitionInputs,
+    GenerationPartitionOutputs,
+    GenerationPartitionParameters,
+)
 from generation_partition import prepare_generation_partition
 from generation_population import POPULATION_SCHEMA
 from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
@@ -28,16 +32,28 @@ class GenerationPartitionTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
         self.partition_id = "1_000000000000_000000000010"
-        self.inputs = SimpleNamespace(**{
-            name: self.directory / name for name in
-            ("partitions", "units", "unit_intervals", "mask", "fasta", "fasta_fai", "score_snv", "population_vcf")
-        }, score_snv_index=None, population_vcf_index=None)
-        self.outputs = SimpleNamespace(**{
-            name: self.directory / f"{name}.parquet"
-            for name in ("allele_states", "allele_membership", "allele_scores")
-        })
-        self.params = SimpleNamespace(
-            compression="zstd", af_tags={"overall": "AF"}, x_af_policy="overall_proxy", hemizygote=False,
+        self.inputs = GenerationPartitionInputs(
+            partitions=self.directory / "partitions",
+            units=self.directory / "units",
+            unit_intervals=self.directory / "unit_intervals",
+            mask=self.directory / "mask",
+            fasta=self.directory / "fasta",
+            fasta_fai=self.directory / "fasta_fai",
+            score_snv=self.directory / "score_snv",
+            score_snv_index=None,
+            population_vcf=self.directory / "population_vcf",
+            population_vcf_index=None,
+        )
+        self.outputs = GenerationPartitionOutputs(
+            allele_states=self.directory / "allele_states.parquet",
+            allele_membership=self.directory / "allele_membership.parquet",
+            allele_scores=self.directory / "allele_scores.parquet",
+        )
+        self.params = GenerationPartitionParameters(
+            compression="zstd",
+            af_tags={"overall": "AF"},
+            x_af_policy="overall_proxy",
+            hemizygote=False,
         )
         self.inputs.partitions.write_text(json.dumps({
             "schema_version": 1, "partitions": [{

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from types import SimpleNamespace
-
 import polars as pl
 
+from generation_bindings import (
+    GenerationScopeInputs,
+    GenerationScopeOutputs,
+    GenerationScopeParameters,
+)
 from generation_manifests import (
     BUCKET_MANIFEST_SCHEMA_VERSION,
     PARTITION_MANIFEST_SCHEMA_VERSION,
@@ -27,17 +29,19 @@ from io_contracts import resource_inventory, write_json_atomic, write_parquet_at
 
 
 def prepare_generation_scope(
-    inputs: SimpleNamespace, outputs: SimpleNamespace, params: SimpleNamespace
+    inputs: GenerationScopeInputs,
+    outputs: GenerationScopeOutputs,
+    params: GenerationScopeParameters,
 ) -> None:
     """Prepare the shared scope once so partition jobs only read their slice."""
     # Check the fixture exception before hashing resources or scheduling partitions.
-    for resource_name in ("population_vcf", "score_snv", "mutation_rate"):
-        if not getattr(inputs, f"{resource_name}_index", None):
-            paths = getattr(inputs, resource_name)
-            if isinstance(paths, (str, Path)):
-                paths = [paths]
-            for path in paths:
-                check_unindexed_fixture(path)
+    for path, index in (
+        (inputs.population_vcf, inputs.population_vcf_index),
+        (inputs.score_snv, inputs.score_snv_index),
+        (inputs.mutation_rate, inputs.mutation_rate_index),
+    ):
+        if path is not None and index is None:
+            check_unindexed_fixture(path)
     units_by_id = read_bed_units(inputs.testing_units)
     par_intervals = read_intervals(inputs.par_regions)
     excluded_intervals = read_intervals(inputs.exclusion) if inputs.exclusion else {}
@@ -192,7 +196,7 @@ def prepare_generation_scope(
         }
     )
     if inputs.mutation_rate:
-        input_resource_paths["mutation_rate"] = inputs.mutation_rate[0]
+        input_resource_paths["mutation_rate"] = inputs.mutation_rate
     write_json_atomic(
         outputs.resource_identities,
         {
