@@ -59,7 +59,7 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             exclusion=None,
             testing_units=self.path,
             par_regions=self.path,
-            exclusions=(),
+            exclusions={},
             fasta=self.path,
             fasta_fai=self.path,
             mutation_rate=None,

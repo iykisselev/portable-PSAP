@@ -107,6 +107,14 @@ class GenerationRuleContext:
             if exclusion.binding.data
         ]
 
+    def exclusion_paths_by_id(self) -> Mapping[str, str]:
+        """Return the authoritative exclusion identity-to-path association."""
+        return {
+            exclusion.identifier: exclusion.binding.data
+            for exclusion in self.plan.exclusions
+            if exclusion.binding.data
+        }
+
     def partition_artifact(self, partition_id: str, artifact_name: str) -> str:
         """Return one partition artifact path for a known artifact name."""
         suffixes = {

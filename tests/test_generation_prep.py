@@ -64,7 +64,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 mutation_rate=None,
                 mutation_rate_index=None,
                 exclusion=fixture / "exclusion.bed",
-                exclusions=(extra,),
+                exclusions={"extra": extra},
                 testing_units=fixture / "testing_units.bed",
                 par_regions=fixture / "par_regions.bed",
                 fasta=ROOT / "tests/smoke/data/reference.fa",

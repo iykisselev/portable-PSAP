@@ -25,7 +25,7 @@ class GenerationScopeInputs:
     exclusion: PathLike | None
     testing_units: PathLike
     par_regions: PathLike
-    exclusions: tuple[PathLike, ...]
+    exclusions: Mapping[str, PathLike]
     fasta: PathLike
     fasta_fai: PathLike
     mutation_rate: PathLike | None

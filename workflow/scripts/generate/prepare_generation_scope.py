@@ -40,7 +40,10 @@ def main() -> None:
             exclusion=str(snakemake.input.exclusion[0]) if snakemake.input.exclusion else None,
             testing_units=str(snakemake.input.testing_units),
             par_regions=str(snakemake.input.par_regions),
-            exclusions=[str(path) for path in snakemake.input.exclusions],
+            exclusions={
+                str(identifier): str(path)
+                for identifier, path in snakemake.params.exclusions.items()
+            },
             fasta=str(snakemake.input.fasta),
             fasta_fai=str(snakemake.input.fasta_fai),
             mutation_rate=(

@@ -45,7 +45,7 @@ def prepare_generation_scope(
     units_by_id = read_bed_units(inputs.testing_units)
     par_intervals = read_intervals(inputs.par_regions)
     excluded_intervals = read_intervals(inputs.exclusion) if inputs.exclusion else {}
-    for exclusion_path in inputs.exclusions:
+    for exclusion_path in inputs.exclusions.values():
         for chromosome, intervals in read_intervals(exclusion_path).items():
             excluded_intervals.setdefault(chromosome, []).extend(intervals)
 
@@ -189,12 +189,7 @@ def prepare_generation_scope(
     }
     if inputs.exclusion:
         input_resource_paths["exclusion"] = inputs.exclusion
-    input_resource_paths.update(
-        {
-            f"interval_exclusion_{index:03d}": path
-            for index, path in enumerate(inputs.exclusions)
-        }
-    )
+    input_resource_paths.update(inputs.exclusions)
     if inputs.mutation_rate:
         input_resource_paths["mutation_rate"] = inputs.mutation_rate
     write_json_atomic(
