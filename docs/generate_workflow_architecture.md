@@ -32,7 +32,7 @@ In standalone `generate` mode, the following bindings live under `generation`:
 | --- | --- | --- |
 | `population_vcf` and optional index | Yes | Population allele states and configured AF INFO tags. |
 | `score_snv` and optional index | Yes | Allele-level CADD score for each calibrated SNV. |
-| `coverage` | Yes | Callable calibration mask and per-unit coverage eligibility. |
+| `exclusion` | Binding required; data may be null | Intervals to subtract, independent of source. Combined with other interval exclusions. |
 | `testing_unit_bed` | Yes | Unit intervals and stable unit IDs. |
 | `fasta` and `.fai` | Yes | Contig lengths, partitioning, and reference allele enumeration. |
 | `par_regions` | Yes | Pseudoautosomal intervals excluded before X-role assignment. |
@@ -48,7 +48,7 @@ needed are all hard failures.
 ### Full-mode binding behavior
 
 Full mode deliberately does not define a second reference scope under
-`generation`. It reuses FASTA, coverage, testing units, CADD SNVs, and ordinary
+`generation`. It reuses FASTA, exclusion, testing units, CADD SNVs, and ordinary
 variant exclusions from `bindings.reference`. Exactly one configured exclusion
 must have the `par_regions` role; every `variants_exclude` binding becomes a
 generation exclusion. `WorkflowPlan` enforces this while the DAG is being
@@ -62,7 +62,7 @@ filesystem.
 
 | Rule | Inputs | Transformation | Outputs |
 | --- | --- | --- | --- |
-| `prepare_generation_scope` (checkpoint) | FASTA index, coverage, units, PAR/exclusions, population/score bindings | Build the supported/callable/non-excluded mask; measure unit coverage; partition the genome; assign deterministic eligible-unit buckets; capture input checksums. | Partition and bucket manifests; provisional unit/interval/mask Parquet files; resource-identity JSON. |
+| `prepare_generation_scope` (checkpoint) | FASTA index, units, exclusion/PAR/other exclusions, population/score bindings | Build supported non-PAR scope; subtract all other interval exclusions; measure retained fractions; partition the genome; assign eligible-unit buckets; capture input checksums. | Partition and bucket manifests; provisional unit/interval/mask Parquet files; resource-identity JSON. |
 | `prepare_generation_partition` | One partition plus scope artifacts, FASTA, population VCF, and scores | Enumerate calibrated SNV alleles in the masked unit intervals; join unit membership, CADD score, and population allele state. | One each of `allele_states`, `allele_membership`, and `allele_scores` Parquet shards. |
 | `calculate_partition_null_distribution` | One partition shard set and one unit bucket | Assign the absent-allele policy and role-specific effective AF; bin scores; aggregate additive no-event statistics. | One partition-by-bucket statistics Parquet shard. |
 | `reduce_null_distribution_bucket` | All statistics shards for one bucket | Compensated reduction across partitions; calculate conditional score-bin survival rows and diagnostics. | HET/HOM and optional HEM lookup rows plus diagnostics TSV for that bucket. |
@@ -78,8 +78,12 @@ and the downstream apply reports together.
 
 These checkpoint artifacts are part of the internal DAG contract:
 
-- `provisional_units.parquet` has one row per unit with union bases, covered
-  bases, coverage fraction, chromosome, and eligibility status.
+- `provisional_units.parquet` has one row per unit with `supported_bases`,
+  `retained_bases`, `retained_fraction`, chromosome, and eligibility status.
+  Supported bases exclude PAR but not other interval exclusions; retained bases
+  also exclude the union of all other exclusion sources. The default minimum
+  retained fraction is 0.5. Statuses distinguish `no_calibration_scope`,
+  `fully_excluded`, `retained_fraction_below_minimum`, and `eligible`.
 - `unit_intervals.parquet` preserves merged raw unit intervals; the masked
   counterpart preserves only callable, supported, non-excluded segments.
 - `effective_calibration_mask.parquet` records the exact calibration intervals.

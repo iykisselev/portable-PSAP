@@ -10,8 +10,8 @@ are deliberately small enough to inspect and calculate by hand.
   and supplies deliberately distinct `AF_FEMALE` and `AF_MALE` tags for X;
   contains a different `AF_DECOY`, a `Number=R` field, a valid AF zero, missing
   AF, a failed-filter record and a scalar INFO field on a multiallelic record.
-- `testing_units.bed`, `coverage.bed` and `par_regions.bed` exercise union-base
-  coverage with overlapping intervals and a mixed PAR/non-PAR X unit.
+- `testing_units.bed`, `exclusion.bed` and `par_regions.bed` exercise retained
+  fractions with overlapping intervals and a mixed PAR/non-PAR X unit.
 - `generation_scores.tsv` covers every possible SNV in the effective
   calibration mask. Removing any required row is a hard preparation failure.
 - `fixture_expectations.json` records AF state, interval and pending-model

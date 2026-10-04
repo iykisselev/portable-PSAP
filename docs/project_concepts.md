@@ -16,7 +16,7 @@ event at least this deleterious in this testing unit?*
 
 The answer is a PSAP value. Smaller values mean that the event is less expected
 under the selected null model. A value only makes sense alongside the
-assembly, testing-unit definition, coverage scope, exclusions, CADD release,
+assembly, testing-unit definition, retained scope, exclusions, CADD release,
 and genotype model used to build its lookup table.
 
 There are three ways to use the workflow:
@@ -80,15 +80,16 @@ four steps:
 
 1. The workflow starts with autosomes 1–22 and chromosome X represented by the
    FASTA index.
-2. It removes pseudoautosomal intervals and any configured generation
-   exclusions.
-3. It intersects the remaining sequence with the callable/coverage resource.
-4. It measures each unit's covered fraction over its supported, non-excluded
-   bases and retains it only when it meets
-   `generation_settings.coverage_minimum`.
+2. It removes pseudoautosomal intervals. Each unit's supported, non-PAR bases
+   form the denominator for its retained fraction.
+3. It subtracts the union of `exclusion` and the other interval exclusions.
+   These inputs are regions to remove, whatever their source.
+4. It divides the remaining unit bases by the denominator from step 2 and
+   requires `generation_settings.minimum_retained_fraction` (default 0.5).
+   Exactly 50% passes; a unit with no remaining bases never passes.
 
 The generated bundle records the surviving unit intervals, the exact
-calibration mask, rejected alleles, and units excluded for low coverage or zero
+calibration mask, rejected alleles, and units excluded for low retention or zero
 event mass. These artifacts make the lookup's scope visible and reviewable.
 
 For an allele missing from the population panel, generation follows the

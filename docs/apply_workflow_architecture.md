@@ -34,8 +34,12 @@ marker files, eligible units, calibration regions, excluded alleles, and
 excluded units.
 
 When the source is a bundle, `workflow_plan._effective_bundle_reference()`
-replaces the configured coverage, testing-unit BED, and variant exclusions with
-the bundle artifacts. FASTA and CADD remain the configured physical resources.
+uses the bundle's inclusion mask as `calibration_regions`, and replaces the
+testing-unit BED and variant exclusions with bundle artifacts. The configured
+`exclusion` is already reflected in that mask and is not reapplied. FASTA and
+CADD remain the configured physical resources. For external lookups, the
+source-neutral `exclusion` binding joins the ordinary exclusion sources; it is
+never interpreted as an inclusion mask.
 In `full` mode, the source is always the bundle produced by the same DAG. The
 generated scope therefore becomes the apply scope, and the bundle's
 `validation.ok` gates scoring.
@@ -68,7 +72,7 @@ in parallel.
 | Validation: `validate_cohort`, `validate_resources`, `validate_model`, `merge_validation`, `require_valid_inputs` | Cohort/metadata/FASTA, resources, lookup source, schemas | Verify formats, contigs, sample agreement, model, lookup/bundle contract, and required role coverage; merge reports and gate expensive rules. | `validation/*.json`, `validation.json`, `validation.ok`, `sample_manifest.tsv` |
 | Staging: `prepare_vcf_resource`, `prepare_table_resource` | Sources and optional indexes from `ApplyResourceRegistry` | Normalize chromosome names when needed, sort/compress/index stageable VCF/BED/TSV resources. | `prepared/cohort.vcf.gz`, staged tables and indexes |
 | Exclusion projection: `combine_exclusions` | Staged cohort and every configured exclusion | Project full-span intervals and exact alleles to a cohort-aligned exclusion VCF. | `prepared/combined_exclusions.vcf` |
-| Variant filtering: `filter_low_coverage`, `filter_excluded_records` | Staged cohort, coverage, combined exclusions | Retain coverage-overlapping variants, then subtract excluded records. | Covered BCF/CSI and filtered VCF/CSI |
+| Variant filtering: `filter_calibration_regions`, `filter_excluded_records` | Staged cohort, optional bundle calibration regions, combined exclusions | Restrict to generated calibration regions when present, then subtract excluded records. | In-scope BCF/CSI and filtered VCF/CSI |
 | Annotation: `annotate_variants`, `summarize_annotations`, `require_valid_annotations`, `prepare_testing_units` | Filtered VCF, CADD, testing BED | Annotate VCF/flat table, reject complete expected annotation misses, normalize to variant/unit rows. | Annotated VCF, annotation QC, `<unit>.tsv.gz` |
 | Per-sample processing: `extract_gt`, `standardize_gt`, `apply_sex_model`, `join_sample_annotations` | Filtered VCF, sample manifest, unit table | Extract calls, standardize ploidy/alleles, assign sex-aware genotype class, and join annotations. | `raw/`, `standardized/`, `sex_classified/`, `annotated/` tables |
 | Scoring: `apply_psap` | Per-sample annotations and lookup source/certificate | Keep compatible best-scoring variants and map score bins to role-specific PSAP values. | `scored/<sample>.<unit>.tsv.gz` |

@@ -15,7 +15,7 @@ the DAG can go directly to the
 Portable PSAP has two main jobs:
 
 1. Build a null-distribution lookup bundle from population allele frequencies,
-   variant scores, genomic coverage, and testing-unit definitions.
+   variant scores, genomic exclusions, and testing-unit definitions.
 2. Apply lookup values to a cohort, then organize the resulting evidence into
    affected-sample candidates and unaffected-control observations.
 
@@ -30,7 +30,7 @@ The workflow supports three modes:
 At a high level, data move through the pipeline like this:
 
 ```text
-Population AF + CADD + coverage + testing units + exclusions
+Population AF + CADD + testing units + exclusions
                               |
                               v
               Generate conditional null distributions
@@ -171,14 +171,33 @@ CHROM  START  END  testing_unit_id
 ```
 
 BED coordinates are zero-based and half-open. A unit may have several rows;
-the workflow merges its intervals when calculating coverage.
+the workflow merges its intervals when calculating retained fractions.
 
-### Coverage and exclusion resources
+### Exclusion resources and retained scope
 
-Coverage defines callable sequence. Apply mode may omit it, but standalone
-generation and full mode require a coverage binding.
+Migration: rename `generation.coverage` to `generation.exclusion` in generate
+mode, or `bindings.reference.coverage` to `bindings.reference.exclusion` in
+apply/full mode. Rename scientific metadata `reference.coverage` to
+`reference.exclusion`, and `generation_settings.coverage_minimum` to
+`generation_settings.minimum_retained_fraction`. An existing exclusion BED
+needs no content conversion. A former inclusion BED must not simply be renamed:
+it needs the opposite intervals within the supported reference scope.
+Regenerate the bundle under a new generation prefix after migrating; old bundles
+retain their old scope. The new provisional-unit columns are `supported_bases`,
+`retained_bases`, and `retained_fraction`.
 
-Exclusions may be BED, TSV, or VCF:
+The `exclusion` binding contains regions to remove, not regions to include.
+It may describe low coverage, mapping problems, or another source of unreliable
+sequence. Use `data: null, index: null` when no primary exclusion is needed.
+Generation interprets interval inputs as zero-based, half-open BED coordinates.
+It combines the primary binding with the other configured interval exclusions.
+
+For each unit, the denominator is its union of supported, non-PAR bases before
+other exclusions. The numerator is the part remaining after all other interval
+exclusions. `generation_settings.minimum_retained_fraction: 0.5` requires at
+least half those bases to remain. Units with no remaining bases are excluded.
+
+Apply-mode exclusions may be BED, TSV, or VCF:
 
 - BED: zero-based, half-open intervals;
 - positional TSV: `CHROM, start, end` using the configured TSV layout;
@@ -267,7 +286,7 @@ generation:
   unobserved_policy: zero
   population_vcf: {data: /shared/resources/population.vcf.gz, index: /shared/resources/population.vcf.gz.tbi}
   score_snv: {data: /shared/resources/cadd.tsv.gz, index: /shared/resources/cadd.tsv.gz.tbi}
-  coverage: {data: /shared/resources/coverage.bed.gz, index: /shared/resources/coverage.bed.gz.tbi}
+  exclusion: {data: /shared/resources/exclusion.bed.gz, index: /shared/resources/exclusion.bed.gz.tbi}
   testing_unit_bed: {data: /shared/resources/units.bed.gz, index: /shared/resources/units.bed.gz.tbi}
   par_regions: {data: /shared/resources/par.bed.gz, index: /shared/resources/par.bed.gz.tbi}
   fasta:
@@ -309,10 +328,10 @@ combination of `unobserved_policy: mutation_rate` and
 
 1. Read testing-unit intervals and the FASTA index.
 2. Restrict the supported contigs to autosomes 1–22 and chromosome X.
-3. Remove PAR and configured exclusion intervals.
-4. Intersect the remaining scope with callable coverage.
-5. Calculate covered fraction per unit and mark units below
-   `coverage_minimum` as ineligible.
+3. Remove PAR to define the supported denominator for each unit.
+4. Subtract the union of primary and additional interval exclusions.
+5. Calculate retained fraction per unit and mark units below
+   `minimum_retained_fraction` as ineligible.
 6. Create deterministic genomic partitions and eligible-unit buckets.
 7. Record source paths and SHA-256 identities.
 
@@ -355,7 +374,7 @@ Possible diagnostic states are:
 
 #### 5. Bundle finalization and certification
 
-`finalize_null_distribution_bundle` keeps a unit only if it meets coverage and
+`finalize_null_distribution_bundle` keeps a unit only if it meets retention and
 has positive mass in every applicable role. For an eligible chromosome-X unit,
 HEM must be valid when the model is enabled. It then streams the public lookup,
 scope, exclusion, and metadata files.
@@ -396,7 +415,7 @@ Three rules run independently:
 - `validate_cohort` checks the VCF, metadata, FASTA, sample agreement,
   normalization, and sex-chromosome requirements, and writes the canonical
   sample manifest.
-- `validate_resources` checks coverage, exclusions, testing units, CADD
+- `validate_resources` checks calibration regions, exclusions, testing units, CADD
   structure, contigs, and indexes.
 - `validate_model` checks lookup roles, score-grid compatibility, testing-unit
   overlap, and bundle certification when applicable.
@@ -414,8 +433,9 @@ the same registry, preventing path drift between stages.
 
 #### 3. Coverage and exclusion filtering
 
-`filter_low_coverage` keeps records overlapping the configured coverage mask.
-If coverage is absent in external apply mode, all variants pass this stage.
+`filter_calibration_regions` keeps records overlapping a generated bundle's
+calibration mask. External apply mode passes all variants through this stage;
+the following exclusion filter removes the primary and additional exclusions.
 
 `combine_exclusions` projects interval and exact-allele exclusions onto the
 cohort. `filter_excluded_records` subtracts the combined set once.
@@ -472,7 +492,7 @@ only after generation has produced a certified bundle.
 | --- | --- | --- |
 | FASTA | `bindings.reference.fasta` | The same configured FASTA |
 | CADD SNV | `bindings.reference.cadd.snv` | The same configured CADD table |
-| Coverage | Configured coverage | Generated `calibration_regions.bed.gz` |
+| Exclusion / retained scope | Configured exclusion intervals are subtracted | Generated `calibration_regions.bed.gz` is an inclusion mask |
 | Testing units | Configured testing-unit BED | Generated `eligible_testing_units.bed.gz` |
 | Variant exclusions | Configured `variants_exclude` resources | Generated `excluded_alleles.tsv.gz` |
 | PAR | Exactly one configured `par_regions` resource | Already reflected in generated scope |
@@ -607,7 +627,20 @@ full mode.
 
 ## Scaling, retries, and recovery
 
-Generation exposes three execution settings:
+Generation requires explicit `.tbi` or `.csi` index bindings for the population
+VCF, CADD SNV table, and any configured mutation-rate table. This is checked
+while building the workflow plan, before jobs are submitted. An index next to
+the data file is not automatically discovered. Full mode checks the shared
+`bindings.reference.cadd.snv.index` binding for CADD.
+
+The small demonstration manifests explicitly set
+`generation.execution.allow_unindexed_fixture_inputs: true`. This exception
+only permits uncompressed files up to 1 MiB; scope preparation checks that limit
+before hashing inputs or scheduling partition jobs. Leave the option unset
+(the default is `false`) for production runs. Coverage, testing-unit and exclusion
+BEDs are read once during scope preparation and do not need indexes for generation.
+
+Generation exposes three performance-tuning settings:
 
 ```yaml
 generation:
@@ -664,7 +697,7 @@ on absent chromosome-X alleles.
 ### A unit is missing from the final lookup
 
 Inspect `excluded_units.tsv.gz` and the bucket diagnostics. Units are removed
-when coverage is below the configured minimum or when an applicable role has
+when retained fraction is below the configured minimum or when an applicable role has
 zero event mass.
 
 ### Apply validation passes but annotation stops

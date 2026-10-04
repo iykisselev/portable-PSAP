@@ -1,9 +1,27 @@
 # Portable PSAP
 
-Portable PSAP is a Snakemake workflow [1] that applies precomputed PSAP lookup
-tables to a cohort VCF and prioritizes variants under the selected disease
-models using the single-case PSAP framework and its genomic-regions extension
-[3,7].
+Portable PSAP is a Snakemake workflow [1] that can generate certified PSAP
+null-distribution lookup bundles, apply an external or certified bundle to a
+cohort VCF, or perform both steps in one full workflow. It prioritizes variants
+under the selected disease models using the single-case PSAP framework and its
+genomic-regions extension [3,7].
+
+## Workflow modes
+
+Every manifest explicitly selects one mode with `workflow.mode`:
+
+| Mode | Inputs | Default target | Result |
+| --- | --- | --- | --- |
+| `apply` | Cohort, reference/annotation resources, external or certified bundle | `all` | Cohort candidate, summary, and control reports |
+| `generate` | Population AF, score, scope, and reference resources | `null_distributions` | Certified generated lookup bundle |
+| `full` | Cohort plus one shared generation/application binding set | `full_results` | Generated bundle followed by cohort reports |
+
+Use the executable small demonstrations in
+[`runs/apply.example.yaml`](runs/apply.example.yaml),
+[`runs/generate.example.yaml`](runs/generate.example.yaml), and
+[`runs/full.example.yaml`](runs/full.example.yaml) to exercise each mode. For a
+production apply run, copy [`runs/run.example.yaml`](runs/run.example.yaml) and
+replace its physical resource paths.
 
 ## Workflow overview
 
@@ -29,8 +47,8 @@ The workflow creates indexed working copies of inputs below the run output
 directory. When necessary, it sorts and BGZF-compresses the VCF and
 tabular genomic resources, then creates indexes for the staged files. It then:
 
-1. retains variants in the configured callable/coverage regions, when a
-   coverage resource is provided;
+1. retains variants in the generated bundle's calibration regions, when a
+   bundle is provided;
 2. removes variants matching the combined exclusion set.
 
 Exclusions may be intervals or exact alleles. For interval exclusions, the
@@ -108,7 +126,8 @@ model; all other models require a matching model.
 
 ## Inputs
 
-Create a run manifest by copying [`runs/run.example.yaml`](runs/run.example.yaml):
+Create a production apply manifest by copying
+[`runs/run.example.yaml`](runs/run.example.yaml):
 
 ```bash
 cp runs/run.example.yaml runs/my_analysis.yaml
@@ -180,13 +199,13 @@ avoid some staging work.
 
 | Binding | Required structure |
 | --- | --- |
-| `coverage` (optional) | BED or tabular genomic intervals that define callable regions. Set `data: null` and `index: null` to skip this filter. |
+| `exclusion` (optional) | Genomic intervals to remove, independent of source. Generation uses zero-based, half-open BED intervals. Set `data: null` and `index: null` when absent. |
 | `testing_unit_bed` | BED with at least four columns: `CHROM`, a zero-based start, an end, and a non-empty testing-unit ID. |
 | `exclusions` | An ordered list of BED, TSV, or VCF resources. BED rows are zero-based, half-open intervals. TSV rows are either `CHROM, start, end` with 1-based inclusive coordinates or `CHROM, POS, REF, ALT` exact variants. VCF exclusions match exact alleles. |
 | `cadd.snv` | Tab-delimited CADD SNV table with `Chrom`, `Pos`, `Ref`, `Alt`, `RawScore`, and `PHRED` as the first six data columns. |
 | `cadd.indel` | Same required CADD layout for indels when `model.include_indels: true`; otherwise it may be `null`. |
 
-The default scientific configuration names gnomAD-derived coverage and lookup
+The exclusion identity is source-neutral; lookup identities name their
 resource releases. When substituting a resource, reflect assembly and release 
 changes in the run documentation; gnomAD constraint resources are described
 in [4,6].
@@ -259,7 +278,7 @@ The same `<outdir>/apply/<apply_prefix>/` directory contains supporting files:
 - `validation.json` and `validation.ok`: input/resource/model validation;
 - `sample_manifest.tsv`: processed sample metadata;
 - `prepared/`: staged VCFs, tables, and indexes;
-- `variants/`: coverage-filtered and exclusion-filtered variants;
+- `variants/`: calibration-scope-filtered and exclusion-filtered variants;
 - `annotations/`: annotated VCF, flat annotation table, and annotation QC;
 - `raw/`, `standardized/`, `sex_classified/`, and `annotated/`: per-sample
   genotype intermediates;
@@ -309,7 +328,7 @@ configure the following:
 | `inputs.vcf` | The cohort VCF and, when available, its `.tbi` or `.csi` index. |
 | `inputs.ped` or `inputs.samples` | Exactly one metadata source. The selected sample IDs must match the VCF header exactly. |
 | `bindings.reference.fasta` | The reference FASTA plus its required `.fai`; a BGZF-compressed FASTA also needs its `.gzi`. |
-| `coverage`, testing-unit, exclusion, CADD, and lookup bindings | Resources compatible with the same assembly and testing-unit identifiers as the scientific configuration. |
+| `exclusion`, testing-unit, CADD, and lookup bindings | Resources compatible with the same assembly and testing-unit identifiers as the scientific configuration. |
 
 Source indexes for the VCF and tabular genomic resources are optional: when an
 index is omitted, the workflow can and index a working copy below the run
@@ -317,7 +336,7 @@ output directory. The source FASTA indexes are not optional. Keep input
 resources outside the output directory and treat them as read-only.
 
 The scientific settings are located in `config/config.yaml`, separately from the
-run manifest. Change them only when deliberately changing the PSAP model or the 
+run manifest. Change them only when deliberately changing the PSAP model or the
 referenced resource release. In particular, if `model.include_indels` is enabled,
 provide the indel CADD table; if `model.hemizygote` is enabled, provide the chromosome-X
 hemizygous lookup table.
@@ -334,6 +353,16 @@ snakemake \
   --profile profiles/default \
   --configfile runs/my_analysis.yaml \
   --cores 8
+```
+
+To execute a bundled demonstration, select its manifest directly. `generate`
+publishes `<outdir>/generate/<generation_prefix>/bundle/`; `full` additionally
+publishes `<outdir>/apply/<apply_prefix>/cohort/` after certifying and consuming
+that bundle.
+
+```bash
+snakemake --configfile runs/generate.example.yaml --cores 2 --use-conda
+snakemake --configfile runs/full.example.yaml --cores 2 --use-conda
 ```
 
 ### 4. Run on Slurm with environment modules
@@ -368,6 +397,29 @@ snakemake \
 
 Tune `jobs`, `default-resources.mem_mb`, and `default-resources.runtime` in
 the profile if they do not match the site or project allocation.
+
+## Generated bundles and supporting outputs
+
+`generate` and `full` publish a versioned bundle under
+`<outdir>/generate/<generation_prefix>/bundle/`. The bundle contains HET/HOM
+lookups, an HEM lookup when enabled, eligible testing units, calibration and
+exclusion artifacts, `metadata.json`, `validation.json`, and `validation.ok`.
+The marker is written only after component size/checksum and semantic
+validation succeeds. `full` is the only mode that automatically binds this
+bundle to application; an `apply` manifest may also name a previously certified
+bundle explicitly.
+
+See [docs/null_distribution_contract.md](docs/null_distribution_contract.md)
+for the generated-bundle interface and
+[docs/workflow_architecture.md](docs/workflow_architecture.md) for module and
+binding ownership.
+
+## Testing and contributing
+
+Test tiers, local commands, and CI coverage are documented in
+[docs/testing.md](docs/testing.md). Module boundaries, how to add resources or
+roles, and the schema/contract deprecation policy are in
+[docs/contributing.md](docs/contributing.md).
 
 ## References
 
