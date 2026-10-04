@@ -7,12 +7,8 @@ from pathlib import Path
 
 import polars as pl
 
-try:
-    from generation_partitions import GenomePartition, read_fasta_index
-    from genomic_contracts import canonical_chromosome
-except ModuleNotFoundError:
-    from .generation_partitions import GenomePartition, read_fasta_index
-    from .genomic_contracts import canonical_chromosome
+from generation_partitions import GenomePartition, read_fasta_index
+from genomic_contracts import canonical_chromosome
 
 try:
     import pysam

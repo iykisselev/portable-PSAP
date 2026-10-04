@@ -15,21 +15,11 @@ from types import MappingProxyType
 from typing import Any, Mapping
 import warnings
 
-try:
-    from generation_resource_policy import check_generation_index_binding
-except ModuleNotFoundError:
-    from .generation_resource_policy import check_generation_index_binding
-
-try:
-    from bundle_contract import (
-        BUNDLE_COMPONENT_FILENAMES,
-        CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
-    )
-except ModuleNotFoundError:
-    from .bundle_contract import (
-        BUNDLE_COMPONENT_FILENAMES,
-        CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
-    )
+from generation_resource_policy import check_generation_index_binding
+from bundle_contract import (
+    BUNDLE_COMPONENT_FILENAMES,
+    CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
+)
 
 
 class WorkflowPlanError(ValueError):

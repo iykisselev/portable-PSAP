@@ -1,4 +1,4 @@
-"""Make the workflow's Python library available to script adapters."""
+"""Expose the workflow's internal flat Python modules to script adapters."""
 
 from pathlib import Path
 import sys

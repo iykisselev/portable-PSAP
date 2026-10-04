@@ -11,24 +11,14 @@ from types import SimpleNamespace
 
 import polars as pl
 
-try:
-    from bundle_contract import (
-        CANONICAL_CONTIG_CONVENTION,
-        CURRENT_GENERATED_BUNDLE_CONTRACT,
-        CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION,
-        FIXED_WIDTH_BINNING_ALGORITHM,
-        VALIDATION_ARTIFACT_FILENAMES,
-    )
-    from io_contracts import write_gzip_tsv_atomic, write_json_atomic
-except ModuleNotFoundError:
-    from .bundle_contract import (
-        CANONICAL_CONTIG_CONVENTION,
-        CURRENT_GENERATED_BUNDLE_CONTRACT,
-        CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION,
-        FIXED_WIDTH_BINNING_ALGORITHM,
-        VALIDATION_ARTIFACT_FILENAMES,
-    )
-    from .io_contracts import write_gzip_tsv_atomic, write_json_atomic
+from bundle_contract import (
+    CANONICAL_CONTIG_CONVENTION,
+    CURRENT_GENERATED_BUNDLE_CONTRACT,
+    CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION,
+    FIXED_WIDTH_BINNING_ALGORITHM,
+    VALIDATION_ARTIFACT_FILENAMES,
+)
+from io_contracts import write_gzip_tsv_atomic, write_json_atomic
 
 
 def applicable_roles(unit_row, hemizygote: bool) -> tuple[str, ...]:

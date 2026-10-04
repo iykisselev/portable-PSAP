@@ -10,84 +10,13 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 import gzip
-import math
 
-try:
-    from genomic_contracts import allele_key, allele_key_text as key_text, canonical_chromosome
-except ModuleNotFoundError:
-    from .genomic_contracts import allele_key, allele_key_text as key_text, canonical_chromosome
+from genomic_contracts import canonical_chromosome
 
 
 def _open(path: str | Path):
     file_path = Path(path)
     return gzip.open(file_path, "rt", encoding="utf-8") if file_path.suffix == ".gz" else file_path.open(encoding="utf-8")
-
-
-def read_population_af(path: str | Path, info_tag: str):
-    """Read valid observed AF and exact rejected allele keys from a VCF.
-
-    ``Number=1`` is accepted only for records originally biallelic; splitting
-    a multiallelic record must never manufacture per-ALT scalar frequencies.
-    """
-    number: str | None = None
-    observed: dict[tuple[str, int, str, str], float] = {}
-    rejected: dict[tuple[str, int, str, str], str] = {}
-    with _open(path) as handle:
-        for raw in handle:
-            if raw.startswith(f"##INFO=<ID={info_tag},"):
-                fields = raw.rstrip().split(",")
-                for field in fields:
-                    if field.startswith("Number="):
-                        number = field.split("=", 1)[1].rstrip(">")
-            if raw.startswith("#"):
-                continue
-            fields = raw.rstrip("\n").split("\t")
-            if len(fields) < 8:
-                raise ValueError("Population VCF record has fewer than eight columns")
-            chrom, pos_text, _, ref, alt_text, _, filter_value, info = fields[:8]
-            alts = alt_text.split(",")
-            keys = [allele_key(chrom, int(pos_text), ref, alt) for alt in alts]
-            if filter_value not in {"PASS", "."}:
-                for key in keys:
-                    rejected[key] = "non_pass_filter"
-                continue
-            info_values = dict(
-                item.split("=", 1) for item in info.split(";") if "=" in item
-            )
-            raw_value = info_values.get(info_tag)
-            if number not in {"A", "R", "1"}:
-                raise ValueError(f"INFO tag {info_tag!r} must declare Number=A, R, or 1")
-            if raw_value in {None, "", "."}:
-                reason = "missing_configured_af"
-                for key in keys:
-                    rejected[key] = reason
-                continue
-            values = raw_value.split(",")
-            if number == "A":
-                selected = values if len(values) == len(alts) else None
-            elif number == "R":
-                selected = values[1:] if len(values) == len(alts) + 1 else None
-            else:
-                selected = values if len(alts) == 1 and len(values) == 1 else None
-            if selected is None:
-                reason = "scalar_af_on_multiallelic_record" if number == "1" and len(alts) > 1 else "invalid_af_cardinality"
-                for key in keys:
-                    rejected[key] = reason
-                continue
-            for key, value in zip(keys, selected):
-                try:
-                    af = float(value)
-                except ValueError:
-                    af = math.nan
-                if not math.isfinite(af) or not 0 <= af <= 1:
-                    rejected[key] = "invalid_af"
-                elif key in observed or key in rejected:
-                    raise ValueError(f"Duplicate/conflicting population allele: {key_text(key)}")
-                else:
-                    observed[key] = af
-    if number is None:
-        raise ValueError(f"Population VCF has no INFO header for configured tag {info_tag!r}")
-    return observed, rejected
 
 
 def read_bed_units(path: str | Path):

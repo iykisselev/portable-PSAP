@@ -18,18 +18,17 @@ properties:
   reference:
     type: object
     additionalProperties: false
-    required: [assembly, fasta, exclusion, testing_unit_bed, exclusions, lookup_tables, cadd]
+    required: [assembly, fasta, exclusion, testing_unit_bed, exclusions, cadd]
     properties:
       assembly: {enum: [GRCh37, GRCh38]}
       fasta: {$ref: "#/$defs/resource_identity"}
       exclusion:
-        allOf:
-          - {$ref: "#/$defs/resource_identity"}
-          - type: object
-            required: [optional, kind]
-            properties:
-              optional: {const: true}
-              kind: {enum: [bed, tsv]}
+        type: object
+        additionalProperties: false
+        required: [id, kind]
+        properties:
+          id: {type: string, minLength: 1}
+          kind: {enum: [bed, tsv]}
       testing_unit_bed: {$ref: "#/$defs/resource_identity"}
       exclusions:
         type: array
@@ -41,14 +40,6 @@ properties:
               properties:
                 kind: {enum: [bed, tsv, vcf]}
                 role: {enum: [variants_exclude, par_regions]}
-      lookup_tables:
-        type: object
-        additionalProperties: false
-        required: [het, hom, hem_chrX]
-        properties:
-          het: {$ref: "#/$defs/resource_identity"}
-          hom: {$ref: "#/$defs/resource_identity"}
-          hem_chrX: {$ref: "#/$defs/resource_identity"}
       cadd:
         type: object
         additionalProperties: false
@@ -93,4 +84,3 @@ $defs:
     required: [id]
     properties:
       id: {type: string, minLength: 1}
-      optional: {type: boolean}

@@ -18,6 +18,7 @@ smoke-output/
 # Language caches and interactive session state
 __pycache__/
 *.py[cod]
+*.swp
 .Rhistory
 .RData
 .Ruserdata

@@ -6,18 +6,11 @@ from types import SimpleNamespace
 
 import polars as pl
 
-try:
-    from generation_manifests import bucket_from_manifest
-    from generation_partitions import partition_from_manifest
-    from generation_probability import statistics_for_role
-    from generation_scores import ALLELE_COLUMNS, mutation_rate_rows
-    from io_contracts import write_parquet_atomic
-except ModuleNotFoundError:
-    from .generation_manifests import bucket_from_manifest
-    from .generation_partitions import partition_from_manifest
-    from .generation_probability import statistics_for_role
-    from .generation_scores import ALLELE_COLUMNS, mutation_rate_rows
-    from .io_contracts import write_parquet_atomic
+from generation_manifests import bucket_from_manifest
+from generation_partitions import partition_from_manifest
+from generation_probability import statistics_for_role
+from generation_scores import ALLELE_COLUMNS, mutation_rate_rows
+from io_contracts import write_parquet_atomic
 
 
 def calculate_partition_statistics(

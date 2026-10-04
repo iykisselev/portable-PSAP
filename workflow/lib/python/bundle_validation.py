@@ -13,14 +13,9 @@ from types import SimpleNamespace
 import jsonschema
 import yaml
 
-try:
-    from bundle_certificate import BundleCertificateError, validate_bundle_component
-    from bundle_contract import HEM_COMPONENT, VALIDATION_ARTIFACT_FILENAMES
-    from io_contracts import sha256_file, write_text_atomic
-except ModuleNotFoundError:
-    from .bundle_certificate import BundleCertificateError, validate_bundle_component
-    from .bundle_contract import HEM_COMPONENT, VALIDATION_ARTIFACT_FILENAMES
-    from .io_contracts import sha256_file, write_text_atomic
+from bundle_certificate import BundleCertificateError, validate_bundle_component
+from bundle_contract import HEM_COMPONENT, VALIDATION_ARTIFACT_FILENAMES
+from io_contracts import sha256_file, write_text_atomic
 
 
 def validate_lookup(path: str | Path, bin_count: int) -> set[str]:

@@ -69,10 +69,9 @@ filesystem.
 | `finalize_null_distribution_bundle` | All bucket rows/diagnostics plus scope and state artifacts | Retain only units with positive mass for every applicable role; stream public bundle components and metadata. | Gzipped lookup, scope, exclusion, and metadata files. |
 | `validate_null_distribution_bundle` | Finalized bundle and schema | Validate component checksums, row coverage, contracts, and semantics. | `validation.json` and `validation.ok`. |
 
-The default `null_distributions` target exposes the certificate and the
-recoverable generation intermediates. `generate_results` is the equivalent
-explicit target. In full mode, `full_results` exposes those generation outputs
-and the downstream apply reports together.
+The public `null_distributions` target exposes the certificate and recoverable
+generation intermediates. In full mode, `full_results` exposes those generation
+outputs and the downstream apply reports together.
 
 ## Intermediate-data contracts
 

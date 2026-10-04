@@ -158,6 +158,12 @@ class GenerationPartitionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate calibration alleles"):
             self.prepare()
 
+    def test_duplicate_population_allele_still_fails(self):
+        content = self.inputs.population_vcf.read_text()
+        self.inputs.population_vcf.write_text(content + "1\t1\t.\tA\tC\t.\tPASS\tAF=0.2\n")
+        with self.assertRaisesRegex(ValueError, "duplicate allele states"):
+            self.prepare()
+
     def test_empty_candidates_write_typed_outputs_without_resource_reads(self):
         for scenario in ("no_overlap", "all_n", "no_eligible_units"):
             with self.subTest(scenario=scenario):

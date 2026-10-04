@@ -16,6 +16,14 @@ Every manifest explicitly selects one mode with `workflow.mode`:
 | `generate` | Population AF, score, scope, and reference resources | `null_distributions` | Certified generated lookup bundle |
 | `full` | Cohort plus one shared generation/application binding set | `full_results` | Generated bundle followed by cohort reports |
 
+These are the only supported explicit Snakemake targets. The workflow does not
+maintain compatibility aliases for result targets.
+
+`workflow/lib/python` is an internal flat-module library, not a public Python
+package. Workflow scripts add that directory through `workflow/shared/_library.py`
+and import modules such as `generation_scope`; package-qualified imports are
+unsupported.
+
 Use the executable small demonstrations in
 [`runs/apply.example.yaml`](runs/apply.example.yaml),
 [`runs/generate.example.yaml`](runs/generate.example.yaml), and

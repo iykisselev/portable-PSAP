@@ -5,12 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-try:
-    from generation_manifests import read_partition_manifest as _read_partition_manifest
-    from genomic_contracts import canonical_chromosome
-except ModuleNotFoundError:
-    from .generation_manifests import read_partition_manifest as _read_partition_manifest
-    from .genomic_contracts import canonical_chromosome
+from generation_manifests import read_partition_manifest as _read_partition_manifest
+from genomic_contracts import canonical_chromosome
 
 
 @dataclass(frozen=True)

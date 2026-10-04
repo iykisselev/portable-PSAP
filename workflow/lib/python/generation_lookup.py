@@ -6,14 +6,9 @@ from collections import defaultdict
 from pathlib import Path
 from types import SimpleNamespace
 
-try:
-    from generation_manifests import bucket_from_manifest
-    from generation_probability import distribution, merge_statistics
-    from io_contracts import write_tsv_atomic
-except ModuleNotFoundError:
-    from .generation_manifests import bucket_from_manifest
-    from .generation_probability import distribution, merge_statistics
-    from .io_contracts import write_tsv_atomic
+from generation_manifests import bucket_from_manifest
+from generation_probability import distribution, merge_statistics
+from io_contracts import write_tsv_atomic
 
 
 def reduce_partition_statistics(

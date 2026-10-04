@@ -8,14 +8,9 @@ from pathlib import Path
 
 import polars as pl
 
-try:
-    from generation_population import indexed_lines
-    from generation_prep import intersect_intervals
-    from genomic_contracts import allele_key
-except ModuleNotFoundError:
-    from .generation_population import indexed_lines
-    from .generation_prep import intersect_intervals
-    from .genomic_contracts import allele_key
+from generation_population import indexed_lines
+from generation_prep import intersect_intervals
+from genomic_contracts import allele_key
 
 
 ALLELE_COLUMNS = ["CHROM", "POS", "REF", "ALT"]

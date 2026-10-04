@@ -37,8 +37,7 @@ if WORKFLOW_MODE in {"generate", "full"}:
     include: "rules/generate/finalize.smk"
 
 if WORKFLOW_MODE == "generate":
-    # Preserve the original default target and offer generate_results as the
-    # clearer mode-specific target.
+    # Public generate-mode target. Result aliases are intentionally unsupported.
     rule null_distributions:
         input:
             marker=rules.validate_null_distribution_bundle.output.marker,
@@ -61,10 +60,6 @@ if WORKFLOW_MODE == "generate":
             ),
             diagnostics=lambda wc: generation_bucket_artifacts(wc, "diagnostics")
         default_target: True
-
-    rule generate_results:
-        input:
-            rules.null_distributions.input
 
 elif WORKFLOW_MODE in {"apply", "full"}:
     include: "rules/apply/paths.smk"
@@ -92,12 +87,6 @@ elif WORKFLOW_MODE in {"apply", "full"}:
                 str(COHORT_DIR / "cohort_summary.tsv.gz"),
                 str(COHORT_DIR / "control_variants.tsv.gz")
             default_target: True
-
-        rule apply_results:
-            input:
-                str(COHORT_DIR / "cohort_candidates.tsv.gz"),
-                str(COHORT_DIR / "cohort_summary.tsv.gz"),
-                str(COHORT_DIR / "control_variants.tsv.gz")
     else:
         rule full_results:
             input:

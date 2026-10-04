@@ -9,12 +9,8 @@ from typing import Iterator
 
 import polars as pl
 
-try:
-    from genomic_contracts import allele_key, canonical_chromosome
-    from generation_resource_policy import check_unindexed_fixture
-except ModuleNotFoundError:
-    from .genomic_contracts import allele_key, canonical_chromosome
-    from .generation_resource_policy import check_unindexed_fixture
+from genomic_contracts import allele_key, canonical_chromosome
+from generation_resource_policy import check_unindexed_fixture
 
 try:
     import pysam

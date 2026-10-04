@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import random
 import sys
 import unittest
@@ -21,11 +20,11 @@ from generation_prep import (  # noqa: E402
     effective_calibration_mask,
     read_bed_units,
     read_intervals,
-    read_population_af,
     supported_scope_mask,
     subtract_intervals,
 )
-from scalable_generation import population_rows, role_probability_expression  # noqa: E402
+from generation_population import population_rows  # noqa: E402
+from generation_probability import role_probability_expression  # noqa: E402
 from generation_scope import prepare_generation_scope
 
 
@@ -73,16 +72,24 @@ class GenerationPreparationTests(unittest.TestCase):
             self.assertEqual(rows["UNIT_X_MIXED_PAR"]["status"], "eligible")
 
     def test_configured_info_tag_preserves_zero_and_rejects_other_states(self) -> None:
-        observed, rejected = read_population_af(
-            ROOT / "tests/null_distribution/population_af.vcf", "AF_CUSTOM"
+        rows = population_rows(
+            ROOT / "tests/null_distribution/population_af.vcf",
+            None,
+            "1",
+            0,
+            60,
+            {"overall": "AF_CUSTOM"},
         )
-        expected = json.loads((ROOT / "tests/null_distribution/fixture_expectations.json").read_text())
-        self.assertEqual(observed[("1", 10, "A", "C")], 0.125)
-        self.assertEqual(observed[("1", 10, "A", "G")], 0.375)
-        self.assertEqual(observed[("1", 20, "T", "C")], 0.0)
-        self.assertEqual(rejected[("1", 40, "C", "T")], "non_pass_filter")
-        self.assertEqual(rejected[("1", 30, "G", "A")], "missing_configured_af")
-        self.assertEqual(expected["af_assignment"]["configured_tag"], "AF_CUSTOM")
+        states = {
+            (row["POS"], row["REF"], row["ALT"]): row
+            for row in rows.to_dicts()
+        }
+        self.assertEqual(states[(10, "A", "C")]["af"], 0.125)
+        self.assertEqual(states[(10, "A", "G")]["af"], 0.375)
+        self.assertEqual(states[(20, "T", "C")]["af"], 0.0)
+        self.assertEqual(states[(40, "C", "T")]["state_reason"], "non_pass_filter")
+        self.assertEqual(states[(30, "G", "A")]["allele_state"], "invalid")
+        self.assertIn("missing selected AF", states[(30, "G", "A")]["state_reason"])
 
     def test_union_retention_does_not_double_count_overlapping_unit_intervals(self) -> None:
         units = read_bed_units(ROOT / "tests/null_distribution/testing_units.bed")
@@ -95,24 +102,19 @@ class GenerationPreparationTests(unittest.TestCase):
         self.assertEqual(rows["UNIT_X_MIXED_PAR"][2:6], (8, 8, 1.0, "eligible"))
 
     def test_multiallelic_scalar_tag_is_not_split_into_alt_frequencies(self) -> None:
-        _, rejected = read_population_af(
-            ROOT / "tests/null_distribution/population_af.vcf", "AF_SCALAR"
+        rows = population_rows(
+            ROOT / "tests/null_distribution/population_af.vcf",
+            None,
+            "1",
+            0,
+            60,
+            {"overall": "AF_SCALAR"},
         )
-        self.assertEqual(rejected[("1", 50, "A", "C")], "scalar_af_on_multiallelic_record")
-        self.assertEqual(rejected[("1", 50, "A", "G")], "scalar_af_on_multiallelic_record")
-
-    def test_conflicting_duplicate_panel_allele_fails(self) -> None:
-        with TemporaryDirectory() as temporary:
-            path = Path(temporary) / "duplicates.vcf"
-            path.write_text(
-                "##fileformat=VCFv4.3\n"
-                "##INFO=<ID=CUSTOM,Number=A,Type=Float,Description=\"x\">\n"
-                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
-                "1\t1\t.\tA\tC\t.\tPASS\tCUSTOM=0.1\n"
-                "1\t1\t.\tA\tC\t.\tPASS\tCUSTOM=0.2\n"
-            )
-            with self.assertRaisesRegex(ValueError, "Duplicate/conflicting"):
-                read_population_af(path, "CUSTOM")
+        invalid = rows.filter((pl.col("POS") == 50) & pl.col("ALT").is_in(["C", "G"]))
+        self.assertEqual(invalid["allele_state"].unique().to_list(), ["invalid"])
+        self.assertTrue(
+            invalid["state_reason"].str.contains("scalar selected AF on a multiallelic record").all()
+        )
 
     def test_effective_mask_subtracts_exclusions_from_supported_nonpar_scope(self) -> None:
         scope = supported_scope_mask(

@@ -70,6 +70,25 @@ class WorkflowDagBaselineTests(unittest.TestCase):
                         msg=f"{mode} dry-run did not schedule {rule_name}",
                     )
 
+    def test_removed_result_aliases_are_rejected(self) -> None:
+        aliases = (
+            ("tests/null_distribution/generate.run.yaml", "generate_results"),
+            ("tests/smoke/run.yaml", "apply_results"),
+        )
+        for manifest, target in aliases:
+            with self.subTest(target=target), tempfile.TemporaryDirectory(
+                prefix=f"portable-psap-{target}-"
+            ) as temporary_dir:
+                result = run_workflow(
+                    manifest,
+                    Path(temporary_dir) / "output",
+                    dry_run=True,
+                    targets=(target,),
+                )
+                output = command_output(result)
+                self.assertNotEqual(0, result.returncode, output[-6000:])
+                self.assertIn(f"No rule to produce {target}", output)
+
 
 if __name__ == "__main__":
     unittest.main()

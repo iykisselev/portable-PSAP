@@ -6,20 +6,12 @@ from types import SimpleNamespace
 
 import polars as pl
 
-try:
-    from generation_partitions import partition_from_manifest
-    from generation_population import POPULATION_SCHEMA, population_rows
-    from generation_prep import intersect_intervals
-    from generation_reference import ReferenceReader, membership_rows
-    from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
-    from io_contracts import write_parquet_atomic
-except ModuleNotFoundError:
-    from .generation_partitions import partition_from_manifest
-    from .generation_population import POPULATION_SCHEMA, population_rows
-    from .generation_prep import intersect_intervals
-    from .generation_reference import ReferenceReader, membership_rows
-    from .generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
-    from .io_contracts import write_parquet_atomic
+from generation_partitions import partition_from_manifest
+from generation_population import POPULATION_SCHEMA, population_rows
+from generation_prep import intersect_intervals
+from generation_reference import ReferenceReader, membership_rows
+from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
+from io_contracts import write_parquet_atomic
 
 
 def prepare_generation_partition(

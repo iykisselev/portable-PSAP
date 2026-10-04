@@ -12,7 +12,6 @@ reference:
     id: GRCh38.p14  # reference sequence release identifier
   exclusion:
     id: excluded-regions  # source-neutral identity for intervals to remove
-    optional: true  # boolean; allow this exclusion filter to be absent
     kind: bed  # file layout; BED intervals
   testing_unit_bed:
     id: biomart-grch38-107-gene  # testing-unit annotation release identifier
@@ -24,14 +23,6 @@ reference:
     - id: par-regions  # source identifier; pseudoautosomal-region intervals
       kind: bed  # file layout; BED intervals
       role: par_regions  # scientific role; PAR exclusion set
-  lookup_tables:
-    # Lookup roles map genotype classes to model-specific frequency/CADD grids.
-    het:
-      id: gnomad-v3-cadd-1.6-gene-het  # heterozygous lookup-table release identifier
-    hom:
-      id: gnomad-v3-cadd-1.6-gene-hom  # homozygous lookup-table release identifier
-    hem_chrX:
-      id: gnomad-v3-cadd-1.6-gene-hem-chrX  # hemizygous chromosome-X lookup release identifier
   cadd:
     # Explicit CADD resources replace the implicit cadd_dir filename convention.
     snv:

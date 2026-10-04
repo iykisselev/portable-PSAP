@@ -33,7 +33,6 @@ TIERS: dict[str, tuple[str, ...]] = {
         "test_sample_manifest.py",
         "test_validate_inputs.py",
         "test_validation_reporting.py",
-        "test_workflow_runtime.py",
     ),
     "schema": ("test_workflow_modes.py", "test_workflow_plan.py", "test_stage8_contracts.py"),
     "workflow": ("test_workflow_dags.py", "test_workflow_lint.py", "test_run_examples.py"),

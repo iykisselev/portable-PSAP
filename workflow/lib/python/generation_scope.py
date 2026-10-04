@@ -7,42 +7,23 @@ from types import SimpleNamespace
 
 import polars as pl
 
-try:
-    from generation_manifests import (
-        BUCKET_MANIFEST_SCHEMA_VERSION,
-        PARTITION_MANIFEST_SCHEMA_VERSION,
-    )
-    from generation_partitions import build_partitions, read_fasta_index
-    from generation_prep import (
-        retention_rows,
-        effective_calibration_mask,
-        intersect_intervals,
-        merge_intervals,
-        read_bed_units,
-        read_intervals,
-        supported_scope_mask,
-    )
-    from generation_probability import unit_bucket_frame
-    from generation_resource_policy import check_unindexed_fixture
-    from io_contracts import resource_inventory, write_json_atomic, write_parquet_atomic
-except ModuleNotFoundError:
-    from .generation_manifests import (
-        BUCKET_MANIFEST_SCHEMA_VERSION,
-        PARTITION_MANIFEST_SCHEMA_VERSION,
-    )
-    from .generation_partitions import build_partitions, read_fasta_index
-    from .generation_prep import (
-        retention_rows,
-        effective_calibration_mask,
-        intersect_intervals,
-        merge_intervals,
-        read_bed_units,
-        read_intervals,
-        supported_scope_mask,
-    )
-    from .generation_probability import unit_bucket_frame
-    from .generation_resource_policy import check_unindexed_fixture
-    from .io_contracts import resource_inventory, write_json_atomic, write_parquet_atomic
+from generation_manifests import (
+    BUCKET_MANIFEST_SCHEMA_VERSION,
+    PARTITION_MANIFEST_SCHEMA_VERSION,
+)
+from generation_partitions import build_partitions, read_fasta_index
+from generation_prep import (
+    retention_rows,
+    effective_calibration_mask,
+    intersect_intervals,
+    merge_intervals,
+    read_bed_units,
+    read_intervals,
+    supported_scope_mask,
+)
+from generation_probability import unit_bucket_frame
+from generation_resource_policy import check_unindexed_fixture
+from io_contracts import resource_inventory, write_json_atomic, write_parquet_atomic
 
 
 def prepare_generation_scope(

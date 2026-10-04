@@ -6,12 +6,8 @@ import json
 from pathlib import Path
 from typing import Mapping
 
-try:
-    from bundle_contract import require_supported_contract
-    from io_contracts import sha256_file
-except ModuleNotFoundError:
-    from .bundle_contract import require_supported_contract
-    from .io_contracts import sha256_file
+from bundle_contract import require_supported_contract
+from io_contracts import sha256_file
 
 
 class BundleCertificateError(ValueError):

@@ -12,6 +12,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_SCHEMA = ROOT / "workflow" / "schemas" / "run.schema.yaml"
+SCIENCE_SCHEMA = ROOT / "workflow" / "schemas" / "science.schema.yaml"
 
 
 def load_yaml(path: Path) -> dict:
@@ -36,6 +37,12 @@ def validate_run_config(config: dict) -> list[jsonschema.ValidationError]:
     return sorted(validator.iter_errors(config), key=lambda error: list(error.path))
 
 
+def validate_science_config(config: dict) -> list[jsonschema.ValidationError]:
+    schema = load_yaml(SCIENCE_SCHEMA)
+    validator = jsonschema.Draft202012Validator(schema)
+    return sorted(validator.iter_errors(config), key=lambda error: list(error.path))
+
+
 class WorkflowModeSchemaTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -54,6 +61,15 @@ class WorkflowModeSchemaTests(unittest.TestCase):
         self.assertNotIn("inputs", config)
         self.assertNotIn("bindings", config)
         self.assertEqual([], validate_run_config(config))
+
+    def test_science_schema_rejects_removed_reference_metadata(self) -> None:
+        config = copy.deepcopy(self.science)
+        config["reference"]["lookup_tables"] = {}
+        self.assertTrue(validate_science_config(config))
+
+        config = copy.deepcopy(self.science)
+        config["reference"]["exclusion"]["optional"] = True
+        self.assertTrue(validate_science_config(config))
 
     def test_full_manifest_uses_generation_inputs_without_external_lookup(self) -> None:
         config = self.merged_manifest("tests/null_distribution/full.run.yaml")
