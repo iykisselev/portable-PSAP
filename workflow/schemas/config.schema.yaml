@@ -6,4 +6,15 @@ description: >-
 allOf:
   - $ref: "science.schema.yaml"
   - $ref: "run.schema.yaml"
-unevaluatedProperties: false
+properties:
+  model: {}
+  reference: {}
+  report: {}
+  generation_settings: {}
+  outdir: {}
+  workflow: {}
+  run: {}
+  inputs: {}
+  bindings: {}
+  generation: {}
+additionalProperties: false

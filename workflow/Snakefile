@@ -1,7 +1,6 @@
 from pathlib import Path
 import sys
 
-from snakemake.utils import validate
 from snakemake.utils import min_version
 
 WORKFLOW_PYTHON_DIR = Path(workflow.basedir) / "lib" / "python"
@@ -16,14 +15,7 @@ configfile: str(Path(workflow.basedir).parent / "config" / "config.yaml")
 
 # Older run manifests did not name a workflow mode. Normalize a copy so they
 # still work, while leaving Snakemake's original configuration untouched.
-RUN_CONFIG = normalize_run_config(config)
-
-validate(
-    RUN_CONFIG,
-    Path(workflow.basedir) / "schemas" / "config.schema.yaml",
-)
-
-WORKFLOW_PLAN = build_workflow_plan(RUN_CONFIG)
+WORKFLOW_PLAN = build_workflow_plan(normalize_run_config(config))
 WORKFLOW_MODE = WORKFLOW_PLAN.mode
 
 # All modes use the same deployment settings, so load them once before choosing

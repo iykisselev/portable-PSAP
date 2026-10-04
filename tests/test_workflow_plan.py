@@ -197,6 +197,26 @@ class WorkflowPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkflowPlanError, "exactly one.*par_regions"):
             build_workflow_plan(manifest)
 
+    def test_generation_execution_defaults_remain_available_to_direct_callers(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["generation"]["execution"] = {
+            "allow_unindexed_fixture_inputs": True
+        }
+
+        plan = build_workflow_plan(manifest)
+
+        assert plan.generation is not None
+        self.assertEqual(5_000_000, plan.generation.partition_size_bp)
+        self.assertEqual(250, plan.generation.unit_bucket_size)
+        self.assertEqual("zstd", plan.generation.parquet_compression)
+
+    def test_direct_plan_validation_rejects_unknown_configuration_fields(self) -> None:
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["bindings"]["reference"]["mistyped_resource"] = {}
+
+        with self.assertRaisesRegex(WorkflowPlanError, "Additional properties are not allowed"):
+            build_workflow_plan(manifest)
+
     def test_legacy_normalization_warns_without_changing_the_source_mapping(self) -> None:
         manifest = self.manifest("tests/smoke/run.yaml")
         del manifest["workflow"]

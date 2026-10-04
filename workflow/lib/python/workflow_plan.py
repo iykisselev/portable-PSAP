@@ -16,6 +16,7 @@ from typing import Any, Mapping
 import warnings
 
 from generation_resource_policy import check_generation_index_binding
+from config_validation import ConfigurationValidationError, validate_configuration
 from bundle_contract import (
     BUNDLE_COMPONENT_FILENAMES,
     CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
@@ -576,6 +577,10 @@ def _effective_bundle_reference(
 def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
     """Resolve validated configuration into immutable mode-specific records."""
     normalized = normalize_run_config(config)
+    try:
+        validate_configuration(normalized)
+    except ConfigurationValidationError as exc:
+        raise WorkflowPlanError(str(exc)) from exc
     mode = _required(_mapping(normalized.get("workflow"), "workflow").get("mode"), "workflow.mode")
     if mode not in {"apply", "generate", "full"}:
         raise WorkflowPlanError(f"Unsupported workflow.mode: {mode!r}")

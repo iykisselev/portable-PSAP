@@ -33,37 +33,7 @@ properties:
     required: [reference]
     properties:
       reference: {type: object}
-  generation:
-    type: object
-    additionalProperties: false
-    properties:
-      population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
-      score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
-      exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
-      testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
-      par_regions: {$ref: "#/$defs/indexed_genomic_binding"}
-      exclusions:
-        type: array
-        items: {$ref: "#/$defs/indexed_genomic_binding"}
-      fasta: {$ref: "#/$defs/fasta_binding"}
-      mutation_rate: {$ref: "#/$defs/indexed_genomic_binding"}
-      unobserved_policy: {enum: [zero, mutation_rate]}
-      af_source:
-        type: object
-        additionalProperties: false
-        required: [overall]
-        properties:
-          overall: {type: string, minLength: 1}
-          female: {type: [string, "null"]}
-          male: {type: [string, "null"]}
-      execution:
-        type: object
-        additionalProperties: false
-        properties:
-          partition_size_bp: {type: integer, minimum: 1}
-          allow_unindexed_fixture_inputs: {type: boolean, default: false}
-          unit_bucket_size: {type: integer, minimum: 1}
-          parquet_compression: {enum: [zstd, lz4, snappy, gzip, uncompressed]}
+  generation: {type: object}
   model:
     type: object
     properties:
@@ -93,26 +63,14 @@ $defs:
       data: {type: string, minLength: 1}
       fai: {type: string, minLength: 1}
       gzi: {type: [string, "null"], minLength: 1}
-  apply_reference_binding:
+  cadd_bindings:
     type: object
     additionalProperties: false
-    required: [fasta, exclusion, testing_unit_bed, exclusions, lookup_source, cadd]
+    required: [snv]
     properties:
-      fasta: {$ref: "#/$defs/fasta_binding"}
-      exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
-      testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
-      exclusions:
-        type: array
-        items: {$ref: "#/$defs/indexed_genomic_binding"}
-      lookup_source: {$ref: "#/$defs/lookup_source"}
-      cadd:
-        type: object
-        additionalProperties: false
-        required: [snv]
-        properties:
-          snv: {$ref: "#/$defs/indexed_genomic_binding"}
-          indel: {$ref: "#/$defs/optional_indexed_genomic_binding"}
-  full_reference_binding:
+      snv: {$ref: "#/$defs/indexed_genomic_binding"}
+      indel: {$ref: "#/$defs/optional_indexed_genomic_binding"}
+  reference_binding_base:
     type: object
     additionalProperties: false
     required: [fasta, exclusion, testing_unit_bed, exclusions, cadd]
@@ -123,19 +81,47 @@ $defs:
       exclusions:
         type: array
         items: {$ref: "#/$defs/indexed_genomic_binding"}
-      cadd:
-        type: object
-        additionalProperties: false
-        required: [snv]
+      cadd: {$ref: "#/$defs/cadd_bindings"}
+      lookup_source: {$ref: "#/$defs/lookup_source"}
+  apply_reference_binding:
+    allOf:
+      - {$ref: "#/$defs/reference_binding_base"}
+      - type: object
+        required: [lookup_source]
         properties:
-          snv: {$ref: "#/$defs/indexed_genomic_binding"}
-          indel: {$ref: "#/$defs/optional_indexed_genomic_binding"}
-  standalone_generation_binding:
+          lookup_source: {$ref: "#/$defs/lookup_source"}
+  full_reference_binding:
+    allOf:
+      - {$ref: "#/$defs/reference_binding_base"}
+      - type: object
+        properties:
+          lookup_source: false
+  af_source:
     type: object
     additionalProperties: false
-    required: [population_vcf, score_snv, exclusion, testing_unit_bed, par_regions, fasta, af_source, unobserved_policy]
+    required: [overall]
+    properties:
+      overall: {type: string, minLength: 1}
+      female: {type: [string, "null"]}
+      male: {type: [string, "null"]}
+  generation_execution:
+    type: object
+    additionalProperties: false
+    properties:
+      partition_size_bp: {type: integer, minimum: 1}
+      allow_unindexed_fixture_inputs: {type: boolean, default: false}
+      unit_bucket_size: {type: integer, minimum: 1}
+      parquet_compression: {enum: [zstd, lz4, snappy, gzip, uncompressed]}
+  generation_binding_base:
+    type: object
+    additionalProperties: false
+    required: [population_vcf, af_source, unobserved_policy]
     properties:
       population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
+      mutation_rate: {$ref: "#/$defs/indexed_genomic_binding"}
+      unobserved_policy: {enum: [zero, mutation_rate]}
+      af_source: {$ref: "#/$defs/af_source"}
+      execution: {$ref: "#/$defs/generation_execution"}
       score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
       exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
@@ -144,48 +130,22 @@ $defs:
         type: array
         items: {$ref: "#/$defs/indexed_genomic_binding"}
       fasta: {$ref: "#/$defs/fasta_binding"}
-      mutation_rate: {$ref: "#/$defs/indexed_genomic_binding"}
-      unobserved_policy: {enum: [zero, mutation_rate]}
-      af_source:
-        type: object
-        additionalProperties: false
-        required: [overall]
-        properties:
-          overall: {type: string, minLength: 1}
-          female: {type: [string, "null"]}
-          male: {type: [string, "null"]}
-      execution:
-        type: object
-        additionalProperties: false
-        properties:
-          partition_size_bp: {type: integer, minimum: 1}
-          allow_unindexed_fixture_inputs: {type: boolean, default: false}
-          unit_bucket_size: {type: integer, minimum: 1}
-          parquet_compression: {enum: [zstd, lz4, snappy, gzip, uncompressed]}
+  standalone_generation_binding:
+    allOf:
+      - {$ref: "#/$defs/generation_binding_base"}
+      - type: object
+        required: [score_snv, exclusion, testing_unit_bed, par_regions, fasta]
   full_generation_binding:
-    type: object
-    additionalProperties: false
-    required: [population_vcf, af_source, unobserved_policy]
-    properties:
-      population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
-      mutation_rate: {$ref: "#/$defs/indexed_genomic_binding"}
-      unobserved_policy: {enum: [zero, mutation_rate]}
-      af_source:
-        type: object
-        additionalProperties: false
-        required: [overall]
+    allOf:
+      - {$ref: "#/$defs/generation_binding_base"}
+      - type: object
         properties:
-          overall: {type: string, minLength: 1}
-          female: {type: [string, "null"]}
-          male: {type: [string, "null"]}
-      execution:
-        type: object
-        additionalProperties: false
-        properties:
-          partition_size_bp: {type: integer, minimum: 1}
-          allow_unindexed_fixture_inputs: {type: boolean, default: false}
-          unit_bucket_size: {type: integer, minimum: 1}
-          parquet_compression: {enum: [zstd, lz4, snappy, gzip, uncompressed]}
+          score_snv: false
+          exclusion: false
+          testing_unit_bed: false
+          par_regions: false
+          exclusions: false
+          fasta: false
   lookup_source:
     oneOf:
       - type: object
@@ -310,7 +270,7 @@ $defs:
               required: [mutation_rate]
   generate_mode:
     allOf:
-      - $ref: "#/$defs/generate_policy"
+      - {$ref: "#/$defs/generate_policy"}
     type: object
     required: [generation]
     properties:
@@ -324,7 +284,7 @@ $defs:
       generation: {$ref: "#/$defs/standalone_generation_binding"}
   full_mode:
     allOf:
-      - $ref: "#/$defs/generate_policy"
+      - {$ref: "#/$defs/generate_policy"}
     type: object
     required: [inputs, bindings, generation]
     properties:
@@ -338,6 +298,6 @@ $defs:
           reference: {$ref: "#/$defs/full_reference_binding"}
       generation: {$ref: "#/$defs/full_generation_binding"}
 oneOf:
-  - $ref: "#/$defs/apply_mode"
-  - $ref: "#/$defs/generate_mode"
-  - $ref: "#/$defs/full_mode"
+  - {$ref: "#/$defs/apply_mode"}
+  - {$ref: "#/$defs/generate_mode"}
+  - {$ref: "#/$defs/full_mode"}
