@@ -9,13 +9,13 @@ import os
 import shutil
 import subprocess
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 from bgzf import has_bgzf_eof, is_bgzf
 from genomic_contracts import canonical_chromosome
 
-VALID_UNITS = {"gene", "cadd_region", "coding_cadd_region"}
-BOOLEAN_VALUES = {"true": True, "false": False}
 MISSING_CONFIG_VALUES = {"", "na", "none", "null", ".", "-"}
 CANONICAL_CHROMOSOMES = tuple(str(chromosome) for chromosome in range(1, 23)) + (
     "X",
@@ -28,15 +28,12 @@ CHROMOSOME_ORDER = {
 }
 
 
-def optional_config_paths(value: str) -> list[str]:
-    normalized = value.strip()
-    if normalized.lower() in MISSING_CONFIG_VALUES:
-        return []
-    return [
-        item.strip()
-        for item in normalized.split(",")
-        if item.strip().lower() not in MISSING_CONFIG_VALUES
-    ]
+@dataclass(frozen=True)
+class IndexedResource:
+    """A resource path and its optional index, kept together by contract."""
+
+    path: str | Path
+    index: str | Path | None = None
 
 
 def genomic_resource_kind(path: str | Path) -> str | None:
@@ -49,53 +46,6 @@ def genomic_resource_kind(path: str | Path) -> str | None:
         if name.endswith(f".{kind}"):
             return "tsv" if kind == "txt" else kind
     return None
-
-
-def parse_bool(value: str, name: str, errors: list[str]) -> bool:
-    normalized = value.strip().lower()
-    if normalized in BOOLEAN_VALUES:
-        return BOOLEAN_VALUES[normalized]
-
-    errors.append(f"{name} must be True or False; received {value!r}")
-    return False
-
-
-def parse_model_settings(
-    args: object,
-    errors: list[str],
-) -> dict[str, bool]:
-    if args.unit not in VALID_UNITS:
-        errors.append(
-            "unit must be one of "
-            + ", ".join(sorted(VALID_UNITS))
-            + f"; received {args.unit!r}"
-        )
-
-    if not args.assembly.strip():
-        errors.append("assembly cannot be empty")
-
-    validate_positive_number(args.score_max, "score_max", errors)
-    settings = {
-        "hemizygote": parse_bool(
-            args.hemizygote_model,
-            "hemizygote_model",
-            errors,
-        ),
-        "include_indels": parse_bool(args.include_indels, "include_indels", errors),
-    }
-
-    return settings
-
-
-def validate_positive_number(value: str, name: str, errors: list[str]) -> None:
-    try:
-        number = float(value)
-    except ValueError:
-        errors.append(f"{name} must be numeric; received {value!r}")
-        return
-
-    if number <= 0:
-        errors.append(f"{name} must be positive; received {value!r}")
 
 
 def require_file(
@@ -1059,65 +1009,61 @@ def validate_lookup_unit_overlap(
 
 
 def validate_reference_tables(
-    args: object,
+    *,
+    calibration_regions: IndexedResource | None,
+    exclusions: Sequence[IndexedResource],
+    testing_units: IndexedResource,
+    par_regions: Sequence[IndexedResource],
+    unit: str,
     errors: list[str],
     warnings: list[str],
 ) -> dict[str, set[str]]:
-    if args.calibration_regions.strip().lower() in MISSING_CONFIG_VALUES:
+    if calibration_regions is None:
         warnings.append(
             "No generated calibration mask supplied; only configured exclusions will filter regions"
         )
     else:
-        calibration_regions_kind = genomic_resource_kind(args.calibration_regions)
+        calibration_regions_kind = genomic_resource_kind(calibration_regions.path)
         if calibration_regions_kind not in {"bed", "tsv"}:
             errors.append(
                 "Generated calibration regions must be a BED or TSV file; received "
-                f"{args.calibration_regions!r}"
+                f"{calibration_regions.path!r}"
             )
         else:
             validate_indexed_table(
-                args.calibration_regions,
+                calibration_regions.path,
                 "Calibration regions file",
                 errors,
                 warnings,
-                getattr(args, "calibration_regions_index", None),
+                calibration_regions.index,
             )
 
-    unit_description = f"Configured {args.unit} testing-unit BED file"
+    unit_description = f"Configured {unit} testing-unit BED file"
     validate_indexed_table(
-        args.testing_unit_bed,
+        testing_units.path,
         unit_description,
         errors,
         warnings,
-        getattr(args, "testing_unit_index", None),
+        testing_units.index,
     )
     unit_chromosomes = validate_bed_regions(
-        args.testing_unit_bed,
+        testing_units.path,
         unit_description,
         errors,
         required_columns=4,
         require_unit_id=True,
     )
 
-    exclusion_paths = optional_config_paths(args.variants_exclude)
-    par_paths = optional_config_paths(args.par_regions)
-    if not exclusion_paths and not par_paths:
+    configured_exclusions = [*exclusions, *par_regions]
+    if not configured_exclusions:
         warnings.append(
             "Neither reference.variants_exclude nor reference.par_regions was "
             "provided; exclusion filtering will be skipped"
         )
 
-    exclusion_indexes = list(getattr(args, "variant_exclude_indexes", []))
-    par_indexes = list(getattr(args, "par_region_indexes", []))
-    configured_exclusions = exclusion_paths + par_paths
-    configured_indexes = exclusion_indexes + par_indexes
     exclusion_chromosomes: set[str] = set()
-    for position, path in enumerate(configured_exclusions, start=1):
-        index_path = (
-            configured_indexes[position - 1]
-            if position <= len(configured_indexes)
-            else None
-        )
+    for position, resource in enumerate(configured_exclusions, start=1):
+        path = resource.path
         description = f"Exclusion file {position}"
         kind = genomic_resource_kind(path)
         if kind is None:
@@ -1126,10 +1072,10 @@ def validate_reference_tables(
             )
             continue
         if kind == "vcf":
-            validate_vcf_resource(path, description, errors, warnings, index_path)
+            validate_vcf_resource(path, description, errors, warnings, resource.index)
             continue
 
-        validate_indexed_table(path, description, errors, warnings, index_path)
+        validate_indexed_table(path, description, errors, warnings, resource.index)
         if kind == "bed":
             exclusion_chromosomes.update(
                 validate_bed_regions(path, description, errors)

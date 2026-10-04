@@ -8,12 +8,16 @@ rule filter_calibration_regions:
     Retain variants in the generated bundle's calibration regions, if present.
     """
     input:
-        vcf=WORKFLOW_INPUT_VCF,
-        vcf_index=WORKFLOW_INPUT_VCF_INDEX,
+        vcf=apply_resource("cohort").staged_data,
+        vcf_index=apply_resource("cohort").staged_index,
         validated=validation_marker,
-        calibration_regions=[WORKFLOW_CALIBRATION_REGIONS] if WORKFLOW_CALIBRATION_REGIONS else [],
+        calibration_regions=optional_input(
+            optional_resource_field("calibration_regions", "staged_data")
+        ),
         calibration_regions_index=(
-            [WORKFLOW_CALIBRATION_REGIONS_INDEX] if WORKFLOW_CALIBRATION_REGIONS else []
+            optional_input(
+                optional_resource_field("calibration_regions", "staged_index")
+            )
         )
     output:
         bcf=ensure(str(FILTERED_BCF), non_empty=True),
@@ -34,7 +38,7 @@ rule filter_calibration_regions:
             if input.calibration_regions
             else ""
         ),
-        calibration_regions_enabled="true" if WORKFLOW_CALIBRATION_REGIONS else "false"
+        calibration_regions_enabled="true" if optional_apply_resource("calibration_regions") else "false"
     shell:
         """
         if {params.calibration_regions_enabled}; then
@@ -67,8 +71,16 @@ rule filter_excluded_records:
     input:
         bcf=rules.filter_calibration_regions.output.bcf,
         bcf_csi=rules.filter_calibration_regions.output.csi,
-        exclusions=[COMBINED_EXCLUSIONS] if EXCLUSION_SOURCES else [],
-        exclusions_index=[COMBINED_EXCLUSIONS_INDEX] if EXCLUSION_SOURCES else []
+        exclusions=(
+            optional_input(APPLY_RESOURCE_REGISTRY.combined_exclusions)
+            if APPLY_RESOURCE_REGISTRY.exclusion_sources
+            else []
+        ),
+        exclusions_index=(
+            optional_input(APPLY_RESOURCE_REGISTRY.combined_exclusions_index)
+            if APPLY_RESOURCE_REGISTRY.exclusion_sources
+            else []
+        )
     output:
         vcf=ensure(str(FILTERED_VCF), non_empty=True),
         csi=ensure(str(FILTERED_VCF) + ".csi", non_empty=True)
@@ -88,7 +100,9 @@ rule filter_excluded_records:
             if input.exclusions
             else ""
         ),
-        exclusion_enabled="true" if EXCLUSION_SOURCES else "false"
+        exclusion_enabled=(
+            "true" if APPLY_RESOURCE_REGISTRY.exclusion_sources else "false"
+        )
     shell:
         """
         if {params.exclusion_enabled}; then

@@ -35,8 +35,14 @@ rule prepare_table_resource:
         cohort_index=table_resource_cohort_index,
         validated=validation_marker
     output:
-        data=ensure(str(PREPARED_TABLE_DIR / "{resource}.{extension}.gz"), non_empty=True),
-        index=ensure(str(PREPARED_TABLE_DIR / "{resource}.{extension}.gz.tbi"), non_empty=True)
+        data=ensure(
+            str(APPLY_RESOURCE_REGISTRY.prepared_table_dir / "{resource}.{extension}.gz"),
+            non_empty=True,
+        ),
+        index=ensure(
+            str(APPLY_RESOURCE_REGISTRY.prepared_table_dir / "{resource}.{extension}.gz.tbi"),
+            non_empty=True,
+        )
     params:
         kind=table_resource_kind,
         tsv_layout=table_resource_tsv_layout
@@ -62,16 +68,17 @@ rule prepare_table_resource:
 rule combine_exclusions:
     """Project full-span interval and exact-allele exclusions onto the cohort VCF."""
     input:
-        cohort=WORKFLOW_INPUT_VCF,
-        cohort_index=WORKFLOW_INPUT_VCF_INDEX,
-        exclusions=WORKFLOW_EXCLUSIONS,
+        cohort=apply_resource("cohort").staged_data,
+        cohort_index=apply_resource("cohort").staged_index,
+        exclusions=list(APPLY_RESOURCE_REGISTRY.workflow_exclusions),
         validated=validation_marker
     output:
-        vcf=ensure(COMBINED_EXCLUSIONS_VCF, non_empty=True)
+        vcf=ensure(APPLY_RESOURCE_REGISTRY.combined_exclusions_vcf, non_empty=True)
     params:
         sources=[
-            f"{EXCLUSION_KIND_BY_ID[item]}:{WORKFLOW_EXCLUSIONS[position]}"
-            for position, item in enumerate(EXCLUSION_IDS)
+            f"{APPLY_RESOURCE_REGISTRY.exclusion_kind_by_id[item]}:"
+            f"{APPLY_RESOURCE_REGISTRY.workflow_exclusions[position]}"
+            for position, item in enumerate(APPLY_RESOURCE_REGISTRY.exclusion_ids)
         ]
     threads: 1
     resources:

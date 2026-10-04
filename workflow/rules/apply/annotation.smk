@@ -1,7 +1,3 @@
-CADD_SNV = WORKFLOW_CADD_SNV
-CADD_INDEL = WORKFLOW_CADD_INDEL
-INCLUDE_INDELS = WORKFLOW_PLAN.model.include_indels
-TESTING_UNIT_BED = WORKFLOW_TESTING_UNIT
 ANNOTATED_VCF = ANNOTATION_DIR / f"{TESTING_UNIT}.vcf.gz"
 ANNOTATED_VCF_CSI = Path(f"{ANNOTATED_VCF}.csi")
 RAW_UNIT_ANNOTATIONS = ANNOTATION_DIR / f"{TESTING_UNIT}.annotated.tsv.gz"
@@ -16,20 +12,30 @@ rule annotate_variants:
     input:
         vcf=rules.filter_excluded_records.output.vcf,
         vcf_csi=rules.filter_excluded_records.output.csi,
-        cadd_snv=str(CADD_SNV),
-        cadd_snv_index=WORKFLOW_CADD_SNV_INDEX,
-        cadd_indel=[str(CADD_INDEL)] if INCLUDE_INDELS else [],
-        cadd_indel_index=(
-            [WORKFLOW_CADD_INDEL_INDEX] if INCLUDE_INDELS else []
+        cadd_snv=apply_resource("cadd_snv").staged_data,
+        cadd_snv_index=apply_resource("cadd_snv").staged_index,
+        cadd_indel=(
+            [
+                optional_resource_field("cadd_indel", "staged_data")
+            ]
+            if WORKFLOW_PLAN.model.include_indels
+            else []
         ),
-        unit_bed=TESTING_UNIT_BED,
-        unit_bed_index=WORKFLOW_TESTING_UNIT_INDEX
+        cadd_indel_index=(
+            [
+                optional_resource_field("cadd_indel", "staged_index")
+            ]
+            if WORKFLOW_PLAN.model.include_indels
+            else []
+        ),
+        unit_bed=apply_resource("testing_units").staged_data,
+        unit_bed_index=apply_resource("testing_units").staged_index
     output:
         vcf=ensure(str(ANNOTATED_VCF), non_empty=True),
         csi=ensure(str(ANNOTATED_VCF_CSI), non_empty=True),
         annotations=ensure(str(RAW_UNIT_ANNOTATIONS), non_empty=True)
     params:
-        include_indels=INCLUDE_INDELS,
+        include_indels=WORKFLOW_PLAN.model.include_indels,
         testing_unit=TESTING_UNIT
     threads: 8
     resources:
@@ -54,7 +60,7 @@ rule summarize_annotations:
     output:
         report=ensure(str(ANNOTATION_QC_REPORT), non_empty=True)
     params:
-        include_indels=INCLUDE_INDELS
+        include_indels=WORKFLOW_PLAN.model.include_indels
     threads: 1
     resources:
         mem_mb=policy_resources("summarize_annotations").mem_mb,

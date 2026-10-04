@@ -1,20 +1,24 @@
 rule validate_cohort:
     """Validate cohort VCF/metadata/FASTA inputs and write the sample manifest."""
     input:
-        vcf=VALIDATION_VCF,
-        vcf_index=VALIDATION_VCF_INDEX_INPUT,
-        metadata=VALIDATION_SAMPLES or VALIDATION_PED,
-        fasta=VALIDATION_FASTA,
-        fasta_index=VALIDATION_FASTA_INDEX,
-        fasta_gzi=VALIDATION_FASTA_GZI_INPUT,
+        vcf=apply_resource("cohort").source,
+        vcf_index=optional_input(apply_resource("cohort").source_index),
+        metadata=INPUT_BINDINGS.samples or INPUT_BINDINGS.ped or "",
+        fasta=apply_resource("fasta").source,
+        fasta_index=apply_resource("fasta").source_index,
+        fasta_gzi=optional_input(
+            apply_resource("fasta").companion_indexes[0]
+            if apply_resource("fasta").companion_indexes
+            else ""
+        ),
         libraries=VALIDATION_LIBRARIES,
         schema=VALIDATION_REPORT_SCHEMA
     output:
         report=ensure(str(COHORT_VALIDATION_REPORT), non_empty=True),
         manifest=protected(ensure(str(SAMPLE_MANIFEST_PATH), non_empty=True))
     params:
-        hemizygote_model=str(WORKFLOW_PLAN.model.hemizygote),
-        metadata_kind="samples" if VALIDATION_SAMPLES else "ped"
+        hemizygote_model=WORKFLOW_PLAN.model.hemizygote,
+        metadata_kind="samples" if INPUT_BINDINGS.samples else "ped"
     threads: 1
     resources:
         mem_mb=policy_resources("validate_cohort").mem_mb,
@@ -32,32 +36,62 @@ rule validate_cohort:
 rule validate_resources:
     """Validate interval, exclusion, testing-unit, and CADD resources."""
     input:
-        vcf=VALIDATION_VCF,
-        calibration_regions=VALIDATION_CALIBRATION_REGIONS_INPUT,
-        calibration_regions_index=VALIDATION_CALIBRATION_REGIONS_INDEX_INPUT,
-        variants_exclude=VALIDATION_VARIANT_EXCLUSIONS,
-        variant_exclude_indexes=[index for index in VALIDATION_VARIANT_EXCLUSION_INDEXES if index],
-        testing_unit_bed=VALIDATION_TESTING_UNIT_BED,
-        testing_unit_index=VALIDATION_TESTING_UNIT_INDEX_INPUT,
-        par_regions=VALIDATION_PAR_REGIONS,
-        par_region_indexes=[index for index in VALIDATION_PAR_REGION_INDEXES if index],
-        cadd_snv=VALIDATION_CADD_SNV,
-        cadd_snv_index=VALIDATION_CADD_SNV_INDEX_INPUT,
-        cadd_indel=VALIDATION_CADD_INDEL_INPUT,
-        cadd_indel_index=VALIDATION_CADD_INDEL_INDEX_INPUT,
+        vcf=apply_resource("cohort").source,
+        calibration_regions=optional_input(
+            optional_resource_field("calibration_regions", "source")
+        ),
+        calibration_regions_index=optional_input(
+            optional_resource_field("calibration_regions", "source_index")
+        ),
+        variants_exclude=[
+            resource_spec.source
+            for resource_spec in resources_with_role("variants_exclude")
+        ],
+        variant_exclude_indexes=[
+            resource_spec.source_index
+            for resource_spec in resources_with_role("variants_exclude")
+            if resource_spec.source_index
+        ],
+        testing_unit_bed=apply_resource("testing_units").source,
+        testing_unit_index=optional_input(apply_resource("testing_units").source_index),
+        par_regions=[
+            resource_spec.source
+            for resource_spec in resources_with_role("par_regions")
+        ],
+        par_region_indexes=[
+            resource_spec.source_index
+            for resource_spec in resources_with_role("par_regions")
+            if resource_spec.source_index
+        ],
+        cadd_snv=apply_resource("cadd_snv").source,
+        cadd_snv_index=optional_input(apply_resource("cadd_snv").source_index),
+        cadd_indel=(
+            [
+                optional_resource_field("cadd_indel", "source")
+            ]
+            if WORKFLOW_PLAN.model.include_indels
+            else []
+        ),
+        cadd_indel_index=(
+            optional_input(
+                optional_resource_field("cadd_indel", "source_index")
+            )
+            if WORKFLOW_PLAN.model.include_indels
+            else []
+        ),
         libraries=VALIDATION_LIBRARIES,
         schema=VALIDATION_REPORT_SCHEMA
     output:
         report=ensure(str(RESOURCE_VALIDATION_REPORT), non_empty=True)
     params:
         unit=WORKFLOW_PLAN.model.unit,
-        include_indels=str(WORKFLOW_PLAN.model.include_indels),
-        calibration_regions_index=VALIDATION_CALIBRATION_REGIONS_INDEX,
-        variant_exclude_indexes=VALIDATION_VARIANT_EXCLUSION_INDEXES,
-        testing_unit_index=VALIDATION_TESTING_UNIT_INDEX,
-        par_region_indexes=VALIDATION_PAR_REGION_INDEXES,
-        cadd_snv_index=VALIDATION_CADD_SNV_INDEX,
-        cadd_indel_index=VALIDATION_CADD_INDEL_INDEX
+        include_indels=WORKFLOW_PLAN.model.include_indels,
+        calibration_regions=optional_apply_resource_binding("calibration_regions"),
+        exclusions=resource_bindings_with_role("variants_exclude"),
+        testing_units=apply_resource_binding("testing_units"),
+        par_regions=resource_bindings_with_role("par_regions"),
+        cadd_snv=apply_resource_binding("cadd_snv"),
+        cadd_indel=optional_apply_resource_binding("cadd_indel")
     threads: 1
     resources:
         mem_mb=policy_resources("validate_resources").mem_mb,
@@ -75,29 +109,47 @@ rule validate_resources:
 rule validate_model:
     """Validate model configuration and enabled lookup resources."""
     input:
-        testing_unit_bed=VALIDATION_TESTING_UNIT_BED,
-        lookup_het=VALIDATION_LOOKUP_HET,
-        lookup_hom=VALIDATION_LOOKUP_HOM,
-        lookup_hem_chrx=VALIDATION_LOOKUP_HEM_CHRX_INPUT,
-        lookup_metadata=VALIDATION_LOOKUP_METADATA_INPUT,
-        lookup_validation=VALIDATION_LOOKUP_REPORT_INPUT,
-        lookup_marker=VALIDATION_LOOKUP_MARKER_INPUT,
-        lookup_eligible_units=VALIDATION_LOOKUP_ELIGIBLE_UNITS_INPUT,
-        lookup_calibration_mask=VALIDATION_LOOKUP_CALIBRATION_MASK_INPUT,
-        lookup_excluded_alleles=VALIDATION_LOOKUP_EXCLUDED_ALLELES_INPUT,
-        lookup_excluded_units=VALIDATION_LOOKUP_EXCLUDED_UNITS_INPUT,
+        testing_unit_bed=apply_resource("testing_units").source,
+        lookup_het=LOOKUP_SOURCE.tables["het"],
+        lookup_hom=LOOKUP_SOURCE.tables["hom"],
+        lookup_hem_chrx=(
+            [LOOKUP_SOURCE.tables["hem_chrX"]]
+            if WORKFLOW_PLAN.model.hemizygote
+            else []
+        ),
+        lookup_metadata=optional_input(LOOKUP_SOURCE.metadata),
+        lookup_validation=optional_input(LOOKUP_SOURCE.validation),
+        lookup_marker=optional_input(LOOKUP_SOURCE.marker),
+        lookup_eligible_units=(
+            optional_input(LOOKUP_SOURCE.eligible_units)
+            if LOOKUP_SOURCE.is_bundle
+            else []
+        ),
+        lookup_calibration_mask=(
+            optional_input(LOOKUP_SOURCE.calibration_mask)
+            if LOOKUP_SOURCE.is_bundle
+            else []
+        ),
+        lookup_excluded_alleles=(
+            list(LOOKUP_SOURCE.excluded_alleles) if LOOKUP_SOURCE.is_bundle else []
+        ),
+        lookup_excluded_units=(
+            optional_input(LOOKUP_SOURCE.excluded_units)
+            if LOOKUP_SOURCE.is_bundle
+            else []
+        ),
         libraries=VALIDATION_LIBRARIES,
         schema=VALIDATION_REPORT_SCHEMA
     output:
         report=ensure(str(MODEL_VALIDATION_REPORT), non_empty=True)
     params:
-        score_max=str(WORKFLOW_PLAN.model.score_max),
+        score_max=WORKFLOW_PLAN.model.score_max,
         assembly=WORKFLOW_PLAN.reference.assembly,
         unit=WORKFLOW_PLAN.model.unit,
-        hemizygote_model=str(WORKFLOW_PLAN.model.hemizygote),
-        include_indels=str(WORKFLOW_PLAN.model.include_indels),
+        hemizygote_model=WORKFLOW_PLAN.model.hemizygote,
+        include_indels=WORKFLOW_PLAN.model.include_indels,
         lookup_contract=LOOKUP_SOURCE.contract,
-        lookup_bin_width=LOOKUP_SOURCE.bin_width or ""
+        lookup_bin_width=LOOKUP_SOURCE.bin_width
     threads: 1
     resources:
         mem_mb=policy_resources("validate_model").mem_mb,

@@ -32,7 +32,7 @@ def main() -> None:
         fasta=snakemake.input.fasta,
         fasta_index=snakemake.input.fasta_index,
         fasta_gzi=fasta_gzi,
-        hemizygote_model=str(snakemake.params.hemizygote_model),
+        hemizygote_model=snakemake.params.hemizygote_model,
         manifest_path=snakemake.output.manifest,
     )
     write_validation_report(report, snakemake.output.report, create_parents=False)

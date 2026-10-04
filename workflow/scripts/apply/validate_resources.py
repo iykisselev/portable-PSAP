@@ -1,6 +1,5 @@
 """Validate resource contracts through injected Snakemake inputs and parameters."""
 
-from types import SimpleNamespace
 from pathlib import Path
 import sys
 
@@ -10,8 +9,15 @@ from _library import add_library_path
 
 add_library_path(snakemake.scriptdir)
 
+from validation import IndexedResource
 from validation_reporting import write_validation_report
 from validation_resources import validate_resource_inputs
+
+
+def indexed_resource(binding) -> IndexedResource:
+    """Build one typed binding without inferring an index by position."""
+    path, index = binding
+    return IndexedResource(path=str(path), index=str(index) if index else None)
 
 
 def main() -> None:
@@ -21,25 +27,30 @@ def main() -> None:
     required indexes and annotation resources, and writes the resulting JSON
     report for the workflow validation gate.
     """
-    args = SimpleNamespace(
-        vcf=str(snakemake.input.vcf),
-        calibration_regions=str(snakemake.input.calibration_regions[0]) if snakemake.input.calibration_regions else "None",
-        variants_exclude=",".join(map(str, snakemake.input.variants_exclude)) or "None",
-        testing_unit_bed=str(snakemake.input.testing_unit_bed),
-        par_regions=",".join(map(str, snakemake.input.par_regions)) or "None",
-        cadd_snv=str(snakemake.input.cadd_snv),
-        cadd_indel=str(snakemake.input.cadd_indel[0]) if snakemake.input.cadd_indel else "None",
-        calibration_regions_index=str(snakemake.params.calibration_regions_index) or None,
-        variant_exclude_indexes=list(snakemake.params.variant_exclude_indexes),
-        testing_unit_index=str(snakemake.params.testing_unit_index) or None,
-        par_region_indexes=list(snakemake.params.par_region_indexes),
-        cadd_snv_index=str(snakemake.params.cadd_snv_index) or None,
-        cadd_indel_index=str(snakemake.params.cadd_indel_index) or None,
-        unit=str(snakemake.params.unit),
-        include_indels=str(snakemake.params.include_indels),
-    )
+    calibration_binding = snakemake.params.calibration_regions
+    cadd_indel_binding = snakemake.params.cadd_indel
     write_validation_report(
-        validate_resource_inputs(args),
+        validate_resource_inputs(
+            vcf=str(snakemake.input.vcf),
+            calibration_regions=(
+                indexed_resource(calibration_binding)
+                if calibration_binding
+                else None
+            ),
+            exclusions=[
+                indexed_resource(binding) for binding in snakemake.params.exclusions
+            ],
+            testing_units=indexed_resource(snakemake.params.testing_units),
+            par_regions=[
+                indexed_resource(binding) for binding in snakemake.params.par_regions
+            ],
+            cadd_snv=indexed_resource(snakemake.params.cadd_snv),
+            cadd_indel=(
+                indexed_resource(cadd_indel_binding) if cadd_indel_binding else None
+            ),
+            unit=str(snakemake.params.unit),
+            include_indels=snakemake.params.include_indels,
+        ),
         snakemake.output.report,
         create_parents=False,
     )

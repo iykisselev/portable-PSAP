@@ -4,6 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -11,6 +12,7 @@ SCRIPT_DIR = Path(__file__).parents[1] / "workflow" / "lib" / "python"
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from validation import (  # noqa: E402
+    IndexedResource,
     read_ped,
     read_samples_tsv,
     validate_cadd_chromosome_names,
@@ -18,9 +20,13 @@ from validation import (  # noqa: E402
     validate_hemizygote_chromosomes,
     validate_indexed_table,
     validate_lookup_unit_overlap,
+    validate_reference_tables,
     validate_region_chromosomes,
 )
 import resources  # noqa: E402
+from validation_cohort import validate_cohort_inputs  # noqa: E402
+from validation_model import validate_model_inputs  # noqa: E402
+from validation_resources import validate_resource_inputs  # noqa: E402
 
 
 class ValidationTests(unittest.TestCase):
@@ -253,6 +259,156 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(errors, [])
             self.assertFalse(any("no configured index" in warning for warning in warnings))
             self.assertFalse((temp_path / "resource.tsv.tbi").exists())
+
+    def test_reference_tables_preserve_comma_paths_and_index_bindings(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            testing_units = temp_path / "units.bed"
+            unindexed_exclusion = temp_path / "first,exclusion.bed"
+            indexed_exclusion = temp_path / "second-exclusion.bed"
+            exclusion_index = temp_path / "second-exclusion.index.tbi"
+            par_regions = temp_path / "par.bed"
+            for path, contents in (
+                (testing_units, "1\t0\t10\tUNIT1\n"),
+                (unindexed_exclusion, "1\t0\t5\n"),
+                (indexed_exclusion, "1\t5\t10\n"),
+                (par_regions, "X\t0\t10\n"),
+            ):
+                path.write_text(contents, encoding="utf-8")
+            exclusion_index.write_text("index\n", encoding="utf-8")
+            errors: list[str] = []
+            warnings: list[str] = []
+
+            chromosomes = validate_reference_tables(
+                calibration_regions=None,
+                exclusions=(
+                    IndexedResource(unindexed_exclusion),
+                    IndexedResource(indexed_exclusion, exclusion_index),
+                ),
+                testing_units=IndexedResource(testing_units),
+                par_regions=(IndexedResource(par_regions),),
+                unit="gene",
+                errors=errors,
+                warnings=warnings,
+            )
+
+            self.assertEqual(errors, [])
+            self.assertEqual(chromosomes["testing_unit"], {"1"})
+            self.assertEqual(chromosomes["exclusions"], {"1", "X"})
+            self.assertTrue(any("first,exclusion.bed" in warning for warning in warnings))
+            self.assertTrue(
+                any(
+                    "Exclusion file 1 has no configured index" in warning
+                    for warning in warnings
+                )
+            )
+            self.assertFalse(
+                any(
+                    "Exclusion file 2 has no configured index" in warning
+                    for warning in warnings
+                )
+            )
+            self.assertTrue(
+                any(
+                    "Exclusion file 3 has no configured index" in warning
+                    for warning in warnings
+                )
+            )
+
+    def test_resource_validation_forwards_indexed_resource_bindings(self) -> None:
+        exclusions = (
+            IndexedResource("first,exclusion.bed"),
+            IndexedResource("second-exclusion.bed", "second-exclusion.tbi"),
+        )
+        with (
+            patch(
+                "validation_resources.validate_reference_tables",
+                return_value={"testing_unit": {"1"}, "exclusions": {"1"}},
+            ) as validate_tables,
+            patch("validation_resources.read_vcf", return_value=([], {"1": "1"})),
+            patch(
+                "validation_resources.validate_cadd_resources", return_value={}
+            ) as validate_cadd,
+        ):
+            report = validate_resource_inputs(
+                vcf="cohort.vcf.gz",
+                calibration_regions=None,
+                exclusions=exclusions,
+                testing_units=IndexedResource("units.bed", "units.bed.tbi"),
+                par_regions=(),
+                cadd_snv=IndexedResource("cadd.tsv.gz", "cadd.tsv.gz.tbi"),
+                cadd_indel=None,
+                unit="gene",
+                include_indels=False,
+        )
+
+        self.assertEqual(validate_tables.call_args.kwargs["exclusions"], exclusions)
+        self.assertIs(validate_cadd.call_args.args[2], False)
+        self.assertIs(report["summary"]["include_indels"], False)
+
+    def test_cohort_validation_passes_a_native_hemizygote_boolean(self) -> None:
+        metadata = {
+            "manifest": [],
+            "all_sample_ids": [],
+            "excluded_phenotype_sample_ids": [],
+            "sex_counts": {},
+            "phenotype_counts": {},
+        }
+        with (
+            patch("validation_cohort.read_samples_tsv", return_value=metadata),
+            patch("validation_cohort.write_sample_manifest"),
+            patch(
+                "validation_cohort.read_sample_manifest_index",
+                return_value=SimpleNamespace(records=[]),
+            ),
+            patch("validation_cohort.read_vcf", return_value=([], {"1": "1"})),
+            patch(
+                "validation_cohort.validate_hemizygote_chromosomes"
+            ) as validate_hemizygote,
+            patch("validation_cohort.validate_vcf_samples"),
+            patch("validation_cohort.validate_vcf_resource"),
+            patch("validation_cohort.validate_fasta"),
+            patch("validation_cohort.validate_normalized_split_vcf"),
+        ):
+            validate_cohort_inputs(
+                metadata_path="samples.tsv",
+                metadata_kind="samples",
+                vcf="cohort.vcf.gz",
+                vcf_index=None,
+                fasta="reference.fa",
+                fasta_index="reference.fa.fai",
+                fasta_gzi=None,
+                hemizygote_model=True,
+                manifest_path="sample_manifest.tsv",
+            )
+
+        self.assertIs(validate_hemizygote.call_args.args[0], True)
+
+    def test_model_validation_passes_native_model_booleans(self) -> None:
+        with (
+            patch("validation_model.validate_lookup_files", return_value=[]) as files,
+            patch("validation_model.validate_lookup_unit_overlap", return_value={}),
+        ):
+            report = validate_model_inputs(
+                score_max=20.0,
+                assembly="GRCh38",
+                unit="gene",
+                hemizygote_model=True,
+                include_indels=False,
+                testing_unit_bed="units.bed",
+                lookup_tables={"het": "het.tsv", "hom": "hom.tsv", "hem_chrX": "hem.tsv"},
+                lookup_contract="external_legacy_v0",
+                lookup_bin_width=None,
+                bundle_certificate=None,
+                bundle_components={},
+            )
+
+        self.assertEqual(
+            files.call_args.args[1],
+            {"hemizygote": True, "include_indels": False},
+        )
+        self.assertIs(report["summary"]["hemizygote_model"], True)
+        self.assertIs(report["summary"]["include_indels"], False)
 
     def test_staging_accepts_a_declared_nonconventional_index(self) -> None:
         with TemporaryDirectory() as temp_dir:

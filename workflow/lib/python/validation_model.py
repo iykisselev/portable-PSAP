@@ -4,32 +4,51 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from types import SimpleNamespace
+from typing import Mapping
 
 from bundle_contract import is_supported_contract
 from bundle_certificate import BundleCertificateError, verify_bundle_certificate
 from validation import (
-    parse_model_settings,
     validate_lookup_files,
     validate_lookup_unit_overlap,
 )
 from validation_reporting import build_validation_report
 
 
+VALID_UNITS = frozenset({"gene", "cadd_region", "coding_cadd_region"})
+
+
 def validate_model_inputs(
     *,
-    args: SimpleNamespace,
+    score_max: float,
+    assembly: str,
+    unit: str,
+    hemizygote_model: bool,
+    include_indels: bool,
     testing_unit_bed: str | Path,
-    lookup_tables: dict[str, str],
+    lookup_tables: Mapping[str, str],
     lookup_contract: str,
-    lookup_bin_width: str,
-    bundle_certificate: dict[str, str | Path] | None,
-    bundle_components: dict[str, str | Path],
+    lookup_bin_width: float | None,
+    bundle_certificate: Mapping[str, str | Path] | None,
+    bundle_components: Mapping[str, str | Path],
 ) -> dict[str, object]:
     """Validate model settings and either an external or certified lookup source."""
     errors: list[str] = []
     warnings: list[str] = []
-    settings = parse_model_settings(args, errors)
+    if unit not in VALID_UNITS:
+        errors.append(
+            "unit must be one of "
+            + ", ".join(sorted(VALID_UNITS))
+            + f"; received {unit!r}"
+        )
+    if not assembly.strip():
+        errors.append("assembly cannot be empty")
+    if score_max <= 0:
+        errors.append(f"score_max must be positive; received {score_max!r}")
+    settings = {
+        "hemizygote": hemizygote_model,
+        "include_indels": include_indels,
+    }
     checked = validate_lookup_files(lookup_tables, settings, errors)
     overlap = validate_lookup_unit_overlap(
         testing_unit_bed,
@@ -53,16 +72,16 @@ def validate_model_inputs(
             roles = metadata["model_assumptions"]["roles"]
             if bool(settings["hemizygote"]) != ("hem_chrX" in roles):
                 errors.append("Generated lookup HEM role does not match model.hemizygote")
-            if metadata.get("assembly") != args.assembly:
+            if metadata.get("assembly") != assembly:
                 errors.append("Generated lookup assembly differs from reference.assembly")
-            if metadata.get("testing_unit_type") != args.unit:
+            if metadata.get("testing_unit_type") != unit:
                 errors.append(
                     "Generated lookup testing-unit type differs from model.unit"
                 )
             binning = metadata["binning"]
             if not math.isclose(
                 float(binning["score_max"]),
-                float(args.score_max),
+                score_max,
                 rel_tol=0,
                 abs_tol=1e-12,
             ):
@@ -84,8 +103,8 @@ def validate_model_inputs(
         errors=errors,
         warnings=warnings,
         summary={
-            "unit": args.unit,
-            "assembly": args.assembly,
+            "unit": unit,
+            "assembly": assembly,
             "hemizygote_model": settings["hemizygote"],
             "include_indels": settings["include_indels"],
             "lookup_contract": lookup_contract,

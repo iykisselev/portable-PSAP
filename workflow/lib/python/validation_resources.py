@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from pathlib import Path
+from typing import Sequence
 
 from validation import (
-    parse_bool,
+    IndexedResource,
     read_vcf,
     validate_annotation_chromosome_names,
     validate_cadd_chromosome_names,
@@ -16,14 +17,32 @@ from validation import (
 from validation_reporting import build_validation_report
 
 
-def validate_resource_inputs(args: SimpleNamespace) -> dict[str, object]:
+def validate_resource_inputs(
+    *,
+    vcf: str | Path,
+    calibration_regions: IndexedResource | None,
+    exclusions: Sequence[IndexedResource],
+    testing_units: IndexedResource,
+    par_regions: Sequence[IndexedResource],
+    cadd_snv: IndexedResource,
+    cadd_indel: IndexedResource | None,
+    unit: str,
+    include_indels: bool,
+) -> dict[str, object]:
     """Validate reference formats and chromosome compatibility in one category."""
     errors: list[str] = []
     warnings: list[str] = []
-    include_indels = parse_bool(args.include_indels, "include_indels", errors)
-    reference_chromosomes = validate_reference_tables(args, errors, warnings)
+    reference_chromosomes = validate_reference_tables(
+        calibration_regions=calibration_regions,
+        exclusions=exclusions,
+        testing_units=testing_units,
+        par_regions=par_regions,
+        unit=unit,
+        errors=errors,
+        warnings=warnings,
+    )
     vcf_errors: list[str] = []
-    _, vcf_chromosomes = read_vcf(args.vcf, vcf_errors)
+    _, vcf_chromosomes = read_vcf(vcf, vcf_errors)
     errors.extend(vcf_errors)
     validate_region_chromosomes(
         reference_chromosomes["exclusions"],
@@ -34,17 +53,17 @@ def validate_resource_inputs(args: SimpleNamespace) -> dict[str, object]:
     validate_annotation_chromosome_names(
         reference_chromosomes["testing_unit"],
         vcf_chromosomes,
-        f"Configured {args.unit} testing-unit BED file",
+        f"Configured {unit} testing-unit BED file",
         warnings,
     )
     cadd_chromosomes = validate_cadd_resources(
-        args.cadd_snv,
-        args.cadd_indel,
+        cadd_snv.path,
+        cadd_indel.path if cadd_indel else None,
         include_indels,
         errors,
         warnings,
-        args.cadd_snv_index,
-        args.cadd_indel_index,
+        cadd_snv.index,
+        cadd_indel.index if cadd_indel else None,
     )
     for filename, chromosomes in cadd_chromosomes.items():
         validate_cadd_chromosome_names(

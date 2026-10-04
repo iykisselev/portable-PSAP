@@ -1,6 +1,5 @@
 """Validate model resources through injected Snakemake inputs and parameters."""
 
-from types import SimpleNamespace
 from pathlib import Path
 import sys
 
@@ -22,13 +21,6 @@ def main() -> None:
     checks every enabled lookup table, and writes a JSON report used by the
     shared validation gate.
     """
-    args = SimpleNamespace(
-        score_max=str(snakemake.params.score_max),
-        assembly=str(snakemake.params.assembly),
-        unit=str(snakemake.params.unit),
-        hemizygote_model=str(snakemake.params.hemizygote_model),
-        include_indels=str(snakemake.params.include_indels),
-    )
     configured = {
         "het": str(snakemake.input.lookup_het),
         "hom": str(snakemake.input.lookup_hom),
@@ -51,14 +43,18 @@ def main() -> None:
             "excluded_alleles": str(snakemake.input.lookup_excluded_alleles[0]),
             "excluded_units": str(snakemake.input.lookup_excluded_units[0]),
         }
-        if str(snakemake.params.hemizygote_model).lower() == "true":
+        if snakemake.params.hemizygote_model:
             components["lookup_hem_chrX"] = configured["hem_chrX"]
     report = validate_model_inputs(
-        args=args,
+        score_max=snakemake.params.score_max,
+        assembly=str(snakemake.params.assembly),
+        unit=str(snakemake.params.unit),
+        hemizygote_model=snakemake.params.hemizygote_model,
+        include_indels=snakemake.params.include_indels,
         testing_unit_bed=snakemake.input.testing_unit_bed,
         lookup_tables=configured,
         lookup_contract=contract,
-        lookup_bin_width=str(snakemake.params.lookup_bin_width),
+        lookup_bin_width=snakemake.params.lookup_bin_width,
         bundle_certificate=certificate,
         bundle_components=components,
     )

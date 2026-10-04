@@ -6,7 +6,6 @@ from pathlib import Path
 
 from sample_manifest import read_sample_manifest_index, write_sample_manifest
 from validation import (
-    parse_bool,
     read_ped,
     read_samples_tsv,
     read_vcf,
@@ -28,13 +27,12 @@ def validate_cohort_inputs(
     fasta: str | Path,
     fasta_index: str | Path,
     fasta_gzi: str | Path | None,
-    hemizygote_model: str,
+    hemizygote_model: bool,
     manifest_path: str | Path,
 ) -> dict[str, object]:
     """Publish and validate one canonical sample manifest against the cohort VCF."""
     errors: list[str] = []
     warnings: list[str] = []
-    hemizygote = parse_bool(hemizygote_model, "hemizygote_model", errors)
     if metadata_kind == "ped":
         metadata = read_ped(metadata_path, errors, warnings)
         metadata_label = "PED"
@@ -49,7 +47,7 @@ def validate_cohort_inputs(
     write_sample_manifest(metadata["manifest"], manifest_path, create_parents=False)
     manifest = read_sample_manifest_index(manifest_path)
     vcf_samples, vcf_chromosomes = read_vcf(vcf, errors)
-    validate_hemizygote_chromosomes(hemizygote, vcf_chromosomes, errors)
+    validate_hemizygote_chromosomes(hemizygote_model, vcf_chromosomes, errors)
     validate_vcf_samples(
         vcf_samples,
         [record.pid for record in manifest.records],
