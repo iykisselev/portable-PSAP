@@ -17,8 +17,8 @@ workflow_config <- function() {
   list(
     input = snakemake@input[["gt"]],
     output = snakemake@output[["gt"]],
-    hemizygote = parse_bool(
-      as.character(snakemake@params[["hemizygote_model"]]),
+    hemizygote = require_boolean(
+      snakemake@params[["hemizygote_model"]],
       "model.hemizygote"
     ),
     threads = snakemake@threads

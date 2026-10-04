@@ -14,7 +14,7 @@ workflow_config <- function() {
     values <- as.character(snakemake@input[[name]])
     if (length(values)) values else NULL
   }
-  hemizygote_model <- parse_bool(as.character(snakemake@params[["hemizygote"]]), "model.hemizygote")
+  hemizygote_model <- require_boolean(snakemake@params[["hemizygote"]], "model.hemizygote")
   hem_chrX <- as.character(snakemake@input[["lookup_hem_chrx"]])
   if (length(hem_chrX) == 0L) hem_chrX <- ""
   score_max <- as.numeric(snakemake@params[["score_max"]])

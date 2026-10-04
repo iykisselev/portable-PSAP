@@ -178,6 +178,18 @@ class WorkflowPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkflowPlanError, "must be a boolean"):
             build_workflow_plan(manifest)
 
+    def test_model_flags_require_real_booleans(self) -> None:
+        for field in ("hemizygote", "include_indels"):
+            for invalid_value in ("false", "true", 0, 1, None):
+                with self.subTest(field=field, invalid_value=invalid_value):
+                    manifest = self.manifest("tests/smoke/run.yaml")
+                    manifest["model"][field] = invalid_value
+
+                    with self.assertRaisesRegex(
+                        WorkflowPlanError, f"model.{field} must be a boolean"
+                    ):
+                        build_workflow_plan(manifest)
+
     def test_full_plan_requires_one_shared_par_role(self) -> None:
         manifest = self.manifest("tests/null_distribution/full.run.yaml")
         manifest["reference"]["exclusions"][1]["role"] = "variants_exclude"

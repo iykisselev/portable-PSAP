@@ -72,6 +72,13 @@ def _number(value: Any, key: str, converter: type[float] | type[int]) -> float |
         raise WorkflowPlanError(f"{key} must be a {converter.__name__}") from exc
 
 
+def _boolean(value: Any, key: str) -> bool:
+    """Require a real configuration boolean rather than coercing truthy values."""
+    if not isinstance(value, bool):
+        raise WorkflowPlanError(f"{key} must be a boolean")
+    return value
+
+
 def _frozen_mapping(values: Mapping[str, str]) -> Mapping[str, str]:
     return MappingProxyType(dict(values))
 
@@ -576,8 +583,10 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
     model_config = _mapping(normalized.get("model"), "model")
     model = ModelPlan(
         unit=_required(model_config.get("unit"), "model.unit"),
-        hemizygote=bool(model_config.get("hemizygote")),
-        include_indels=bool(model_config.get("include_indels")),
+        hemizygote=_boolean(model_config.get("hemizygote"), "model.hemizygote"),
+        include_indels=_boolean(
+            model_config.get("include_indels"), "model.include_indels"
+        ),
         score_max=_number(model_config.get("score_max"), "model.score_max", float),
     )
     generation_settings_config = _mapping(

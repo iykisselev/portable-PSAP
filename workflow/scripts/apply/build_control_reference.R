@@ -18,7 +18,7 @@ workflow_config <- function() {
   if (length(unique(lengths)) != 1L) abort("Control input counts differ: %s", paste(names(lengths), lengths, sep = "=", collapse = ", "))
   list(
     input = inputs, psap_input = psap_inputs, pid = pids, sex_value = vapply(sexes, parse_sex, numeric(1)),
-    hemizygote_model = parse_bool(as.character(snakemake@params[["hemizygote"]]), "model.hemizygote"),
+    hemizygote_model = require_boolean(snakemake@params[["hemizygote"]], "model.hemizygote"),
     deduplicate = isTRUE(snakemake@params[["deduplicate"]]), output = snakemake@output[["control_variants"]], threads = snakemake@threads
   )
 }

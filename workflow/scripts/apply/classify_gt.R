@@ -18,8 +18,8 @@ workflow_config <- function() {
     input = snakemake@input[["gt"]],
     output = snakemake@output[["gt"]],
     sex_value = parse_sex(as.character(snakemake@params[["sex"]])),
-    hemizygote = parse_bool(
-      as.character(snakemake@params[["hemizygote_model"]]),
+    hemizygote = require_boolean(
+      snakemake@params[["hemizygote_model"]],
       "model.hemizygote"
     ),
     threads = snakemake@threads

@@ -32,6 +32,13 @@ expect_error <- function(expression, pattern) {
 }
 
 
+stopifnot(isTRUE(require_boolean(TRUE, "model.hemizygote")))
+expect_error(
+    require_boolean("false", "model.hemizygote"),
+    "must be a boolean"
+)
+
+
 haploid <- data.table(CHROM = "chrX", GT = "1")
 standardized <- standardize_genotypes(copy(haploid), hemizygote_model = TRUE)
 stopifnot(

@@ -1,22 +1,14 @@
-`%||%` <- function(value, replacement) {
-  if (is.null(value)) replacement else value
-}
-
-
 abort <- function(...) {
   stop(sprintf(...), call. = FALSE)
 }
 
 
-parse_bool <- function(value, name) {
-  normalized <- tolower(trimws(as.character(value)))
-  if (identical(normalized, "true")) {
-    return(TRUE)
+require_boolean <- function(value, name) {
+  if (!is.logical(value) || length(value) != 1L || is.na(value)) {
+    display_value <- if (length(value)) paste(as.character(value), collapse = ", ") else "NULL"
+    abort("%s must be a boolean; received %s", name, display_value)
   }
-  if (identical(normalized, "false")) {
-    return(FALSE)
-  }
-  abort("%s must be True or False; received %s", name, value)
+  value
 }
 
 
@@ -30,15 +22,7 @@ parse_sex <- function(value) {
 
   sex <- suppressWarnings(as.numeric(normalized))
   if (is.na(sex)) {
-    abort("--sex must be numeric or missing; received %s", value)
+    abort("sex must be numeric or missing; received %s", value)
   }
   sex
-}
-
-
-require_positive_threads <- function(value) {
-  if (is.na(value) || value < 1L) {
-    abort("--threads must be a positive integer")
-  }
-  invisible(TRUE)
 }
