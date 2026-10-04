@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from generation_manifests import read_partition_manifest as _read_partition_manifest
+from generation_manifests import read_partition_manifest
 from genomic_contracts import canonical_chromosome
 
 
@@ -40,22 +40,39 @@ def read_fasta_index(path: str | Path) -> dict[str, tuple[str, int]]:
 
 def build_partitions(
     fasta_index: str | Path,
-    chromosomes: set[str],
+    testing_unit_intervals: list[tuple[str, int, int]],
     partition_size: int,
 ) -> list[GenomePartition]:
-    """Divide testing-unit contigs into stable, non-overlapping windows."""
+    """Return fixed-size windows that intersect eligible testing-unit intervals."""
     if partition_size <= 0:
         raise ValueError("generation.execution.partition_size_bp must be positive")
     fasta_contigs = read_fasta_index(fasta_index)
+    chromosomes = {chromosome for chromosome, _, _ in testing_unit_intervals}
     missing = sorted(chromosomes - set(fasta_contigs))
     if missing:
         raise ValueError("Testing-unit contigs are absent from the FASTA index: " + ", ".join(missing))
 
+    selected_windows: dict[str, set[int]] = {}
+    for chromosome, interval_start, interval_end in testing_unit_intervals:
+        _, contig_length = fasta_contigs[chromosome]
+        if interval_start < 0 or interval_end <= interval_start:
+            raise ValueError(f"Testing-unit interval on {chromosome} is invalid")
+        if interval_end > contig_length:
+            raise ValueError(
+                f"Testing-unit interval on {chromosome} extends beyond the FASTA contig"
+            )
+        first_window = interval_start // partition_size
+        last_window = (interval_end - 1) // partition_size
+        selected_windows.setdefault(chromosome, set()).update(
+            range(first_window, last_window + 1)
+        )
+
     partitions: list[GenomePartition] = []
     ordinal = 0
-    for chromosome in sorted(chromosomes):
+    for chromosome in sorted(selected_windows):
         _, length = fasta_contigs[chromosome]
-        for start in range(0, length, partition_size):
+        for window in sorted(selected_windows[chromosome]):
+            start = window * partition_size
             end = min(start + partition_size, length)
             partitions.append(
                 GenomePartition(
@@ -70,7 +87,7 @@ def build_partitions(
     return partitions
 
 
-def read_partition_manifest(path: str | Path) -> list[GenomePartition]:
+def read_genome_partitions(path: str | Path) -> list[GenomePartition]:
     """Load validated scope partitions into the partition-local record type."""
     return [
         GenomePartition(
@@ -80,13 +97,13 @@ def read_partition_manifest(path: str | Path) -> list[GenomePartition]:
             end=entry.end,
             ordinal=entry.ordinal,
         )
-        for entry in _read_partition_manifest(path)
+        for entry in read_partition_manifest(path)
     ]
 
 
 def partition_from_manifest(path: str | Path, identifier: str) -> GenomePartition:
     """Resolve one requested wildcard without reconstructing coordinates from text."""
-    for partition in read_partition_manifest(path):
+    for partition in read_genome_partitions(path):
         if partition.identifier == identifier:
             return partition
     raise ValueError(f"Unknown generation partition {identifier!r}")

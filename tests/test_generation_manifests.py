@@ -16,9 +16,16 @@ from generation_manifests import (  # noqa: E402
     BUCKET_MANIFEST_SCHEMA_VERSION,
     PARTITION_MANIFEST_SCHEMA_VERSION,
     GenerationManifestError,
+    PartitionManifestEntry,
     bucket_from_manifest,
     bucket_ids,
     partition_ids,
+    read_partition_manifest,
+)
+from generation_partitions import (  # noqa: E402
+    GenomePartition,
+    build_partitions,
+    read_genome_partitions,
 )
 
 
@@ -62,6 +69,10 @@ class GenerationManifestTests(unittest.TestCase):
             self.assertEqual(
                 ("1_000000000000_000000000010",), partition_ids(partitions)
             )
+            self.assertIsInstance(
+                read_partition_manifest(partitions)[0], PartitionManifestEntry
+            )
+            self.assertIsInstance(read_genome_partitions(partitions)[0], GenomePartition)
             self.assertEqual(("00000",), bucket_ids(buckets))
             self.assertEqual(("UNIT_A", "UNIT_B"), bucket_from_manifest(buckets, "00000").unit_ids)
 
@@ -82,6 +93,29 @@ class GenerationManifestTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(GenerationManifestError, "noncanonical"):
                 bucket_ids(path)
+
+    def test_partitions_cover_only_windows_with_eligible_testing_units(self) -> None:
+        with TemporaryDirectory() as temporary:
+            fasta_index = Path(temporary) / "reference.fa.fai"
+            fasta_index.write_text("1\t30\t0\t0\t0\nX\t30\t0\t0\t0\n", encoding="utf-8")
+
+            partitions = build_partitions(
+                fasta_index,
+                [("1", 2, 8), ("1", 9, 12), ("X", 20, 21)],
+                10,
+            )
+
+            self.assertEqual(
+                [
+                    ("1_000000000000_000000000010", "1", 0, 10),
+                    ("1_000000000010_000000000020", "1", 10, 20),
+                    ("X_000000000020_000000000030", "X", 20, 30),
+                ],
+                [
+                    (partition.identifier, partition.chromosome, partition.start, partition.end)
+                    for partition in partitions
+                ],
+            )
 
 
 if __name__ == "__main__":

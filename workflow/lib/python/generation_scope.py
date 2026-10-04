@@ -82,12 +82,6 @@ def prepare_generation_scope(
             merged_intervals, calibration_mask.get(chromosome, [])
         ):
             callable_unit_intervals.append((unit_id, chromosome, start, end))
-    genome_partitions = build_partitions(
-        inputs.fasta_fai,
-        {chromosome for _, chromosome, _, _ in unit_intervals},
-        int(params.partition_size),
-    )
-
     unit_retention_frame = pl.DataFrame(
         unit_retention_rows,
         schema=[
@@ -99,6 +93,18 @@ def prepare_generation_scope(
             "status",
         ],
         orient="row",
+    )
+    eligible_unit_ids = set(
+        unit_retention_frame.filter(pl.col("status") == "eligible")["testing_unit_id"].to_list()
+    )
+    genome_partitions = build_partitions(
+        inputs.fasta_fai,
+        [
+            (chromosome, start, end)
+            for unit_id, chromosome, start, end in unit_intervals
+            if unit_id in eligible_unit_ids
+        ],
+        int(params.partition_size),
     )
     write_parquet_atomic(unit_retention_frame, outputs.units, params.compression)
     write_parquet_atomic(

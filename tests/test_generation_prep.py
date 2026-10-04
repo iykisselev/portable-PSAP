@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import random
 import sys
 import unittest
@@ -70,6 +71,11 @@ class GenerationPreparationTests(unittest.TestCase):
             self.assertEqual(rows["UNIT_X_MIXED_PAR"]["supported_bases"], 8)
             self.assertEqual(rows["UNIT_X_MIXED_PAR"]["retained_fraction"], 0.5)
             self.assertEqual(rows["UNIT_X_MIXED_PAR"]["status"], "eligible")
+            partitions = json.loads(outputs.partitions.read_text(encoding="utf-8"))["partitions"]
+            self.assertEqual(
+                ["X_000000000000_000000000010"],
+                [partition["partition_id"] for partition in partitions],
+            )
 
     def test_configured_info_tag_preserves_zero_and_rejects_other_states(self) -> None:
         rows = population_rows(
