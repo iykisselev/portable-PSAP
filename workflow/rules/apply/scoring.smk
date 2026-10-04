@@ -36,8 +36,8 @@ rule apply_psap:
         lookup_bin_width=LOOKUP_SOURCE.bin_width or ""
     threads: 4
     resources:
-        mem_mb=16000,
-        runtime=360
+        mem_mb=policy_resources("apply_psap").mem_mb,
+        runtime=policy_resources("apply_psap").runtime
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")

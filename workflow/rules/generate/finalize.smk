@@ -59,8 +59,8 @@ rule finalize_null_distribution_bundle:
         }
     threads: 1
     resources:
-        mem_mb=2048,
-        runtime=120
+        mem_mb=policy_resources("finalize_null_distribution_bundle").mem_mb,
+        runtime=policy_resources("finalize_null_distribution_bundle").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")
@@ -92,8 +92,8 @@ rule validate_null_distribution_bundle:
         marker=ensure(GENERATION_BUNDLE_PATHS["marker"], non_empty=True)
     threads: 1
     resources:
-        mem_mb=1024,
-        runtime=120
+        mem_mb=policy_resources("validate_null_distribution_bundle").mem_mb,
+        runtime=policy_resources("validate_null_distribution_bundle").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")

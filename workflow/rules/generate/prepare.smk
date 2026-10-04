@@ -31,8 +31,8 @@ checkpoint prepare_generation_scope:
         compression=GENERATION_PARQUET_COMPRESSION
     threads: 1
     resources:
-        mem_mb=4096,
-        runtime=120
+        mem_mb=policy_resources("prepare_generation_scope").mem_mb,
+        runtime=policy_resources("prepare_generation_scope").runtime
     conda:
         str(Path(workflow.basedir) / "envs" / "validation.yaml")
     envmodules: *mod("validation")
@@ -67,8 +67,8 @@ rule prepare_generation_partition:
         compression=GENERATION_PARQUET_COMPRESSION
     threads: 1
     resources:
-        mem_mb=16384,
-        runtime=360
+        mem_mb=policy_resources("prepare_generation_partition").mem_mb,
+        runtime=policy_resources("prepare_generation_partition").runtime
     conda:
         str(Path(workflow.basedir) / "envs" / "validation.yaml")
     envmodules: *mod("validation")

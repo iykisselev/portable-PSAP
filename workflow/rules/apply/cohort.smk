@@ -20,8 +20,8 @@ rule build_sample_candidates:
         candidate_id_ordinal_width=WORKFLOW_PLAN.report.candidate_id_ordinal_width
     threads: 2
     resources:
-        mem_mb=4096,
-        runtime=60
+        mem_mb=policy_resources("build_sample_candidates").mem_mb,
+        runtime=policy_resources("build_sample_candidates").runtime
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")
@@ -57,12 +57,8 @@ rule build_control_reference:
         deduplicate=WORKFLOW_PLAN.report.deduplicate_controls
     threads: 4
     resources:
-        mem_mb=lambda wc, input, attempt: execution_mem_mb(
-            wc, input, attempt, "cohort_aggregate"
-        ),
-        runtime=lambda wc, input, attempt: execution_runtime_minutes(
-            wc, input, attempt, "cohort_aggregate"
-        )
+        mem_mb=policy_resources("build_control_reference").mem_mb,
+        runtime=policy_resources("build_control_reference").runtime
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")
@@ -97,12 +93,8 @@ rule build_cohort_report:
         )
     threads: 4
     resources:
-        mem_mb=lambda wc, input, attempt: execution_mem_mb(
-            wc, input, attempt, "cohort_aggregate"
-        ),
-        runtime=lambda wc, input, attempt: execution_runtime_minutes(
-            wc, input, attempt, "cohort_aggregate"
-        )
+        mem_mb=policy_resources("build_cohort_report").mem_mb,
+        runtime=policy_resources("build_cohort_report").runtime
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")

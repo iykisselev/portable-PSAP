@@ -29,6 +29,7 @@ WORKFLOW_MODE = WORKFLOW_PLAN.mode
 # All modes use the same deployment settings, so load them once before choosing
 # the mode-specific rules below.
 include: "rules/deployment.smk"
+include: "rules/execution_resources.smk"
 
 if WORKFLOW_MODE in {"generate", "full"}:
     include: "rules/generate/context.smk"

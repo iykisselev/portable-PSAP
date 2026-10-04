@@ -25,8 +25,8 @@ rule calculate_partition_null_distribution:
         compression=GENERATION_PARQUET_COMPRESSION
     threads: 1
     resources:
-        mem_mb=8192,
-        runtime=240
+        mem_mb=policy_resources("calculate_partition_null_distribution").mem_mb,
+        runtime=policy_resources("calculate_partition_null_distribution").runtime
     conda:
         str(Path(workflow.basedir) / "envs" / "validation.yaml")
     envmodules: *mod("validation")
@@ -60,8 +60,8 @@ rule reduce_null_distribution_bucket:
         roles=GENERATION_ROLES
     threads: 1
     resources:
-        mem_mb=4096,
-        runtime=120
+        mem_mb=policy_resources("reduce_null_distribution_bucket").mem_mb,
+        runtime=policy_resources("reduce_null_distribution_bucket").runtime
     conda:
         str(Path(workflow.basedir) / "envs" / "validation.yaml")
     envmodules: *mod("validation")

@@ -20,8 +20,8 @@ rule filter_calibration_regions:
         csi=ensure(str(FILTERED_BCF) + ".csi", non_empty=True)
     threads: 4
     resources:
-        mem_mb=4096,
-        runtime=180
+        mem_mb=policy_resources("filter_calibration_regions").mem_mb,
+        runtime=policy_resources("filter_calibration_regions").runtime
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
     envmodules: *mod("bioinformatics")
@@ -74,8 +74,8 @@ rule filter_excluded_records:
         csi=ensure(str(FILTERED_VCF) + ".csi", non_empty=True)
     threads: 4
     resources:
-        mem_mb=4096,
-        runtime=180
+        mem_mb=policy_resources("filter_excluded_records").mem_mb,
+        runtime=policy_resources("filter_excluded_records").runtime
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
     envmodules: *mod("bioinformatics")

@@ -17,8 +17,8 @@ rule validate_cohort:
         metadata_kind="samples" if VALIDATION_SAMPLES else "ped"
     threads: 1
     resources:
-        mem_mb=4096,
-        runtime=30
+        mem_mb=policy_resources("validate_cohort").mem_mb,
+        runtime=policy_resources("validate_cohort").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")
@@ -60,8 +60,8 @@ rule validate_resources:
         cadd_indel_index=VALIDATION_CADD_INDEL_INDEX
     threads: 1
     resources:
-        mem_mb=4096,
-        runtime=30
+        mem_mb=policy_resources("validate_resources").mem_mb,
+        runtime=policy_resources("validate_resources").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")
@@ -100,8 +100,8 @@ rule validate_model:
         lookup_bin_width=LOOKUP_SOURCE.bin_width or ""
     threads: 1
     resources:
-        mem_mb=512,
-        runtime=10
+        mem_mb=policy_resources("validate_model").mem_mb,
+        runtime=policy_resources("validate_model").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")
@@ -122,8 +122,8 @@ rule merge_validation:
         report=protected(ensure(str(COMBINED_VALIDATION_REPORT), non_empty=True))
     threads: 1
     resources:
-        mem_mb=512,
-        runtime=5
+        mem_mb=policy_resources("merge_validation").mem_mb,
+        runtime=policy_resources("merge_validation").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")
@@ -147,8 +147,8 @@ rule require_valid_inputs:
         success_marker="validated\n"
     threads: 1
     resources:
-        mem_mb=512,
-        runtime=5
+        mem_mb=policy_resources("require_valid_inputs").mem_mb,
+        runtime=policy_resources("require_valid_inputs").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")

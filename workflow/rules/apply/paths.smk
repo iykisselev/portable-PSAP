@@ -1,16 +1,12 @@
-"""Shared paths and resource callbacks for apply rules.
+"""Shared paths for apply rules.
 
 ``Snakefile`` creates ``WORKFLOW_PLAN`` and ``WORKFLOW_PYTHON_DIR`` before it
 loads this file. The constants below give every apply rule the same output
-layout and resource-sizing functions.
+layout.
 """
 
 from pathlib import Path
 import re
-
-from execution_policy import resource_mem_mb as _resource_mem_mb
-from execution_policy import resource_runtime_minutes as _resource_runtime_minutes
-
 
 if WORKFLOW_PLAN.apply is None:
     raise ValueError("Apply rules require an apply or full WorkflowPlan")
@@ -35,13 +31,3 @@ CANDIDATE_DIR = APPLY_OUTPUT_DIR / "candidates"
 COHORT_DIR = APPLY_OUTPUT_DIR / "cohort"
 PREPARED_DIR = APPLY_OUTPUT_DIR / "prepared"
 BENCHMARK_DIR = APPLY_OUTPUT_DIR / "benchmarks"
-
-
-def execution_mem_mb(wildcards, input, attempt, policy_name):
-    """Look up a named memory policy for this Snakemake job."""
-    return _resource_mem_mb(policy_name, input, attempt)
-
-
-def execution_runtime_minutes(wildcards, input, attempt, policy_name):
-    """Look up a named runtime policy for this Snakemake job."""
-    return _resource_runtime_minutes(policy_name, input, attempt)

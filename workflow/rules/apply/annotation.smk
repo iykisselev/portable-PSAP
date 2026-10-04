@@ -33,12 +33,8 @@ rule annotate_variants:
         testing_unit=TESTING_UNIT
     threads: 8
     resources:
-        mem_mb=lambda wc, input, attempt: execution_mem_mb(
-            wc, input, attempt, "annotate_variants"
-        ),
-        runtime=lambda wc, input, attempt: execution_runtime_minutes(
-            wc, input, attempt, "annotate_variants"
-        )
+        mem_mb=policy_resources("annotate_variants").mem_mb,
+        runtime=policy_resources("annotate_variants").runtime
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
     envmodules: *mod("bioinformatics")
@@ -64,8 +60,8 @@ rule summarize_annotations:
         include_indels=INCLUDE_INDELS
     threads: 1
     resources:
-        mem_mb=1024,
-        runtime=30
+        mem_mb=policy_resources("summarize_annotations").mem_mb,
+        runtime=policy_resources("summarize_annotations").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")
@@ -91,8 +87,8 @@ rule require_valid_annotations:
         success_marker="annotation validation passed\n"
     threads: 1
     resources:
-        mem_mb=512,
-        runtime=5
+        mem_mb=policy_resources("require_valid_annotations").mem_mb,
+        runtime=policy_resources("require_valid_annotations").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")
@@ -117,8 +113,8 @@ rule prepare_testing_units:
         unit_table=ensure(str(TESTING_UNIT_TABLE), non_empty=True)
     threads: 4
     resources:
-        mem_mb=16000,
-        runtime=180
+        mem_mb=policy_resources("prepare_testing_units").mem_mb,
+        runtime=policy_resources("prepare_testing_units").runtime
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")

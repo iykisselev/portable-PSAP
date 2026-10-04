@@ -5,7 +5,7 @@ use the same paths instead of resolving a resource independently.
 """
 
 from apply_resources import build_apply_resource_registry
-from execution_policy import resource_mem_mb, resource_runtime_minutes
+from execution_policy import table_resource_policy
 
 
 APPLY_RESOURCE_REGISTRY = build_apply_resource_registry(WORKFLOW_PLAN, PREPARED_DIR)
@@ -40,6 +40,10 @@ COMBINED_EXCLUSIONS_VCF = APPLY_RESOURCE_REGISTRY.combined_exclusions_vcf
 COMBINED_EXCLUSIONS = APPLY_RESOURCE_REGISTRY.combined_exclusions
 COMBINED_EXCLUSIONS_INDEX = APPLY_RESOURCE_REGISTRY.combined_exclusions_index
 VCF_RESOURCE_IDS = ("cohort", "combined_exclusions")
+TABLE_RESOURCE_POLICY_BY_ID = {
+    resource_id: table_resource_policy(resource_spec.scientific_role)
+    for resource_id, resource_spec in APPLY_RESOURCE_REGISTRY.table_resources.items()
+}
 VCF_RESOURCE_PATTERN = "(?:cohort|combined_exclusions)"
 
 
@@ -62,12 +66,11 @@ def table_resource_cohort_index(wildcards):
     return [WORKFLOW_INPUT_VCF_INDEX] if resource_spec.requires_chromosome_normalization else []
 
 
-def table_resource_mem_mb(wildcards, input, attempt):
-    return resource_mem_mb("stage_" + TABLE_RESOURCE_SPECS[wildcards.resource].scientific_role, input, attempt)
+def table_resource_policy_name(wildcards):
+    return TABLE_RESOURCE_POLICY_BY_ID[wildcards.resource]
 
 
-def table_resource_runtime_minutes(wildcards, input, attempt):
-    return resource_runtime_minutes("stage_" + TABLE_RESOURCE_SPECS[wildcards.resource].scientific_role, input, attempt)
+TABLE_RESOURCE_CALLBACKS = policy_resources(table_resource_policy_name)
 
 
 def table_resource_kind(wildcards):

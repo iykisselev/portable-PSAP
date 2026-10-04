@@ -14,12 +14,8 @@ rule prepare_vcf_resource:
         resource=VCF_RESOURCE_PATTERN
     threads: 1
     resources:
-        mem_mb=lambda wc, input, attempt: resource_mem_mb(
-            "stage_vcf", input, attempt
-        ),
-        runtime=lambda wc, input, attempt: resource_runtime_minutes(
-            "stage_vcf", input, attempt
-        )
+        mem_mb=policy_resources("prepare_vcf_resource").mem_mb,
+        runtime=policy_resources("prepare_vcf_resource").runtime
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
     envmodules: *mod("bioinformatics")
@@ -49,8 +45,8 @@ rule prepare_table_resource:
         extension="(?:bed|tsv|vcf)"
     threads: 1
     resources:
-        mem_mb=table_resource_mem_mb,
-        runtime=table_resource_runtime_minutes
+        mem_mb=TABLE_RESOURCE_CALLBACKS.mem_mb,
+        runtime=TABLE_RESOURCE_CALLBACKS.runtime
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
     envmodules: *mod("bioinformatics")
@@ -79,8 +75,8 @@ rule combine_exclusions:
         ]
     threads: 1
     resources:
-        mem_mb=12000,
-        runtime=180
+        mem_mb=policy_resources("combine_exclusions").mem_mb,
+        runtime=policy_resources("combine_exclusions").runtime
     conda:
         str(CONDA_ENV_DIR / "validation.yaml")
     envmodules: *mod("validation")

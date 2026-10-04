@@ -12,8 +12,8 @@ rule extract_gt:
         sample=lambda wc: wc.sample
     threads: 2
     resources:
-        mem_mb=4096,
-        runtime=120
+        mem_mb=policy_resources("extract_gt").mem_mb,
+        runtime=policy_resources("extract_gt").runtime
     conda:
         str(CONDA_ENV_DIR / "bioinformatics.yaml")
     envmodules: *mod("bioinformatics")
@@ -47,8 +47,8 @@ rule standardize_gt:
         sample=SAMPLE_PATTERN
     threads: 2
     resources:
-        mem_mb=8192,
-        runtime=120
+        mem_mb=policy_resources("standardize_gt").mem_mb,
+        runtime=policy_resources("standardize_gt").runtime
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")
@@ -79,8 +79,8 @@ rule apply_sex_model:
         hemizygote_model=WORKFLOW_PLAN.model.hemizygote
     threads: 2
     resources:
-        mem_mb=8192,
-        runtime=120
+        mem_mb=policy_resources("apply_sex_model").mem_mb,
+        runtime=policy_resources("apply_sex_model").runtime
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")
@@ -112,8 +112,8 @@ rule join_sample_annotations:
         testing_unit=TESTING_UNIT_PATTERN
     threads: 4
     resources:
-        mem_mb=16000,
-        runtime=180
+        mem_mb=policy_resources("join_sample_annotations").mem_mb,
+        runtime=policy_resources("join_sample_annotations").runtime
     conda:
         str(CONDA_ENV_DIR / "r.yaml")
     envmodules: *mod("r")
