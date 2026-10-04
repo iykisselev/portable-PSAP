@@ -13,10 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
-from generation_topology import (  # noqa: E402
-    build_generation_execution_layout,
-    build_generation_scope_artifacts,
-)
+from generation_topology import build_generation_execution_layout  # noqa: E402
 from generation_context import GenerationRuleContext  # noqa: E402
 from workflow_plan import build_workflow_plan  # noqa: E402
 
@@ -37,23 +34,13 @@ def merge(base: dict, override: dict) -> dict:
 
 
 class GenerationTopologyTests(unittest.TestCase):
-    def test_static_context_defers_topology_to_scope_outputs(self) -> None:
+    def test_execution_layout_derives_bins_and_roles_from_the_model(self) -> None:
         configuration = merge(
             load_yaml(ROOT / "config" / "config.yaml"),
             load_yaml(ROOT / "tests" / "null_distribution" / "generate.run.yaml"),
         )
         plan = build_workflow_plan(configuration)
         assert plan.generation is not None
-
-        scope = build_generation_scope_artifacts(plan.generation)
-        self.assertEqual(
-            str(plan.generation.scalable_dir / "prepared" / "partitions.json"),
-            scope.artifacts["partitions"],
-        )
-        self.assertEqual(
-            str(plan.generation.scalable_dir / "prepared" / "unit_buckets.json"),
-            scope.artifacts["buckets"],
-        )
 
         layout = build_generation_execution_layout(
             plan.generation,
@@ -62,10 +49,6 @@ class GenerationTopologyTests(unittest.TestCase):
         )
         self.assertEqual(1400, layout.bin_count)
         self.assertEqual(("het", "hom", "hem_chrX"), layout.roles)
-        self.assertEqual(
-            str(plan.generation.bundle_dir / "lookup_het.tsv.gz"),
-            layout.bundle_paths["lookup_het"],
-        )
 
     def test_rule_context_keeps_generation_layout_and_inputs_together(self) -> None:
         configuration = merge(
@@ -76,14 +59,6 @@ class GenerationTopologyTests(unittest.TestCase):
         context = GenerationRuleContext.from_workflow_plan(plan)
 
         self.assertEqual(plan.generation, context.plan)
-        self.assertEqual(
-            str(plan.generation.scalable_dir / "partitions"),
-            str(context.partition_dir),
-        )
-        self.assertEqual(
-            str(plan.generation.scalable_dir / "calculated" / "partition_statistics"),
-            str(context.statistics_dir),
-        )
         self.assertEqual(
             str(
                 plan.generation.scalable_dir

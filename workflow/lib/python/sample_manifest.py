@@ -75,22 +75,6 @@ class SampleIndex:
         return record
 
 
-def read_sample_manifest(path: str | Path) -> "pd.DataFrame":
-    """Load the canonical manifest and reject malformed or duplicate samples."""
-    import pandas as pd
-
-    manifest = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False)
-    missing = set(SAMPLE_MANIFEST_COLUMNS) - set(manifest.columns)
-    if missing:
-        raise ValueError(
-            f"Sample manifest {path!s} has columns {manifest.columns.tolist()!r}; "
-            "missing: " + ", ".join(sorted(missing))
-        )
-    manifest = manifest.loc[:, SAMPLE_MANIFEST_COLUMNS]
-    SampleIndex.from_rows(manifest.to_dict("records"))
-    return manifest
-
-
 def read_sample_manifest_index(path: str | Path) -> SampleIndex:
     """Read and index the physical canonical manifest exactly once."""
     with Path(path).open("rt", encoding="utf-8", newline="") as handle:
@@ -198,35 +182,3 @@ def _append_configured_record(
             "phenotype": label,
         }
     )
-
-
-def _as_index(manifest: "pd.DataFrame" | SampleIndex) -> SampleIndex:
-    if isinstance(manifest, SampleIndex):
-        return manifest
-    return SampleIndex.from_rows(manifest.to_dict("records"))
-
-
-def sample_metadata(
-    manifest: "pd.DataFrame" | SampleIndex,
-    pid: str,
-    expected_phenotype: str | None = None,
-) -> "pd.Series" | SampleRecord:
-    """Return one sample record, optionally checking its phenotype role."""
-    if isinstance(manifest, SampleIndex):
-        return manifest.sample(pid, expected_phenotype)
-    _as_index(manifest).sample(pid, expected_phenotype)
-    return manifest.loc[manifest["pid"] == str(pid)].iloc[0]
-
-
-def sample_ids_by_phenotype(
-    manifest: "pd.DataFrame" | SampleIndex, phenotype: str
-) -> list[str]:
-    """Return stable sample IDs for one workflow phenotype role."""
-    return _as_index(manifest).sample_ids(phenotype)
-
-
-def sample_sexes_by_phenotype(
-    manifest: "pd.DataFrame" | SampleIndex, phenotype: str
-) -> list[str]:
-    """Return stable sex values for one workflow phenotype role."""
-    return _as_index(manifest).sample_sexes(phenotype)

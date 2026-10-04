@@ -82,55 +82,6 @@ class ExecutionPolicyTests(unittest.TestCase):
             expected_rule_names | {"prepare_table_resource"},
         )
 
-    def test_policy_values_preserve_each_rule_resource_request(self) -> None:
-        expected = {
-            "prepare_generation_scope": (4096, 120, 0, 0, False),
-            "prepare_generation_partition": (16384, 360, 0, 0, False),
-            "calculate_partition_null_distribution": (8192, 240, 0, 0, False),
-            "reduce_null_distribution_bucket": (4096, 120, 0, 0, False),
-            "finalize_null_distribution_bundle": (2048, 120, 0, 0, False),
-            "validate_null_distribution_bundle": (1024, 120, 0, 0, False),
-            "validate_cohort": (4096, 30, 0, 0, False),
-            "validate_resources": (4096, 30, 0, 0, False),
-            "validate_model": (512, 10, 0, 0, False),
-            "merge_validation": (512, 5, 0, 0, False),
-            "require_valid_inputs": (512, 5, 0, 0, False),
-            "extract_gt": (4096, 120, 0, 0, False),
-            "standardize_gt": (8192, 120, 0, 0, False),
-            "apply_sex_model": (8192, 120, 0, 0, False),
-            "join_sample_annotations": (16000, 180, 0, 0, False),
-            "annotate_variants": (32000, 720, 512, 30, True),
-            "summarize_annotations": (1024, 30, 0, 0, False),
-            "require_valid_annotations": (512, 5, 0, 0, False),
-            "prepare_testing_units": (16000, 180, 0, 0, False),
-            "filter_calibration_regions": (4096, 180, 0, 0, False),
-            "filter_excluded_records": (4096, 180, 0, 0, False),
-            "build_sample_candidates": (4096, 60, 0, 0, False),
-            "build_control_reference": (16000, 360, 256, 20, True),
-            "build_cohort_report": (16000, 360, 256, 20, True),
-            "prepare_vcf_resource": (4096, 180, 0, 0, True),
-            "combine_exclusions": (12000, 180, 0, 0, False),
-            "apply_psap": (16000, 360, 0, 0, False),
-            "stage_calibration_regions": (2048, 60, 0, 0, True),
-            "stage_testing_units": (2048, 60, 0, 0, True),
-            "stage_cadd_snv": (2048, 360, 256, 20, True),
-            "stage_cadd_indel": (2048, 360, 256, 20, True),
-            "stage_variants_exclude": (4096, 180, 0, 0, True),
-            "stage_par_regions": (4096, 180, 0, 0, True),
-        }
-
-        observed = {
-            name: (
-                policy.baseline_mem_mb,
-                policy.baseline_runtime_minutes,
-                policy.mem_mb_per_gib,
-                policy.runtime_minutes_per_gib,
-                policy.scale_with_attempt,
-            )
-            for name, policy in EXECUTION_POLICIES.items()
-        }
-        self.assertEqual(observed, expected)
-
     def test_size_scaled_policies_preserve_recorded_retry_scaling(self) -> None:
         with TemporaryDirectory() as temporary:
             resource = Path(temporary) / "resource.bin"

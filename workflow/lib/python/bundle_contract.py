@@ -9,7 +9,7 @@ than silently reinterpret an existing certificate.
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Callable, Mapping
+from typing import Mapping
 
 
 CURRENT_GENERATED_BUNDLE_CONTRACT = "generated_bundle_v2"
@@ -69,19 +69,3 @@ def require_supported_contract(contract: str) -> str:
         )
     return contract
 
-
-def upgrade_metadata(metadata: Mapping[str, object], target: str = CURRENT_GENERATED_BUNDLE_CONTRACT) -> dict[str, object]:
-    """Upgrade metadata only through a declared conversion path.
-
-    No v1-to-v2 metadata-only conversion exists: v2 adds certified X-policy
-    semantics and potentially an HEM component, so users must regenerate a v1
-    bundle.  Keeping that decision executable prevents accidental silent
-    contract drift when a later version adds an upgrader.
-    """
-    source = require_supported_contract(str(metadata.get("contract", "")))
-    target = str(target)
-    if source == target:
-        return dict(metadata)
-    raise BundleContractError(
-        f"No safe metadata-only upgrade path exists from {source} to {target}; regenerate the bundle"
-    )

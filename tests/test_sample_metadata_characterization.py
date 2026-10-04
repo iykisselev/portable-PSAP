@@ -88,6 +88,42 @@ class SampleMetadataCharacterizationTests(unittest.TestCase):
             ],
         )
 
+    def test_unknown_phenotypes_are_excluded_from_processable_samples(self) -> None:
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            ped = directory / "cohort.ped"
+            samples = directory / "samples.tsv"
+            ped.write_text(
+                "F1\taffected\t0\t0\t1\t2\n"
+                "F1\tunaffected\t0\t0\t2\t1\n"
+                "F1\tunknown\t0\t0\t1\t0\n",
+                encoding="utf-8",
+            )
+            samples.write_text(
+                "family_id\tpid\tsex\tphenotype\n"
+                "F1\taffected\t1\t2\n"
+                "F1\tunaffected\t2\t1\n"
+                "F1\tunknown\t1\t0\n",
+                encoding="utf-8",
+            )
+            for reader, path in ((read_ped, ped), (read_samples_tsv, samples)):
+                with self.subTest(reader=reader.__name__):
+                    result, errors, warnings = self.read(reader, path)
+                    self.assertEqual(errors, [])
+                    self.assertEqual(len(warnings), 1)
+                    self.assertEqual(
+                        result["all_sample_ids"], ["affected", "unaffected", "unknown"]
+                    )
+                    self.assertEqual(result["sample_ids"], ["affected", "unaffected"])
+                    self.assertEqual(result["excluded_phenotype_sample_ids"], ["unknown"])
+                    self.assertEqual(
+                        result["manifest"],
+                        [
+                            {"family_id": "F1", "pid": "affected", "sex": "1", "phenotype": "affected"},
+                            {"family_id": "F1", "pid": "unaffected", "sex": "2", "phenotype": "unaffected"},
+                        ],
+                    )
+
     def test_excluded_sample_warning_keeps_ten_identifier_examples(self) -> None:
         ped_rows = "F\tkept\t0\t0\t1\t1\n" + "".join(
             f"F\tunknown{index}\t0\t0\t2\t0\n" for index in range(11)

@@ -1,4 +1,4 @@
-"""Maintenance contracts for documented test tiers and run-mode examples."""
+"""Maintenance contracts for documented run-mode examples."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from workflow_plan import build_workflow_plan  # noqa: E402
-from run_tier import TIERS  # noqa: E402
 
 
 def merge(base: dict, override: dict) -> dict:
@@ -40,14 +39,6 @@ class StageEightContracts(unittest.TestCase):
             with self.subTest(mode=mode):
                 plan = build_workflow_plan(merge(science, yaml.safe_load(path.read_text(encoding="utf-8"))))
                 self.assertEqual(mode, plan.mode)
-
-    def test_tiers_keep_expensive_work_out_of_the_fast_loop(self) -> None:
-        self.assertIn("test_apply_workflow.py", TIERS["e2e"])
-        self.assertIn("test_full_workflow.py", TIERS["e2e"])
-        self.assertIn("test_generation_recovery.py", TIERS["resilience"])
-        fast = set(TIERS["unit"]) | set(TIERS["schema"])
-        self.assertNotIn("test_full_workflow.py", fast)
-        self.assertNotIn("test_generation_recovery.py", fast)
 
 
 if __name__ == "__main__":

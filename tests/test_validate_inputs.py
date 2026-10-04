@@ -30,33 +30,6 @@ from validation_resources import validate_resource_inputs  # noqa: E402
 
 
 class ValidationTests(unittest.TestCase):
-    def test_sample_sheet_matches_ped_metadata_interpretation(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            samples = Path(temp_dir) / "samples.tsv"
-            samples.write_text(
-                "family_id\tpid\tsex\tphenotype\n"
-                "F1\taffected\t1\t2\n"
-                "F1\tunaffected\t2\t1\n"
-                "F1\tunknown\t1\t0\n",
-                encoding="utf-8",
-            )
-            errors: list[str] = []
-            warnings: list[str] = []
-
-            result = read_samples_tsv(samples, errors, warnings)
-
-            self.assertEqual(errors, [])
-            self.assertEqual(result["sample_ids"], ["affected", "unaffected"])
-            self.assertEqual(result["excluded_phenotype_sample_ids"], ["unknown"])
-            self.assertEqual(
-                result["manifest"],
-                [
-                    {"family_id": "F1", "pid": "affected", "sex": "1", "phenotype": "affected"},
-                    {"family_id": "F1", "pid": "unaffected", "sex": "2", "phenotype": "unaffected"},
-                ],
-            )
-            self.assertEqual(len(warnings), 1)
-
     def test_all_unknown_sample_sheet_phenotypes_fail_validation(self) -> None:
         with TemporaryDirectory() as temp_dir:
             samples = Path(temp_dir) / "samples.tsv"
@@ -80,35 +53,6 @@ class ValidationTests(unittest.TestCase):
                     "(1=unaffected or 2=affected)"
                 ],
             )
-
-    def test_samples_with_unknown_phenotype_are_excluded(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            ped = Path(temp_dir) / "cohort.ped"
-            ped.write_text(
-                "F1\taffected\t0\t0\t1\t2\n"
-                "F1\tunaffected\t0\t0\t2\t1\n"
-                "F1\tunknown\t0\t0\t1\t0\n",
-                encoding="utf-8",
-            )
-            errors: list[str] = []
-            warnings: list[str] = []
-
-            result = read_ped(ped, errors, warnings)
-
-            self.assertEqual(errors, [])
-            self.assertEqual(
-                result["all_sample_ids"],
-                ["affected", "unaffected", "unknown"],
-            )
-            self.assertEqual(result["sample_ids"], ["affected", "unaffected"])
-            self.assertEqual(
-                [row["pid"] for row in result["manifest"]],
-                ["affected", "unaffected"],
-            )
-            self.assertEqual(result["excluded_phenotype_sample_ids"], ["unknown"])
-            self.assertEqual(len(warnings), 1)
-            self.assertIn("excluded", warnings[0].lower())
-            self.assertIn("unknown", warnings[0])
 
     def test_all_unknown_phenotypes_fail_validation(self) -> None:
         with TemporaryDirectory() as temp_dir:

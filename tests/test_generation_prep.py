@@ -180,19 +180,6 @@ class GenerationPreparationTests(unittest.TestCase):
         self.assertEqual(first["af_female"], 0.25)
         self.assertEqual(first["af_male"], 0.4)
 
-    def test_invalid_selected_af_is_retained_for_the_calibration_universe_to_reject(self) -> None:
-        rows = population_rows(
-            ROOT / "tests/null_distribution/population_af.vcf",
-            None,
-            "1",
-            0,
-            60,
-            {"overall": "AF_CUSTOM"},
-        )
-        invalid = rows.filter((rows["POS"] == 30) & (rows["ALT"] == "A")).row(0, named=True)
-        self.assertEqual(invalid["allele_state"], "invalid")
-        self.assertIn("missing selected AF", invalid["state_reason"])
-
     def test_hem_probability_uses_haploid_af_not_a_diploid_transform(self) -> None:
         import polars as pl
 

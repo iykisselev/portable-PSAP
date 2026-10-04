@@ -286,6 +286,90 @@ class WorkflowPlanTests(unittest.TestCase):
         self.assertEqual(original, manifest)
         self.assertEqual(DeprecationWarning, recorded[0].category)
 
+    def assert_rejected(self, manifest: dict) -> None:
+        with self.assertRaises(WorkflowPlanError):
+            build_workflow_plan(manifest)
+
+    def test_science_configuration_rejects_removed_reference_metadata(self) -> None:
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["reference"]["lookup_tables"] = {}
+        self.assert_rejected(manifest)
+
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["reference"]["exclusion"]["optional"] = True
+        self.assert_rejected(manifest)
+
+    def test_unknown_workflow_mode_is_rejected(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["workflow"]["mode"] = "unknown"
+        self.assert_rejected(manifest)
+
+    def test_generate_rejects_apply_inputs(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["inputs"] = {"vcf": {"data": "cohort.vcf", "index": None}, "ped": "cohort.ped", "samples": None}
+        self.assert_rejected(manifest)
+
+    def test_generation_rejects_indel_enabled_model(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["model"]["include_indels"] = True
+        self.assert_rejected(manifest)
+
+    def test_sex_specific_hem_generation_requires_male_af_tag(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        del manifest["generation"]["af_source"]["male"]
+        self.assert_rejected(manifest)
+
+    def test_mutation_policy_requires_a_rate_binding(self) -> None:
+        manifest = self.manifest("tests/null_distribution/mutation.run.yaml")
+        del manifest["generation"]["mutation_rate"]
+        self.assert_rejected(manifest)
+
+    def test_full_rejects_a_second_shared_resource_binding_set(self) -> None:
+        manifest = self.manifest("tests/null_distribution/full.run.yaml")
+        manifest["generation"]["score_snv"] = manifest["bindings"]["reference"]["cadd"]["snv"]
+        self.assert_rejected(manifest)
+
+    def test_full_rejects_external_lookup_source(self) -> None:
+        manifest = self.manifest("tests/null_distribution/full.run.yaml")
+        manifest["bindings"]["reference"]["lookup_source"] = {
+            "type": "external",
+            "contract": "external_legacy_v0",
+            "tables": {"het": "het.tsv", "hom": "hom.tsv"},
+        }
+        self.assert_rejected(manifest)
+
+    def test_full_allows_no_exclusion_in_the_shared_reference_bindings(self) -> None:
+        manifest = self.manifest("tests/null_distribution/full.run.yaml")
+        manifest["bindings"]["reference"]["exclusion"] = {"data": None, "index": None}
+        build_workflow_plan(manifest)
+
+    def test_apply_without_hemizygote_does_not_require_hem_lookup(self) -> None:
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["model"]["hemizygote"] = False
+        del manifest["bindings"]["reference"]["lookup_source"]["tables"]["hem_chrX"]
+        build_workflow_plan(manifest)
+
+    def test_bundle_lookup_source_requires_every_certified_scope_component(self) -> None:
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["model"]["hemizygote"] = False
+        manifest["model"]["include_indels"] = False
+        source = {
+            "type": "bundle",
+            "contract": GENERATED_BUNDLE_CONTRACT,
+            "tables": {"het": "lookup_het.tsv.gz", "hom": "lookup_hom.tsv.gz"},
+            "metadata": "metadata.json",
+            "validation": "validation.json",
+            "marker": "validation.ok",
+            "eligible_units": "eligible_testing_units.bed.gz",
+            "calibration_mask": "calibration_regions.bed.gz",
+            "excluded_alleles": "excluded_alleles.tsv.gz",
+            "excluded_units": "excluded_units.tsv.gz",
+        }
+        manifest["bindings"]["reference"]["lookup_source"] = source
+        build_workflow_plan(manifest)
+        del source["excluded_units"]
+        self.assert_rejected(manifest)
+
 
 if __name__ == "__main__":
     unittest.main()

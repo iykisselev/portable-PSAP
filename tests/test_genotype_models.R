@@ -303,7 +303,7 @@ fwrite(
 metadata_path <- tempfile(fileext = ".json")
 jsonlite::write_json(
     list(
-        contract = "generated_bundle_v1",
+        contract = "generated_bundle_v2",
         binning = list(
             algorithm = "fixed_width_decimal_v1",
             score_max = 6,
@@ -321,9 +321,9 @@ jsonlite::write_json(
     auto_unbox = TRUE
 )
 marker_path <- tempfile(fileext = ".ok")
-writeLines("generated_bundle_v1\tfixture-digest\tfixture-validation-digest", marker_path)
+writeLines("generated_bundle_v2\tfixture-digest\tfixture-validation-digest", marker_path)
 generated_contract <- resolve_lookup_contract(
-    "generated_bundle_v1",
+    "generated_bundle_v2",
     list(het = generated_path),
     metadata_path,
     validation_path,
