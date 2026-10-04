@@ -50,17 +50,23 @@ class ApplyResourceRegistryTests(unittest.TestCase):
         registry = build_apply_resource_registry(plan, Path("output") / "prepared")
 
         self.assertEqual(
-            ("testing_units", "cadd_snv", "cadd_indel", "exclusion_000", "exclusion_001"),
+            (
+                "testing_units",
+                "cadd_snv",
+                "cadd_indel",
+                "exclusion_gnomad-r2-notpass",
+                "exclusion_par-regions",
+            ),
             registry.table_resource_ids,
         )
         self.assertEqual(
-            "(?:testing_units|cadd_snv|cadd_indel|exclusion_000|exclusion_001)",
+            "(?:testing_units|cadd_snv|cadd_indel|exclusion_gnomad\\-r2\\-notpass|exclusion_par\\-regions)",
             registry.table_resource_pattern,
         )
         self.assertEqual("output/prepared/cohort.vcf.gz", registry.prepared_input_vcf)
         self.assertEqual(
             "tests/smoke/data/exclude_full_span.bed",
-            registry.exclusion_source_by_id["exclusion_000"],
+            registry.exclusion_source_by_id["exclusion_gnomad-r2-notpass"],
         )
         with self.assertRaises(TypeError):
             registry.table_resources["other"] = registry.table_resources["cadd_snv"]  # type: ignore[index]
@@ -93,7 +99,10 @@ class ApplyResourceRegistryTests(unittest.TestCase):
         )
         self.assertEqual("generated_bundle", registry.resource("testing_units").origin)
         self.assertEqual("generated_bundle", registry.resource("calibration_regions").origin)
-        self.assertEqual("generated_bundle", registry.resource("exclusion_000").origin)
+        self.assertEqual(
+            "generated_bundle",
+            registry.resource("exclusion_generated-bundle-excluded-alleles").origin,
+        )
         self.assertEqual(
             str(plan.generation.bundle_dir / "eligible_testing_units.bed.gz"),
             registry.resource("testing_units").source,

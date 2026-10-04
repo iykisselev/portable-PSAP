@@ -29,9 +29,11 @@ bindings:
       data: resources/testing_units.bed.gz
       index: resources/testing_units.bed.gz.tbi
     exclusions:
-      - data: resources/variant_exclusions.bed.gz
+      gnomad-r2-notpass:
+        data: resources/variant_exclusions.bed.gz
         index: resources/variant_exclusions.bed.gz.tbi
-      - data: resources/par_regions.bed.gz
+      par-regions:
+        data: resources/par_regions.bed.gz
         index: resources/par_regions.bed.gz.tbi
     lookup_tables:
       het: resources/lookup_het.tsv.gz

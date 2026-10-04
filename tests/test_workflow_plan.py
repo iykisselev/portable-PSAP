@@ -192,10 +192,56 @@ class WorkflowPlanTests(unittest.TestCase):
 
     def test_full_plan_requires_one_shared_par_role(self) -> None:
         manifest = self.manifest("tests/null_distribution/full.run.yaml")
-        manifest["reference"]["exclusions"][1]["role"] = "variants_exclude"
+        manifest["reference"]["exclusions"]["par-regions"]["role"] = "variants_exclude"
 
         with self.assertRaisesRegex(WorkflowPlanError, "exactly one.*par_regions"):
             build_workflow_plan(manifest)
+
+    def test_exclusions_are_resolved_by_identifier_not_manifest_order(self) -> None:
+        manifest = self.manifest("tests/smoke/run.yaml")
+        bindings = manifest["bindings"]["reference"]["exclusions"]
+        manifest["bindings"]["reference"]["exclusions"] = {
+            "par-regions": bindings["par-regions"],
+            "gnomad-r2-notpass": bindings["gnomad-r2-notpass"],
+        }
+
+        plan = build_workflow_plan(manifest)
+
+        assert plan.apply is not None
+        resolved = {item.identifier: item.binding.data for item in plan.apply.effective_exclusions}
+        self.assertEqual(
+            {
+                "gnomad-r2-notpass": "tests/smoke/data/exclude_full_span.bed",
+                "par-regions": "tests/smoke/data/par_regions.bed",
+            },
+            resolved,
+        )
+
+    def test_exclusion_identifier_mismatches_fail_before_resource_registry(self) -> None:
+        missing = self.manifest("tests/smoke/run.yaml")
+        del missing["bindings"]["reference"]["exclusions"]["gnomad-r2-notpass"]
+        with self.assertRaisesRegex(WorkflowPlanError, "missing active bindings.*gnomad-r2-notpass"):
+            build_workflow_plan(missing)
+
+        unknown = self.manifest("tests/smoke/run.yaml")
+        unknown["bindings"]["reference"]["exclusions"]["unexpected"] = {
+            "data": "unexpected.bed",
+            "index": None,
+        }
+        with self.assertRaisesRegex(WorkflowPlanError, "no scientific metadata.*unexpected"):
+            build_workflow_plan(unknown)
+
+    def test_disabled_scientific_exclusion_does_not_require_or_stage_a_binding(self) -> None:
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["reference"]["exclusions"]["gnomad-r2-notpass"]["enabled"] = False
+
+        plan = build_workflow_plan(manifest)
+
+        assert plan.apply is not None
+        self.assertEqual(
+            ("par-regions",),
+            tuple(item.identifier for item in plan.apply.effective_exclusions),
+        )
 
     def test_generation_execution_defaults_remain_available_to_direct_callers(self) -> None:
         manifest = self.manifest("tests/null_distribution/generate.run.yaml")
@@ -215,6 +261,15 @@ class WorkflowPlanTests(unittest.TestCase):
         manifest["bindings"]["reference"]["mistyped_resource"] = {}
 
         with self.assertRaisesRegex(WorkflowPlanError, "Additional properties are not allowed"):
+            build_workflow_plan(manifest)
+
+    def test_legacy_exclusion_lists_explain_the_migration(self) -> None:
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["bindings"]["reference"]["exclusions"] = [
+            {"data": "old-style.bed", "index": None}
+        ]
+
+        with self.assertRaisesRegex(WorkflowPlanError, "mapping keyed by exclusion ID"):
             build_workflow_plan(manifest)
 
     def test_legacy_normalization_warns_without_changing_the_source_mapping(self) -> None:

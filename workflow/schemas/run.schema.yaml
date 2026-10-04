@@ -41,6 +41,10 @@ properties:
       include_indels: {type: boolean}
     additionalProperties: true
 $defs:
+  resource_id:
+    type: string
+    minLength: 1
+    pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"
   indexed_genomic_binding:
     type: object
     additionalProperties: false
@@ -63,6 +67,10 @@ $defs:
       data: {type: string, minLength: 1}
       fai: {type: string, minLength: 1}
       gzi: {type: [string, "null"], minLength: 1}
+  exclusion_bindings:
+    type: object
+    propertyNames: {$ref: "#/$defs/resource_id"}
+    additionalProperties: {$ref: "#/$defs/indexed_genomic_binding"}
   cadd_bindings:
     type: object
     additionalProperties: false
@@ -78,9 +86,7 @@ $defs:
       fasta: {$ref: "#/$defs/fasta_binding"}
       exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
-      exclusions:
-        type: array
-        items: {$ref: "#/$defs/indexed_genomic_binding"}
+      exclusions: {$ref: "#/$defs/exclusion_bindings"}
       cadd: {$ref: "#/$defs/cadd_bindings"}
       lookup_source: {$ref: "#/$defs/lookup_source"}
   apply_reference_binding:

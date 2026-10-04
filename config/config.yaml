@@ -15,12 +15,12 @@ reference:
     kind: bed  # file layout; BED intervals
   testing_unit_bed:
     id: biomart-grch38-107-gene  # testing-unit annotation release identifier
-  # Source order is scientific: exclusions are projected and combined in this order.
+  # Each key is a stable scientific identity; bindings use the same key.
   exclusions:
-    - id: gnomad-r2-notpass  # source identifier; remove excluded variant intervals
+    gnomad-r2-notpass:
       kind: bed  # file layout; BED intervals
       role: variants_exclude  # scientific role; variant exclusion set
-    - id: par-regions  # source identifier; pseudoautosomal-region intervals
+    par-regions:
       kind: bed  # file layout; BED intervals
       role: par_regions  # scientific role; PAR exclusion set
   cadd:

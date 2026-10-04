@@ -45,7 +45,9 @@ class ApplyWorkflowFixtureTests(unittest.TestCase):
             manifest = yaml.safe_load((ROOT / "tests/smoke/run.yaml").read_text())
             # Repeated exclusions must be subtracted once, never treated as an
             # inclusion mask by the renamed primary input.
-            manifest["bindings"]["reference"]["exclusion"] = dict(manifest["bindings"]["reference"]["exclusions"][0])
+            manifest["bindings"]["reference"]["exclusion"] = dict(
+                manifest["bindings"]["reference"]["exclusions"]["gnomad-r2-notpass"]
+            )
             manifest_path = Path(temporary_dir) / "run.yaml"
             manifest_path.write_text(yaml.safe_dump(manifest))
             result = run_workflow(manifest_path, outdir)

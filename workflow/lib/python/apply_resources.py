@@ -236,18 +236,12 @@ def build_apply_resource_registry(
             origin="configured",
         )
 
-    if len(apply_plan.effective_exclusion_metadata) != len(effective_reference.exclusions):
-        raise ValueError(
-            "reference.exclusions and bindings.reference.exclusions must have the same length"
-        )
-    for position, (exclusion_metadata, exclusion_binding) in enumerate(
-        zip(apply_plan.effective_exclusion_metadata, effective_reference.exclusions)
-    ):
+    for exclusion in apply_plan.effective_exclusions:
         add_table_resource(
-            f"exclusion_{position:03d}",
-            exclusion_binding,
-            exclusion_metadata.kind,
-            exclusion_metadata.role,
+            f"exclusion_{exclusion.identifier}",
+            exclusion.binding,
+            exclusion.kind,
+            exclusion.role,
             origin=resource_origin,
         )
 

@@ -208,6 +208,52 @@ Apply mode projects intervals onto the full span of each cohort variant,
 including REF length and `INFO/END`, before constructing a combined exclusion
 VCF.
 
+#### Keyed reference exclusions
+
+`reference.exclusions` and `bindings.reference.exclusions` are mappings keyed
+by the same stable exclusion ID. The key joins the scientific role and file
+binding, so their YAML order does not change interpretation:
+
+```yaml
+# config/config.yaml or a scientific configuration layer
+reference:
+  exclusions:
+    gnomad-r2-notpass:
+      kind: bed
+      role: variants_exclude
+    par-regions:
+      kind: bed
+      role: par_regions
+
+# Run manifest
+bindings:
+  reference:
+    exclusions:
+      gnomad-r2-notpass: {data: resources/notpass.bed.gz, index: resources/notpass.bed.gz.tbi}
+      par-regions: {data: resources/par.bed.gz, index: resources/par.bed.gz.tbi}
+```
+
+Migrate list entries by using their existing scientific `id` values as mapping
+keys. Lists are rejected with a migration error; the workflow never infers an
+ID from list position. Every active scientific entry needs a matching binding,
+and a binding whose ID is absent from scientific configuration is rejected.
+
+Configuration layers merge keyed entries by ID. To disable an inherited
+scientific exclusion, set `enabled: false` on that entry; its binding is then
+optional and the resource is not staged. Do not use an empty mapping to remove
+inherited entries. The singular `exclusion` binding remains separate from this
+plural catalog and removes its own interval source.
+
+The PAR-role requirement and `minimum_retained_fraction: 0.5` are unchanged.
+Prepared exclusion filenames now include IDs, so regenerate prepared resources
+and generated bundles after migration instead of renaming old outputs. A
+standalone generate manifest may keep its existing `generation.exclusions`
+list because it has no parallel scientific exclusion catalog.
+
+YAML parsers normally retain only the last occurrence of a duplicate mapping
+key before schema validation begins. Keep every exclusion ID unique in its
+source file; a duplicate-key error cannot be recovered after parsing.
+
 ### CADD score table
 
 The SNV and optional indel tables use the first six CADD columns:

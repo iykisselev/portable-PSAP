@@ -91,11 +91,11 @@ class FullWorkflowFixtureTests(unittest.TestCase):
                 resource_paths["exclusion"]["path"],
             )
             self.assertEqual(
-                shared_reference["exclusions"][0]["data"],
+                shared_reference["exclusions"]["gnomad-r2-notpass"]["data"],
                 resource_paths["interval_exclusion_000"]["path"],
             )
             self.assertEqual(
-                shared_reference["exclusions"][1]["data"],
+                shared_reference["exclusions"]["par-regions"]["data"],
                 resource_paths["par_regions"]["path"],
             )
 

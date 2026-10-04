@@ -20,8 +20,8 @@ bindings:
     exclusion: {data: null, index: null}
     testing_unit_bed: {data: tests/smoke/data/testing_units.bed, index: null}
     exclusions:
-      - {data: tests/smoke/data/exclude_full_span.bed, index: null}
-      - {data: tests/smoke/data/par_regions.bed, index: null}
+      gnomad-r2-notpass: {data: tests/smoke/data/exclude_full_span.bed, index: null}
+      par-regions: {data: tests/smoke/data/par_regions.bed, index: null}
     lookup_source:
       type: external
       contract: external_legacy_v0

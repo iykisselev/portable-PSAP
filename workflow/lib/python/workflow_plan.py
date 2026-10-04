@@ -42,6 +42,27 @@ def normalize_run_config(config: Mapping[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _reject_legacy_exclusion_lists(config: Mapping[str, Any]) -> None:
+    """Give users an actionable error for the ID-keyed exclusion migration."""
+    reference = config.get("reference")
+    if isinstance(reference, Mapping) and isinstance(reference.get("exclusions"), list):
+        raise WorkflowPlanError(
+            "reference.exclusions must be a mapping keyed by exclusion ID; "
+            "see docs/pipeline.md#keyed-reference-exclusions"
+        )
+    bindings = config.get("bindings")
+    if not isinstance(bindings, Mapping):
+        return
+    bound_reference = bindings.get("reference")
+    if isinstance(bound_reference, Mapping) and isinstance(
+        bound_reference.get("exclusions"), list
+    ):
+        raise WorkflowPlanError(
+            "bindings.reference.exclusions must be a mapping keyed by exclusion ID; "
+            "see docs/pipeline.md#keyed-reference-exclusions"
+        )
+
+
 def _mapping(value: Any, key: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise WorkflowPlanError(f"{key} must be a mapping")
@@ -81,6 +102,12 @@ def _boolean(value: Any, key: str) -> bool:
 
 
 def _frozen_mapping(values: Mapping[str, str]) -> Mapping[str, str]:
+    return MappingProxyType(dict(values))
+
+
+def _frozen_binding_mapping(
+    values: Mapping[str, FileBinding]
+) -> Mapping[str, FileBinding]:
     return MappingProxyType(dict(values))
 
 
@@ -135,6 +162,17 @@ class ExclusionMetadata:
     identifier: str
     kind: str
     role: str
+    enabled: bool
+
+
+@dataclass(frozen=True)
+class ExclusionBinding:
+    """One active exclusion's stable identity, scientific role, and path."""
+
+    identifier: str
+    kind: str
+    role: str
+    binding: FileBinding
 
 
 @dataclass(frozen=True)
@@ -148,7 +186,7 @@ class ReferenceMetadata:
     testing_unit_id: str
     cadd_snv_id: str
     cadd_indel_id: str | None
-    exclusions: tuple[ExclusionMetadata, ...]
+    exclusions: Mapping[str, ExclusionMetadata]
 
 
 @dataclass(frozen=True)
@@ -158,7 +196,7 @@ class ReferenceBindings:
     fasta: FastaBinding
     exclusion: FileBinding
     testing_unit_bed: FileBinding
-    exclusions: tuple[FileBinding, ...]
+    exclusions: Mapping[str, FileBinding]
     cadd_snv: FileBinding
     cadd_indel: FileBinding | None
     calibration_regions: FileBinding | None = None
@@ -216,7 +254,7 @@ class GenerationPlan:
     testing_unit_bed: FileBinding
     fasta: FastaBinding
     par_regions: FileBinding
-    exclusions: tuple[FileBinding, ...]
+    exclusions: tuple[ExclusionBinding, ...]
     mutation_rate: FileBinding | None
     unobserved_policy: str
     af_source: Mapping[str, str]
@@ -249,7 +287,7 @@ class ApplyPlan:
     inputs: InputBindings
     configured_reference: ReferenceBindings
     effective_reference: ReferenceBindings
-    effective_exclusion_metadata: tuple[ExclusionMetadata, ...]
+    effective_exclusions: tuple[ExclusionBinding, ...]
     lookup_source: LookupSource
 
 
@@ -290,14 +328,17 @@ def binding_index(binding: FileBinding | None) -> str:
 
 def _reference_metadata(config: Mapping[str, Any]) -> ReferenceMetadata:
     reference = _mapping(config.get("reference"), "reference")
-    exclusions = tuple(
-        ExclusionMetadata(
-            identifier=_required(item.get("id"), f"reference.exclusions[{index}].id"),
-            kind=_required(item.get("kind"), f"reference.exclusions[{index}].kind"),
-            role=_required(item.get("role"), f"reference.exclusions[{index}].role"),
+    exclusions = _mapping(reference.get("exclusions"), "reference.exclusions")
+    exclusion_metadata = {
+        identifier: ExclusionMetadata(
+            identifier=identifier,
+            kind=_required(item.get("kind"), f"reference.exclusions.{identifier}.kind"),
+            role=_required(item.get("role"), f"reference.exclusions.{identifier}.role"),
+            enabled=_boolean(item.get("enabled", True), f"reference.exclusions.{identifier}.enabled"),
         )
-        for index, item in enumerate(reference.get("exclusions", []))
-    )
+        for identifier, value in exclusions.items()
+        for item in (_mapping(value, f"reference.exclusions.{identifier}"),)
+    }
     cadd = _mapping(reference.get("cadd"), "reference.cadd")
     indel = cadd.get("indel")
     return ReferenceMetadata(
@@ -312,7 +353,7 @@ def _reference_metadata(config: Mapping[str, Any]) -> ReferenceMetadata:
             if indel is not None
             else None
         ),
-        exclusions=exclusions,
+        exclusions=_frozen_mapping(exclusion_metadata),
     )
 
 
@@ -330,9 +371,14 @@ def _reference_bindings(value: Any, key: str, *, require_lookup: bool) -> Refere
         testing_unit_bed=FileBinding.from_config(
             reference.get("testing_unit_bed"), f"{key}.testing_unit_bed"
         ),
-        exclusions=tuple(
-            FileBinding.from_config(item, f"{key}.exclusions[{index}]")
-            for index, item in enumerate(reference.get("exclusions", []))
+        exclusions=_frozen_binding_mapping(
+            {
+                identifier: FileBinding.from_config(item, f"{key}.exclusions.{identifier}")
+                for identifier, value in _mapping(
+                    reference.get("exclusions"), f"{key}.exclusions"
+                ).items()
+                for item in (_mapping(value, f"{key}.exclusions.{identifier}"),)
+            }
         ),
         cadd_snv=FileBinding.from_config(cadd.get("snv"), f"{key}.cadd.snv"),
         cadd_indel=(
@@ -340,6 +386,40 @@ def _reference_bindings(value: Any, key: str, *, require_lookup: bool) -> Refere
             if indel is not None
             else None
         ),
+    )
+
+
+def _resolved_reference_exclusions(
+    metadata: ReferenceMetadata, bindings: ReferenceBindings
+) -> tuple[ExclusionBinding, ...]:
+    """Join active scientific exclusions to paths by stable identifier."""
+    configured_ids = set(metadata.exclusions)
+    binding_ids = set(bindings.exclusions)
+    unknown_ids = sorted(binding_ids - configured_ids)
+    if unknown_ids:
+        raise WorkflowPlanError(
+            "bindings.reference.exclusions has no scientific metadata for: "
+            + ", ".join(unknown_ids)
+        )
+    active_ids = {
+        identifier
+        for identifier, exclusion in metadata.exclusions.items()
+        if exclusion.enabled
+    }
+    missing_ids = sorted(active_ids - binding_ids)
+    if missing_ids:
+        raise WorkflowPlanError(
+            "bindings.reference.exclusions is missing active bindings for: "
+            + ", ".join(missing_ids)
+        )
+    return tuple(
+        ExclusionBinding(
+            identifier=identifier,
+            kind=metadata.exclusions[identifier].kind,
+            role=metadata.exclusions[identifier].role,
+            binding=bindings.exclusions[identifier],
+        )
+        for identifier in sorted(active_ids)
     )
 
 
@@ -385,7 +465,7 @@ def _lookup_source(
     excluded_alleles = (
         (_required(source.get("excluded_alleles"), f"{key}.excluded_alleles"),)
         if is_bundle
-        else tuple(binding_data(binding) for binding in configured_reference.exclusions)
+        else ()
     )
     excluded_units = _optional(source.get("excluded_units")) if is_bundle else None
     if is_bundle and not all(
@@ -428,24 +508,22 @@ def _generation_plan(
     if mode == "full":
         if configured_reference is None:
             raise WorkflowPlanError("full mode requires bindings.reference")
-        if len(reference_metadata.exclusions) != len(configured_reference.exclusions):
-            raise WorkflowPlanError(
-                "reference.exclusions and bindings.reference.exclusions must have equal lengths"
-            )
-        paired_exclusions = tuple(zip(reference_metadata.exclusions, configured_reference.exclusions))
-        par_bindings = [
-            binding for metadata, binding in paired_exclusions if metadata.role == "par_regions"
+        resolved_exclusions = _resolved_reference_exclusions(
+            reference_metadata, configured_reference
+        )
+        par_exclusions = [
+            exclusion for exclusion in resolved_exclusions if exclusion.role == "par_regions"
         ]
-        if len(par_bindings) != 1:
+        if len(par_exclusions) != 1:
             raise WorkflowPlanError(
                 "full mode requires exactly one bindings.reference exclusion with role par_regions"
             )
         resources = configured_reference
-        par_regions = par_bindings[0]
+        par_regions = par_exclusions[0].binding
         exclusions = tuple(
-            binding
-            for metadata, binding in paired_exclusions
-            if metadata.role == "variants_exclude"
+            exclusion
+            for exclusion in resolved_exclusions
+            if exclusion.role == "variants_exclude"
         )
     else:
         resources = ReferenceBindings(
@@ -456,13 +534,20 @@ def _generation_plan(
             testing_unit_bed=FileBinding.from_config(
                 generation.get("testing_unit_bed"), "generation.testing_unit_bed"
             ),
-            exclusions=(),
+            exclusions=_frozen_binding_mapping({}),
             cadd_snv=FileBinding.from_config(generation.get("score_snv"), "generation.score_snv"),
             cadd_indel=None,
         )
         par_regions = FileBinding.from_config(generation.get("par_regions"), "generation.par_regions")
         exclusions = tuple(
-            FileBinding.from_config(item, f"generation.exclusions[{index}]")
+            ExclusionBinding(
+                identifier=f"standalone-{index:03d}",
+                kind="bed",
+                role="variants_exclude",
+                binding=FileBinding.from_config(
+                    item, f"generation.exclusions[{index}]"
+                ),
+            )
             for index, item in enumerate(generation.get("exclusions", []))
         )
     af_source = _frozen_mapping(
@@ -552,31 +637,43 @@ def _generated_lookup_source(
 
 def _effective_bundle_reference(
     configured_reference: ReferenceBindings, lookup_source: LookupSource
-) -> tuple[ReferenceBindings, tuple[ExclusionMetadata, ...]]:
+) -> tuple[ReferenceBindings, tuple[ExclusionBinding, ...]]:
+    bundle_exclusions = tuple(
+        ExclusionBinding(
+            identifier=(
+                "generated-bundle-excluded-alleles"
+                if index == 0
+                else f"generated-bundle-excluded-alleles-{index:03d}"
+            ),
+            kind="tsv",
+            role="variants_exclude",
+            binding=FileBinding(path),
+        )
+        for index, path in enumerate(lookup_source.excluded_alleles)
+    )
     return (
         ReferenceBindings(
             fasta=configured_reference.fasta,
             exclusion=FileBinding(None),
             calibration_regions=FileBinding(lookup_source.calibration_mask),
             testing_unit_bed=FileBinding(lookup_source.eligible_units),
-            exclusions=tuple(FileBinding(path) for path in lookup_source.excluded_alleles),
+            exclusions=_frozen_binding_mapping(
+                {
+                    exclusion.identifier: exclusion.binding
+                    for exclusion in bundle_exclusions
+                }
+            ),
             cadd_snv=configured_reference.cadd_snv,
             cadd_indel=configured_reference.cadd_indel,
         ),
-        tuple(
-            ExclusionMetadata(
-                identifier="generated-bundle-excluded-alleles",
-                kind="tsv",
-                role="variants_exclude",
-            )
-            for _ in lookup_source.excluded_alleles
-        ),
+        bundle_exclusions,
     )
 
 
 def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
     """Resolve validated configuration into immutable mode-specific records."""
     normalized = normalize_run_config(config)
+    _reject_legacy_exclusion_lists(normalized)
     try:
         validate_configuration(normalized)
     except ConfigurationValidationError as exc:
@@ -658,7 +755,7 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
             if generation is None:
                 raise WorkflowPlanError("full mode requires generation inputs")
             lookup_source = _generated_lookup_source(generation, model, settings)
-            effective_reference, effective_metadata = _effective_bundle_reference(
+            effective_reference, effective_exclusions = _effective_bundle_reference(
                 configured_reference, lookup_source
             )
         else:
@@ -673,12 +770,14 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
                 settings=settings,
             )
             if lookup_source.is_bundle:
-                effective_reference, effective_metadata = _effective_bundle_reference(
+                effective_reference, effective_exclusions = _effective_bundle_reference(
                     configured_reference, lookup_source
                 )
             else:
                 effective_reference = configured_reference
-                effective_metadata = reference_metadata.exclusions
+                effective_exclusions = _resolved_reference_exclusions(
+                    reference_metadata, configured_reference
+                )
         inputs_config = _mapping(normalized.get("inputs"), "inputs")
         apply = ApplyPlan(
             output_dir=output_root / "apply" / prefix,
@@ -690,7 +789,7 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
             ),
             configured_reference=configured_reference,
             effective_reference=effective_reference,
-            effective_exclusion_metadata=effective_metadata,
+            effective_exclusions=effective_exclusions,
             lookup_source=lookup_source,
         )
     return WorkflowPlan(

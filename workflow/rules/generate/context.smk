@@ -54,7 +54,7 @@ def generation_mutation_rate_index():
 
 
 def generation_exclusion_data():
-    return [exclusion_binding.data for exclusion_binding in GENERATION_EXCLUSION_BINDINGS]
+    return [exclusion_binding.binding.data for exclusion_binding in GENERATION_EXCLUSION_BINDINGS]
 
 
 def generation_scope_artifact(wildcards, artifact_name):

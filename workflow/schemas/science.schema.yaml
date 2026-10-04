@@ -31,15 +31,16 @@ properties:
           kind: {enum: [bed, tsv]}
       testing_unit_bed: {$ref: "#/$defs/resource_identity"}
       exclusions:
-        type: array
-        items:
-          allOf:
-            - {$ref: "#/$defs/resource_identity"}
-            - type: object
-              required: [kind, role]
-              properties:
-                kind: {enum: [bed, tsv, vcf]}
-                role: {enum: [variants_exclude, par_regions]}
+        type: object
+        propertyNames: {$ref: "#/$defs/resource_id"}
+        additionalProperties:
+          type: object
+          additionalProperties: false
+          required: [kind, role]
+          properties:
+            kind: {enum: [bed, tsv, vcf]}
+            role: {enum: [variants_exclude, par_regions]}
+            enabled: {type: boolean, default: true}
       cadd:
         type: object
         additionalProperties: false
@@ -79,6 +80,10 @@ properties:
           af_policy: {enum: [sex_specific, overall_proxy]}
           mutation_rate_policy: {enum: [reject, sex_averaged_proxy]}
 $defs:
+  resource_id:
+    type: string
+    minLength: 1
+    pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"
   resource_identity:
     type: object
     required: [id]
