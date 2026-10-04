@@ -73,7 +73,9 @@ class WorkflowDagBaselineTests(unittest.TestCase):
     def test_removed_result_aliases_are_rejected(self) -> None:
         aliases = (
             ("tests/null_distribution/generate.run.yaml", "generate_results"),
+            ("tests/null_distribution/generate.run.yaml", "null_distributions"),
             ("tests/smoke/run.yaml", "apply_results"),
+            ("tests/null_distribution/full.run.yaml", "full_results"),
         )
         for manifest, target in aliases:
             with self.subTest(target=target), tempfile.TemporaryDirectory(

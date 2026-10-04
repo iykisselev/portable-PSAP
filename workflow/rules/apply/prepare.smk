@@ -17,7 +17,7 @@ rule prepare_vcf_resource:
         mem_mb=policy_resources("prepare_vcf_resource").mem_mb,
         runtime=policy_resources("prepare_vcf_resource").runtime
     conda:
-        str(CONDA_ENV_DIR / "bioinformatics.yaml")
+        env("bioinformatics")
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
@@ -48,7 +48,7 @@ rule prepare_table_resource:
         mem_mb=TABLE_RESOURCE_CALLBACKS.mem_mb,
         runtime=TABLE_RESOURCE_CALLBACKS.runtime
     conda:
-        str(CONDA_ENV_DIR / "bioinformatics.yaml")
+        env("bioinformatics")
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     benchmark:
@@ -78,7 +78,7 @@ rule combine_exclusions:
         mem_mb=policy_resources("combine_exclusions").mem_mb,
         runtime=policy_resources("combine_exclusions").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:

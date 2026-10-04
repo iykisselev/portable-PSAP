@@ -36,6 +36,7 @@ GENERATION_BIN_COUNT = GENERATION_EXECUTION_LAYOUT.bin_count
 GENERATION_ROLES = GENERATION_EXECUTION_LAYOUT.roles
 GENERATION_HEM_ENABLED = WORKFLOW_PLAN.model.hemizygote
 GENERATION_BUNDLE_PATHS = GENERATION_EXECUTION_LAYOUT.bundle_paths
+GENERATION_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "generate"
 
 
 def generation_index(resource_binding):
@@ -118,3 +119,16 @@ def generation_statistics_artifacts(wildcards):
         for partition_id in generation_partition_ids(wildcards)
         for bucket_id in generation_bucket_ids(wildcards)
     ]
+
+
+def generation_outputs(wildcards):
+    """Return recoverable outputs of one generation run after certification."""
+    outputs = []
+    for artifact_name in ("allele_states", "allele_membership", "allele_scores"):
+        outputs.extend(generation_partition_artifacts(wildcards, artifact_name))
+    outputs.extend(generation_statistics_artifacts(wildcards))
+    for artifact_name in ("lookup_het", "lookup_hom", "diagnostics"):
+        outputs.extend(generation_bucket_artifacts(wildcards, artifact_name))
+    if GENERATION_HEM_ENABLED:
+        outputs.extend(generation_bucket_artifacts(wildcards, "lookup_hem"))
+    return outputs

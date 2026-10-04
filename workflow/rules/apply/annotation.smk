@@ -36,16 +36,13 @@ rule annotate_variants:
         mem_mb=policy_resources("annotate_variants").mem_mb,
         runtime=policy_resources("annotate_variants").runtime
     conda:
-        str(CONDA_ENV_DIR / "bioinformatics.yaml")
+        env("bioinformatics")
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     benchmark:
         str(BENCHMARK_DIR / "annotate_variants.tsv")
     log:
-        str(
-            APPLY_LOG_DIR /
-            "annotation" / "annotate_variants.log"
-        )
+        str(APPLY_LOG_DIR / "annotation" / "annotate_variants.log")
     script:
         str(APPLY_SCRIPT_DIR / "annotate_variants.py")
 
@@ -63,14 +60,11 @@ rule summarize_annotations:
         mem_mb=policy_resources("summarize_annotations").mem_mb,
         runtime=policy_resources("summarize_annotations").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
-        str(
-            APPLY_LOG_DIR /
-            "annotation" / "summarize_annotations.log"
-        )
+        str(APPLY_LOG_DIR / "annotation" / "summarize_annotations.log")
     script:
         str(APPLY_SCRIPT_DIR / "summarize_annotations.py")
 
@@ -90,14 +84,11 @@ rule require_valid_annotations:
         mem_mb=policy_resources("require_valid_annotations").mem_mb,
         runtime=policy_resources("require_valid_annotations").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
-        str(
-            APPLY_LOG_DIR /
-            "annotation" / "require_valid_annotations.log"
-        )
+        str(APPLY_LOG_DIR / "annotation" / "require_valid_annotations.log")
     script:
         str(APPLY_SCRIPT_DIR / "require_valid_report.py")
 
@@ -116,13 +107,10 @@ rule prepare_testing_units:
         mem_mb=policy_resources("prepare_testing_units").mem_mb,
         runtime=policy_resources("prepare_testing_units").runtime
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
+        env("r")
     envmodules: *mod("r")
     container: sif("r")
     log:
-        str(
-            APPLY_LOG_DIR /
-            "annotation" / "prepare_testing_units.log"
-        )
+        str(APPLY_LOG_DIR / "annotation" / "prepare_testing_units.log")
     script:
         str(APPLY_SCRIPT_DIR / "prepare_testing_units.R")

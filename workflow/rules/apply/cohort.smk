@@ -23,15 +23,11 @@ rule build_sample_candidates:
         mem_mb=policy_resources("build_sample_candidates").mem_mb,
         runtime=policy_resources("build_sample_candidates").runtime
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
+        env("r")
     envmodules: *mod("r")
     container: sif("r")
     log:
-        str(
-            APPLY_LOG_DIR
-            / "cohort"
-            / "build_sample_candidates_{sample}_{testing_unit}.log"
-        )
+        str(APPLY_LOG_DIR / "cohort" / "build_sample_candidates_{sample}_{testing_unit}.log")
     script:
         str(APPLY_SCRIPT_DIR / "build_sample_candidates.R")
 
@@ -60,17 +56,13 @@ rule build_control_reference:
         mem_mb=policy_resources("build_control_reference").mem_mb,
         runtime=policy_resources("build_control_reference").runtime
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
+        env("r")
     envmodules: *mod("r")
     container: sif("r")
     benchmark:
         str(BENCHMARK_DIR / "build_control_reference.tsv")
     log:
-        str(
-            APPLY_LOG_DIR
-            / "cohort"
-            / "build_control_reference.log"
-        )
+        str(APPLY_LOG_DIR / "cohort" / "build_control_reference.log")
     script:
         str(APPLY_SCRIPT_DIR / "build_control_reference.R")
 
@@ -96,16 +88,12 @@ rule build_cohort_report:
         mem_mb=policy_resources("build_cohort_report").mem_mb,
         runtime=policy_resources("build_cohort_report").runtime
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
+        env("r")
     envmodules: *mod("r")
     container: sif("r")
     benchmark:
         str(BENCHMARK_DIR / "build_cohort_report.tsv")
     log:
-        str(
-            APPLY_LOG_DIR
-            / "cohort"
-            / "build_cohort_report.log"
-        )
+        str(APPLY_LOG_DIR / "cohort" / "build_cohort_report.log")
     script:
         str(APPLY_SCRIPT_DIR / "build_cohort_report.R")

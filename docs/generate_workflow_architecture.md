@@ -69,9 +69,8 @@ filesystem.
 | `finalize_null_distribution_bundle` | All bucket rows/diagnostics plus scope and state artifacts | Retain only units with positive mass for every applicable role; stream public bundle components and metadata. | Gzipped lookup, scope, exclusion, and metadata files. |
 | `validate_null_distribution_bundle` | Finalized bundle and schema | Validate component checksums, row coverage, contracts, and semantics. | `validation.json` and `validation.ok`. |
 
-The public `null_distributions` target exposes the certificate and recoverable
-generation intermediates. In full mode, `full_results` exposes those generation
-outputs and the downstream apply reports together.
+The public `all` target exposes the certificate and recoverable generation
+intermediates. In full mode, it also exposes the downstream apply reports.
 
 ## Intermediate-data contracts
 
@@ -98,6 +97,14 @@ These checkpoint artifacts are part of the internal DAG contract:
 Downstream rules should not glob these files or infer wildcard names from
 directory contents. Use the callbacks in `rules/generate/context.smk`; they
 wait for the checkpoint and validate the manifests before returning paths.
+
+## Rule authoring conventions
+
+Use `env`, `mod`, and `sif` from `rules/deployment.smk` together when adding a
+rule, selecting one logical tool family. Keep rule-specific threads and
+resource-policy declarations at the call site. Add recoverable generation
+target artifacts through `generation_outputs()` rather than copying
+checkpoint-aware callbacks into `Snakefile`.
 
 ## Bundle contract
 

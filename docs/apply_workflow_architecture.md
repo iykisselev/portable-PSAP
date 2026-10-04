@@ -51,7 +51,7 @@ generated scope therefore becomes the apply scope, and the bundle's
 | Cohort VCF and optional index | Yes | Normalized/split VCF with `GT` and sample IDs matching metadata. |
 | PED or sample sheet | Exactly one | Sample ID, phenotype, and sex used to build the DAG and classify genotypes. |
 | FASTA, `.fai`, and optional `.gzi` | Yes | Assembly validation and VCF/resource compatibility. |
-| Coverage resource | Optional in external apply; bundle-derived in full/bundle apply | Callable interval filter. |
+| Calibration-region resource | Optional in external apply; bundle-derived in full/bundle apply | Optional callable interval filter. |
 | Testing-unit BED | Yes in configured bindings; bundle-derived when applicable | Fourth column is the unit ID joined to lookup rows. |
 | CADD SNV and optional indel resource | SNV yes; indel when `include_indels` | Allele-level scores used for lookup-bin selection. |
 | Exclusions | Optional | BED/TSV/VCF intervals or exact alleles removed from the cohort. |
@@ -127,6 +127,12 @@ For `outdir` and `run.apply_prefix`, results are rooted at
    memberships before scoring or control comparison.
 6. **Keep adapters thin.** Put cross-rule logic in libraries and use
    `APPLY_SCRIPT_DIR` for every apply script path.
+
+## Rule authoring conventions
+
+Use `env`, `mod`, and `sif` from `rules/deployment.smk` together when adding a
+rule, selecting one logical tool family. Keep rule-specific threads and
+resource-policy declarations visible in the rule.
 
 ## Where common changes belong
 

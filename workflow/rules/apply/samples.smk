@@ -15,14 +15,11 @@ rule extract_gt:
         mem_mb=policy_resources("extract_gt").mem_mb,
         runtime=policy_resources("extract_gt").runtime
     conda:
-        str(CONDA_ENV_DIR / "bioinformatics.yaml")
+        env("bioinformatics")
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
-        str(
-            APPLY_LOG_DIR / "samples" /
-            "extract_gt_{sample}.log"
-        )
+        str(APPLY_LOG_DIR / "samples" / "extract_gt_{sample}.log")
     shell:
         """
         bcftools query \
@@ -50,14 +47,11 @@ rule standardize_gt:
         mem_mb=policy_resources("standardize_gt").mem_mb,
         runtime=policy_resources("standardize_gt").runtime
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
+        env("r")
     envmodules: *mod("r")
     container: sif("r")
     log:
-        str(
-            APPLY_LOG_DIR / "samples" /
-            "standardize_gt_{sample}.log"
-        )
+        str(APPLY_LOG_DIR / "samples" / "standardize_gt_{sample}.log")
     script:
         str(APPLY_SCRIPT_DIR / "standardize_gt.R")
 
@@ -82,14 +76,11 @@ rule apply_sex_model:
         mem_mb=policy_resources("apply_sex_model").mem_mb,
         runtime=policy_resources("apply_sex_model").runtime
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
+        env("r")
     envmodules: *mod("r")
     container: sif("r")
     log:
-        str(
-            APPLY_LOG_DIR / "samples" /
-            "apply_sex_model_{sample}.log"
-        )
+        str(APPLY_LOG_DIR / "samples" / "apply_sex_model_{sample}.log")
     script:
         str(APPLY_SCRIPT_DIR / "classify_gt.R")
 
@@ -115,13 +106,10 @@ rule join_sample_annotations:
         mem_mb=policy_resources("join_sample_annotations").mem_mb,
         runtime=policy_resources("join_sample_annotations").runtime
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
+        env("r")
     envmodules: *mod("r")
     container: sif("r")
     log:
-        str(
-            APPLY_LOG_DIR / "samples" /
-            "join_sample_annotations_{sample}_{testing_unit}.log"
-        )
+        str(APPLY_LOG_DIR / "samples" / "join_sample_annotations_{sample}_{testing_unit}.log")
     script:
         str(APPLY_SCRIPT_DIR / "join_sample_annotations.R")

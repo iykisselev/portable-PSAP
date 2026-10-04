@@ -38,28 +38,10 @@ if WORKFLOW_MODE in {"generate", "full"}:
     include: "rules/generate/finalize.smk"
 
 if WORKFLOW_MODE == "generate":
-    # Public generate-mode target. Result aliases are intentionally unsupported.
-    rule null_distributions:
+    rule all:
         input:
             marker=rules.validate_null_distribution_bundle.output.marker,
-            allele_states=lambda wc: generation_partition_artifacts(
-                wc, "allele_states"
-            ),
-            allele_memberships=lambda wc: generation_partition_artifacts(
-                wc, "allele_membership"
-            ),
-            allele_scores=lambda wc: generation_partition_artifacts(
-                wc, "allele_scores"
-            ),
-            statistics=generation_statistics_artifacts,
-            lookup_het=lambda wc: generation_bucket_artifacts(wc, "lookup_het"),
-            lookup_hom=lambda wc: generation_bucket_artifacts(wc, "lookup_hom"),
-            lookup_hem=(
-                lambda wc: generation_bucket_artifacts(wc, "lookup_hem")
-                if GENERATION_HEM_ENABLED
-                else []
-            ),
-            diagnostics=lambda wc: generation_bucket_artifacts(wc, "diagnostics")
+            generation=generation_outputs
         default_target: True
 
 elif WORKFLOW_MODE in {"apply", "full"}:
@@ -89,36 +71,13 @@ elif WORKFLOW_MODE in {"apply", "full"}:
                 str(COHORT_DIR / "control_variants.tsv.gz")
             default_target: True
     else:
-        rule full_results:
+        rule all:
             input:
                 marker=rules.validate_null_distribution_bundle.output.marker,
                 cohort_candidates=str(COHORT_DIR / "cohort_candidates.tsv.gz"),
                 cohort_summary=str(COHORT_DIR / "cohort_summary.tsv.gz"),
                 control_variants=str(COHORT_DIR / "control_variants.tsv.gz"),
-                allele_states=lambda wc: generation_partition_artifacts(
-                    wc, "allele_states"
-                ),
-                allele_memberships=lambda wc: generation_partition_artifacts(
-                    wc, "allele_membership"
-                ),
-                allele_scores=lambda wc: generation_partition_artifacts(
-                    wc, "allele_scores"
-                ),
-                statistics=generation_statistics_artifacts,
-                lookup_het=lambda wc: generation_bucket_artifacts(
-                    wc, "lookup_het"
-                ),
-                lookup_hom=lambda wc: generation_bucket_artifacts(
-                    wc, "lookup_hom"
-                ),
-                lookup_hem=(
-                    lambda wc: generation_bucket_artifacts(wc, "lookup_hem")
-                    if GENERATION_HEM_ENABLED
-                    else []
-                ),
-                diagnostics=lambda wc: generation_bucket_artifacts(
-                    wc, "diagnostics"
-                )
+                generation=generation_outputs
             default_target: True
 
 else:

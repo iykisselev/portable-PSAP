@@ -28,7 +28,7 @@ rule calculate_partition_null_distribution:
         mem_mb=policy_resources("calculate_partition_null_distribution").mem_mb,
         runtime=policy_resources("calculate_partition_null_distribution").runtime
     conda:
-        str(Path(workflow.basedir) / "envs" / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
@@ -38,7 +38,7 @@ rule calculate_partition_null_distribution:
             / "{partition}.{bucket}.calculate.log"
         )
     script:
-        str(Path(workflow.basedir) / "scripts" / "generate" / "calculate_partition_statistics.py")
+        str(GENERATION_SCRIPT_DIR / "calculate_partition_statistics.py")
 
 
 rule reduce_null_distribution_bucket:
@@ -63,10 +63,10 @@ rule reduce_null_distribution_bucket:
         mem_mb=policy_resources("reduce_null_distribution_bucket").mem_mb,
         runtime=policy_resources("reduce_null_distribution_bucket").runtime
     conda:
-        str(Path(workflow.basedir) / "envs" / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(GENERATION_LOG_DIR / "buckets" / "{bucket}.reduce.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "generate" / "reduce_partition_statistics.py")
+        str(GENERATION_SCRIPT_DIR / "reduce_partition_statistics.py")

@@ -13,8 +13,8 @@ Every manifest explicitly selects one mode with `workflow.mode`:
 | Mode | Inputs | Default target | Result |
 | --- | --- | --- | --- |
 | `apply` | Cohort, reference/annotation resources, external or certified bundle | `all` | Cohort candidate, summary, and control reports |
-| `generate` | Population AF, score, scope, and reference resources | `null_distributions` | Certified generated lookup bundle |
-| `full` | Cohort plus one shared generation/application binding set | `full_results` | Generated bundle followed by cohort reports |
+| `generate` | Population AF, score, scope, and reference resources | `all` | Certified generated lookup bundle |
+| `full` | Cohort plus one shared generation/application binding set | `all` | Generated bundle followed by cohort reports |
 
 These are the only supported explicit Snakemake targets. The workflow does not
 maintain compatibility aliases for result targets.

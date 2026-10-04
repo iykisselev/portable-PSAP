@@ -25,6 +25,11 @@ def mod(*tools):
     return modules
 
 
+def env(tool):
+    """Return the pinned Conda environment for one logical tool family."""
+    return str(CONDA_ENV_DIR / f"{tool}.yaml")
+
+
 def sif(tool):
     """Return the logical tool's pinned Apptainer/Singularity image reference."""
     return CONTAINERS[tool]

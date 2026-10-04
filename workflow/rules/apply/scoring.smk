@@ -1,7 +1,3 @@
-LOOKUP_TABLES = {
-    name: path
-    for name, path in LOOKUP_SOURCE.tables.items()
-}
 HEMIZYGOUS_MODEL_ENABLED = WORKFLOW_PLAN.model.hemizygote
 
 
@@ -11,10 +7,10 @@ rule apply_psap:
     """
     input:
         annotated_gt=rules.join_sample_annotations.output.annotated_gt,
-        lookup_het=LOOKUP_TABLES["het"],
-        lookup_hom=LOOKUP_TABLES["hom"],
+        lookup_het=LOOKUP_SOURCE.tables["het"],
+        lookup_hom=LOOKUP_SOURCE.tables["hom"],
         lookup_hem_chrx=(
-            [LOOKUP_TABLES["hem_chrX"]] if HEMIZYGOUS_MODEL_ENABLED else []
+            [LOOKUP_SOURCE.tables["hem_chrX"]] if HEMIZYGOUS_MODEL_ENABLED else []
         ),
         lookup_metadata=[LOOKUP_SOURCE.metadata] if LOOKUP_SOURCE.metadata else [],
         lookup_validation=[LOOKUP_SOURCE.validation] if LOOKUP_SOURCE.validation else [],
@@ -39,15 +35,12 @@ rule apply_psap:
         mem_mb=policy_resources("apply_psap").mem_mb,
         runtime=policy_resources("apply_psap").runtime
     conda:
-        str(CONDA_ENV_DIR / "r.yaml")
+        env("r")
     envmodules: *mod("r")
     container: sif("r")
     benchmark:
         str(BENCHMARK_DIR / "apply_psap_{sample}_{testing_unit}.tsv")
     log:
-        str(
-            APPLY_LOG_DIR / "samples" /
-            "apply_psap_{sample}_{testing_unit}.log"
-        )
+        str(APPLY_LOG_DIR / "samples" / "apply_psap_{sample}_{testing_unit}.log")
     script:
         str(APPLY_SCRIPT_DIR / "apply_psap.R")

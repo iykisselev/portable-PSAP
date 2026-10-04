@@ -62,13 +62,13 @@ rule finalize_null_distribution_bundle:
         mem_mb=policy_resources("finalize_null_distribution_bundle").mem_mb,
         runtime=policy_resources("finalize_null_distribution_bundle").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(GENERATION_LOG_DIR / "finalize.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "generate" / "finalize_bundle.py")
+        str(GENERATION_SCRIPT_DIR / "finalize_bundle.py")
 
 
 rule validate_null_distribution_bundle:
@@ -95,10 +95,10 @@ rule validate_null_distribution_bundle:
         mem_mb=policy_resources("validate_null_distribution_bundle").mem_mb,
         runtime=policy_resources("validate_null_distribution_bundle").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(GENERATION_LOG_DIR / "validate_bundle.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "generate" / "validate_bundle.py")
+        str(GENERATION_SCRIPT_DIR / "validate_bundle.py")

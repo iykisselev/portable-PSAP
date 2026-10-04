@@ -23,7 +23,7 @@ rule filter_calibration_regions:
         mem_mb=policy_resources("filter_calibration_regions").mem_mb,
         runtime=policy_resources("filter_calibration_regions").runtime
     conda:
-        str(CONDA_ENV_DIR / "bioinformatics.yaml")
+        env("bioinformatics")
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:
@@ -77,7 +77,7 @@ rule filter_excluded_records:
         mem_mb=policy_resources("filter_excluded_records").mem_mb,
         runtime=policy_resources("filter_excluded_records").runtime
     conda:
-        str(CONDA_ENV_DIR / "bioinformatics.yaml")
+        env("bioinformatics")
     envmodules: *mod("bioinformatics")
     container: sif("bioinformatics")
     log:

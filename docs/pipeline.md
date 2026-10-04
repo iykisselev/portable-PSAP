@@ -23,9 +23,9 @@ The workflow supports three modes:
 
 | Mode | What runs | Default target | Main result |
 | --- | --- | --- | --- |
-| `generate` | Null-distribution generation only | `null_distributions` | A certified lookup bundle |
+| `generate` | Null-distribution generation only | `all` | A certified lookup bundle |
 | `apply` | Cohort processing and scoring only | `all` | Cohort candidate, summary, and control reports |
-| `full` | Generation followed by application in one DAG | `full_results` | Both the certified bundle and cohort reports |
+| `full` | Generation followed by application in one DAG | `all` | Both the certified bundle and cohort reports |
 
 At a high level, data move through the pipeline like this:
 
@@ -619,11 +619,10 @@ snakemake \
   --configfile runs/grex-generate.yaml \
   --software-deployment-method env-modules \
   --dry-run \
-  null_distributions
+  all
 ```
 
-Submit by removing `--dry-run`. Use `all` for apply mode or `full_results` for
-full mode.
+Submit by removing `--dry-run`. Every mode uses `all` as its default target.
 
 ## Scaling, retries, and recovery
 

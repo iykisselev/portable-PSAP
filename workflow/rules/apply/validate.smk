@@ -20,7 +20,7 @@ rule validate_cohort:
         mem_mb=policy_resources("validate_cohort").mem_mb,
         runtime=policy_resources("validate_cohort").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
@@ -63,7 +63,7 @@ rule validate_resources:
         mem_mb=policy_resources("validate_resources").mem_mb,
         runtime=policy_resources("validate_resources").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
@@ -103,7 +103,7 @@ rule validate_model:
         mem_mb=policy_resources("validate_model").mem_mb,
         runtime=policy_resources("validate_model").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
@@ -125,7 +125,7 @@ rule merge_validation:
         mem_mb=policy_resources("merge_validation").mem_mb,
         runtime=policy_resources("merge_validation").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
@@ -150,7 +150,7 @@ rule require_valid_inputs:
         mem_mb=policy_resources("require_valid_inputs").mem_mb,
         runtime=policy_resources("require_valid_inputs").runtime
     conda:
-        str(CONDA_ENV_DIR / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:

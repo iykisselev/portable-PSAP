@@ -34,13 +34,13 @@ checkpoint prepare_generation_scope:
         mem_mb=policy_resources("prepare_generation_scope").mem_mb,
         runtime=policy_resources("prepare_generation_scope").runtime
     conda:
-        str(Path(workflow.basedir) / "envs" / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(GENERATION_LOG_DIR / "prepare_scope.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "generate" / "prepare_generation_scope.py")
+        str(GENERATION_SCRIPT_DIR / "prepare_generation_scope.py")
 
 
 rule prepare_generation_partition:
@@ -70,10 +70,10 @@ rule prepare_generation_partition:
         mem_mb=policy_resources("prepare_generation_partition").mem_mb,
         runtime=policy_resources("prepare_generation_partition").runtime
     conda:
-        str(Path(workflow.basedir) / "envs" / "validation.yaml")
+        env("validation")
     envmodules: *mod("validation")
     container: sif("validation")
     log:
         str(GENERATION_LOG_DIR / "partitions" / "{partition}.prepare.log")
     script:
-        str(Path(workflow.basedir) / "scripts" / "generate" / "prepare_generation_partition.py")
+        str(GENERATION_SCRIPT_DIR / "prepare_generation_partition.py")

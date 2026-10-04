@@ -41,7 +41,7 @@
       "reduce_null_distribution_bucket",
       "finalize_null_distribution_bundle",
       "validate_null_distribution_bundle",
-      "null_distributions"
+      "all"
     ]
   },
   "full": {
@@ -69,7 +69,7 @@
       "validate_null_distribution_bundle",
       "validate_model",
       "build_cohort_report",
-      "full_results"
+      "all"
     ]
   }
 }
