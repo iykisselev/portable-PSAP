@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import sys
 from typing import Iterable, Mapping
+
+from io_contracts import write_text_atomic
 
 
 VALIDATION_REPORT_SCHEMA_VERSION = 1
@@ -76,23 +77,12 @@ def validate_validation_report(report: object) -> dict[str, object]:
     return report
 
 
-def write_atomic_text(path: str | Path, text: str, *, create_parents: bool = True) -> Path:
-    """Atomically replace one text artifact after its full content is available."""
-    destination = Path(path)
-    if create_parents:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".tmp")
-    temporary.write_text(text, encoding="utf-8")
-    os.replace(temporary, destination)
-    return destination
-
-
 def write_validation_report(
     report: Mapping[str, object], path: str | Path, *, create_parents: bool = True
 ) -> Path:
     """Validate and atomically publish a report consumed by a workflow marker."""
     checked = validate_validation_report(dict(report))
-    return write_atomic_text(
+    return write_text_atomic(
         path,
         json.dumps(checked, indent=2, sort_keys=True) + "\n",
         create_parents=create_parents,
@@ -149,7 +139,7 @@ def require_validation_success(
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         raise RuntimeError(f"{failure_message}; see {report_path}")
-    return write_atomic_text(marker_path, success_marker, create_parents=True)
+    return write_text_atomic(marker_path, success_marker, create_parents=True)
 
 
 def _append_unique(target: list[str], values: Iterable[object]) -> None:

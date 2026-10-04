@@ -23,6 +23,10 @@ class ExclusionOverlapTests(unittest.TestCase):
         self.assertFalse(interval_overlaps_variant(index, "chr1", 95, 99))
         self.assertFalse(interval_overlaps_variant(index, "chr1", 111, 120))
 
+    def test_mitochondrial_aliases_share_the_genomic_contract(self) -> None:
+        index = merged_interval_index({"MT": [(1, 10)]})
+        self.assertTrue(interval_overlaps_variant(index, "chrM", 5, 5))
+
     def test_vcf_span_uses_ref_length_and_info_end(self) -> None:
         self.assertEqual(
             vcf_record_span(["1", "95", ".", "AAAAAAAAAA", "A"]),

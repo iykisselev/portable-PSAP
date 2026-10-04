@@ -275,7 +275,7 @@ class ValidationTests(unittest.TestCase):
             source_index.write_text("index", encoding="utf-8")
 
             with (
-                patch.object(resources, "is_bgzip", return_value=True),
+                patch.object(resources, "is_bgzf", return_value=True),
                 patch.object(resources, "has_bgzf_eof", return_value=True),
                 patch.object(resources, "require_tool", return_value="bcftools"),
                 patch.object(resources, "run") as run,

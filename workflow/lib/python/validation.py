@@ -11,6 +11,9 @@ import subprocess
 from collections import Counter
 from pathlib import Path
 
+from bgzf import has_bgzf_eof, is_bgzf
+from genomic_contracts import canonical_chromosome
+
 VALID_UNITS = {"gene", "cadd_region", "coding_cadd_region"}
 BOOLEAN_VALUES = {"true": True, "false": False}
 MISSING_CONFIG_VALUES = {"", "na", "none", "null", ".", "-"}
@@ -23,9 +26,6 @@ CHROMOSOME_ORDER = {
     chromosome: position
     for position, chromosome in enumerate(CANONICAL_CHROMOSOMES)
 }
-BGZF_EOF_BLOCK = bytes.fromhex(
-    "1f8b08040000000000ff0600424302001b0003000000000000000000"
-)
 
 
 def optional_config_paths(value: str) -> list[str]:
@@ -130,47 +130,6 @@ def validate_declared_index(
     require_file(index_path, f"{description} index", errors)
 
 
-def is_bgzip_file(path: str | Path) -> bool:
-    try:
-        with Path(path).open("rb") as handle:
-            header = handle.read(18)
-            if len(header) < 18:
-                return False
-
-            gzip_magic = header[0:2] == b"\x1f\x8b"
-            has_extra_field = bool(header[3] & 0x04)
-            if not gzip_magic or not has_extra_field:
-                return False
-
-            extra_length = int.from_bytes(header[10:12], byteorder="little")
-            extra = header[12:] + handle.read(max(0, extra_length - len(header[12:])))
-    except OSError:
-        return False
-
-    offset = 0
-    while offset + 4 <= len(extra):
-        subfield_id = extra[offset : offset + 2]
-        subfield_length = int.from_bytes(extra[offset + 2 : offset + 4], "little")
-        subfield_start = offset + 4
-        subfield_end = subfield_start + subfield_length
-        if subfield_end > len(extra):
-            return False
-        if subfield_id == b"BC" and subfield_length == 2:
-            return True
-        offset = subfield_end
-
-    return False
-
-
-def has_bgzf_eof(path: str | Path) -> bool:
-    try:
-        with Path(path).open("rb") as handle:
-            handle.seek(-len(BGZF_EOF_BLOCK), 2)
-            return handle.read() == BGZF_EOF_BLOCK
-    except OSError:
-        return False
-
-
 def open_text_maybe_gzip(path: str | Path):
     file_path = Path(path)
     try:
@@ -216,7 +175,7 @@ def validate_indexed_table(
     index_path: str | Path | None = None,
 ) -> None:
     if has_data_row(path, description, errors):
-        bgzip = is_bgzip_file(path)
+        bgzip = is_bgzf(path)
         if not bgzip:
             warnings.append(
                 f"{description} is not BGZF-compressed; the workflow will prepare "
@@ -469,7 +428,7 @@ def validate_vcf_resource(
     if not has_data_row(data_path, description, errors):
         return
 
-    bgzip = is_bgzip_file(data_path)
+    bgzip = is_bgzf(data_path)
     if not bgzip:
         warnings.append(
             f"{description} is not BGZF-compressed; the workflow will prepare a "
@@ -775,11 +734,8 @@ def read_samples_tsv(
 
 
 def canonical_chromosome_name(name: str) -> str | None:
-    normalized = name.strip()
-    if normalized.lower().startswith("chr"):
-        normalized = normalized[3:]
-    normalized = normalized.upper()
-    return normalized if normalized in CANONICAL_CHROMOSOME_SET else None
+    canonical = canonical_chromosome(name)
+    return canonical if canonical in CANONICAL_CHROMOSOME_SET else None
 
 
 def chromosome_sort_key(chromosome: str) -> int:

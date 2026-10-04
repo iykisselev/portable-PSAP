@@ -29,8 +29,9 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def _temporary_path(destination: Path) -> Path:
-    destination.parent.mkdir(parents=True, exist_ok=True)
+def _temporary_path(destination: Path, *, create_parents: bool = True) -> Path:
+    if create_parents:
+        destination.parent.mkdir(parents=True, exist_ok=True)
     return destination.with_suffix(destination.suffix + ".tmp")
 
 
@@ -42,12 +43,19 @@ def write_json_atomic(path: str | Path, value: object) -> None:
     os.replace(temporary, destination)
 
 
-def write_text_atomic(path: str | Path, value: str) -> None:
-    """Atomically publish text that has already been validated by its caller."""
+def write_text_atomic(
+    path: str | Path, value: str, *, create_parents: bool = True
+) -> Path:
+    """Atomically publish text and return its destination path.
+
+    Set ``create_parents`` to false when a missing output directory should be
+    treated as a caller error rather than created implicitly.
+    """
     destination = Path(path)
-    temporary = _temporary_path(destination)
+    temporary = _temporary_path(destination, create_parents=create_parents)
     temporary.write_text(value, encoding="utf-8")
     os.replace(temporary, destination)
+    return destination
 
 
 def write_parquet_atomic(frame: pl.DataFrame, path: str | Path, compression: str) -> None:

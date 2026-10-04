@@ -10,34 +10,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-
-BGZF_EOF_BLOCK = bytes.fromhex(
-    "1f8b08040000000000ff0600424302001b0003000000000000000000"
-)
+from bgzf import has_bgzf_eof, is_bgzf
+from genomic_contracts import canonical_chromosome
 
 def is_gzip(path: Path) -> bool:
     with path.open("rb") as handle:
         return handle.read(2) == b"\x1f\x8b"
-
-
-def is_bgzip(path: Path) -> bool:
-    try:
-        with path.open("rb") as handle:
-            header = handle.read(18)
-            if len(header) < 18 or header[:2] != b"\x1f\x8b" or not header[3] & 4:
-                return False
-            extra_length = int.from_bytes(header[10:12], "little")
-            extra = header[12:] + handle.read(max(0, extra_length - 6))
-    except OSError:
-        return False
-
-    offset = 0
-    while offset + 4 <= len(extra):
-        length = int.from_bytes(extra[offset + 2 : offset + 4], "little")
-        if extra[offset : offset + 2] == b"BC" and length == 2:
-            return True
-        offset += 4 + length
-    return False
 
 
 def source_has_index(index_path: Path | None) -> bool:
@@ -46,15 +24,6 @@ def source_has_index(index_path: Path | None) -> bool:
 
 def is_conventional_source_index(source: Path, index_path: Path) -> bool:
     return index_path in (Path(f"{source}.tbi"), Path(f"{source}.csi"))
-
-
-def has_bgzf_eof(path: Path) -> bool:
-    try:
-        with path.open("rb") as handle:
-            handle.seek(-len(BGZF_EOF_BLOCK), 2)
-            return handle.read() == BGZF_EOF_BLOCK
-    except OSError:
-        return False
 
 
 def require_tool(name: str) -> str:
@@ -76,7 +45,7 @@ def prepare_vcf(
     """Stage a cohort VCF, reusing a complete conventional BGZF pair when safe."""
     bcftools = require_tool("bcftools")
     reusable = (
-        is_bgzip(source)
+        is_bgzf(source)
         and has_bgzf_eof(source)
         and source_has_index(source_index)
         and source_index is not None
@@ -97,14 +66,6 @@ def prepare_vcf(
             ]
         )
     run([bcftools, "index", "--force", "--tbi", str(output)])
-
-
-def chromosome_key(name: str) -> str:
-    normalized = name.strip()
-    if normalized.lower().startswith("chr"):
-        normalized = normalized[3:]
-    normalized = normalized.upper()
-    return "MT" if normalized == "M" else normalized
 
 
 def vcf_chromosome_map(path: Path) -> dict[str, str]:
@@ -139,7 +100,7 @@ def vcf_chromosome_map(path: Path) -> dict[str, str]:
 
     chromosome_map: dict[str, str] = {}
     for name in names:
-        key = chromosome_key(name)
+        key = canonical_chromosome(name)
         previous = chromosome_map.get(key)
         if previous is not None and previous != name:
             raise ValueError(
@@ -180,7 +141,7 @@ def copy_as_bgzip(
 
                 if chromosome_map:
                     chromosome, separator, remainder = line.partition("\t")
-                    replacement = chromosome_map.get(chromosome_key(chromosome))
+                    replacement = chromosome_map.get(canonical_chromosome(chromosome))
                     if separator and replacement and replacement != chromosome:
                         line = replacement + separator + remainder
                         rewritten += 1
@@ -238,7 +199,7 @@ def chromosome_rewrites_required(
     return any(
         replacement is not None and replacement != name
         for name in names
-        if (replacement := chromosome_map.get(chromosome_key(name))) is not None
+        if (replacement := chromosome_map.get(canonical_chromosome(name))) is not None
     )
 
 
@@ -274,7 +235,7 @@ def copy_indexed_as_bgzip(
                 ("#", "track ", "browser ")
             ):
                 chromosome, separator, remainder = line.partition("\t")
-                replacement = chromosome_map.get(chromosome_key(chromosome))
+                replacement = chromosome_map.get(canonical_chromosome(chromosome))
                 if separator and replacement and replacement != chromosome:
                     line = replacement + separator + remainder
                     rewritten += 1
@@ -332,7 +293,7 @@ def prepare_table(
         ]
 
     source_ready = (
-        is_bgzip(source) and has_bgzf_eof(source) and source_has_index(source_index)
+        is_bgzf(source) and has_bgzf_eof(source) and source_has_index(source_index)
     )
     if source_ready:
         source_chromosomes = (

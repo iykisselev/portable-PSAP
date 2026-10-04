@@ -9,7 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Iterable, Mapping
 
-from validation_reporting import write_atomic_text
+from io_contracts import write_text_atomic
 
 
 SAMPLE_MANIFEST_COLUMNS = ("family_id", "pid", "sex", "phenotype")
@@ -127,7 +127,7 @@ def write_sample_manifest(
     )
     writer.writeheader()
     writer.writerows(rows)
-    return write_atomic_text(path, stream.getvalue(), create_parents=create_parents)
+    return write_text_atomic(path, stream.getvalue(), create_parents=create_parents)
 
 
 def configured_sample_index(path: str | Path, metadata_kind: str) -> SampleIndex:

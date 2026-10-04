@@ -8,13 +8,7 @@ import gzip
 from collections import defaultdict
 from pathlib import Path
 
-
-def chromosome_key(name: str) -> str:
-    normalized = name.strip()
-    if normalized.lower().startswith("chr"):
-        normalized = normalized[3:]
-    normalized = normalized.upper()
-    return "MT" if normalized == "M" else normalized
+from genomic_contracts import canonical_chromosome
 
 
 def open_text(path: Path):
@@ -51,7 +45,7 @@ def add_bed_interval(
     end = int(columns[2])
     if start < 0 or end <= start:
         raise ValueError(f"{path}:{line_number}: invalid BED interval {start}, {end}")
-    intervals[chromosome_key(columns[0])].append((start + 1, end))
+    intervals[canonical_chromosome(columns[0])].append((start + 1, end))
 
 
 def add_tsv_target(
@@ -76,7 +70,7 @@ def add_tsv_target(
                 f"{path}:{line_number}: expected CHROM/POS/REF/ALT variant columns"
             )
         for alternate in columns[3].split(","):
-            variants.add((chromosome_key(columns[0]), start, columns[2], alternate))
+            variants.add((canonical_chromosome(columns[0]), start, columns[2], alternate))
         return
 
     if start < 1 or end < start:
@@ -84,7 +78,7 @@ def add_tsv_target(
             f"{path}:{line_number}: TSV intervals are 1-based inclusive and must "
             f"satisfy 1 <= start <= end; received {start}, {end}"
         )
-    intervals[chromosome_key(columns[0])].append((start, end))
+    intervals[canonical_chromosome(columns[0])].append((start, end))
 
 
 def add_vcf_variants(
@@ -100,7 +94,7 @@ def add_vcf_variants(
         raise ValueError(f"{path}:{line_number}: VCF position must be positive")
     for alternate in columns[4].split(","):
         variants.add(
-            (chromosome_key(columns[0]), position, columns[3], alternate)
+            (canonical_chromosome(columns[0]), position, columns[3], alternate)
         )
 
 
@@ -132,7 +126,7 @@ def interval_overlaps_variant(
         raise ValueError(
             f"Invalid variant span: {chromosome}:{variant_start}-{variant_end}"
         )
-    chromosome_index = index.get(chromosome_key(chromosome))
+    chromosome_index = index.get(canonical_chromosome(chromosome))
     if chromosome_index is None:
         return False
     starts, ends = chromosome_index
@@ -214,11 +208,10 @@ def write_projected_vcf(
                 position,
                 record_end,
             )
-            chromosome = chromosome_key(columns[0])
+            chromosome = canonical_chromosome(columns[0])
             variant_match = any(
                 (chromosome, position, columns[3], alternate) in variants
                 for alternate in columns[4].split(",")
             )
             if interval_match or variant_match:
                 output.write(line)
-

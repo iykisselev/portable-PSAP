@@ -17,6 +17,7 @@ TIERS: dict[str, tuple[str, ...]] = {
     "unit": (
         "test_annotation_qc.py",
         "test_apply_resources.py",
+        "test_bgzf.py",
         "test_bundle_finalization.py",
         "test_combine_exclusions.py",
         "test_execution_policy.py",

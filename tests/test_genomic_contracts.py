@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from genomic_contracts import allele_key, allele_key_text, canonical_chromosome  # noqa: E402
+from validation import canonical_chromosome_name  # noqa: E402
 
 
 class GenomicContractTests(unittest.TestCase):
@@ -24,6 +25,11 @@ class GenomicContractTests(unittest.TestCase):
         )
         self.assertEqual(allele_key("chrM", "7", "a", "t"), ("MT", 7, "A", "T"))
         self.assertEqual(allele_key_text(("MT", 7, "A", "T")), "MT:7:A:T")
+
+    def test_validation_applies_scope_after_shared_canonicalization(self) -> None:
+        self.assertEqual(canonical_chromosome_name(" chr1 "), "1")
+        self.assertEqual(canonical_chromosome_name("chrX"), "X")
+        self.assertIsNone(canonical_chromosome_name("chrM"))
 
     def test_r_and_python_contracts_match(self) -> None:
         rscript = shutil.which("Rscript")
