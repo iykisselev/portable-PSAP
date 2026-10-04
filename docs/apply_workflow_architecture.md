@@ -132,7 +132,9 @@ For `outdir` and `run.apply_prefix`, results are rooted at
 
 Use `env`, `mod`, and `sif` from `rules/deployment.smk` together when adding a
 rule, selecting one logical tool family. Keep rule-specific threads and
-resource-policy declarations visible in the rule.
+resource-policy declarations visible in the rule. Construct optional shell
+arguments with a tested helper such as `optional_regions_argument()`; do not
+hand-build unquoted optional fragments in a shell body.
 
 ## Where common changes belong
 

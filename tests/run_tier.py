@@ -33,6 +33,7 @@ TIERS: dict[str, tuple[str, ...]] = {
         "test_r_scripts.py",
         "test_sample_metadata_characterization.py",
         "test_sample_manifest.py",
+        "test_shell_arguments.py",
         "test_validate_inputs.py",
         "test_validation_reporting.py",
     ),

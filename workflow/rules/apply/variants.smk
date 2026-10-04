@@ -1,3 +1,6 @@
+from shell_arguments import optional_regions_argument
+
+
 VARIANT_DIR = APPLY_OUTPUT_DIR / "variants"
 FILTERED_BCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.in_scope.bcf"
 FILTERED_VCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.filtered_pass.vcf.gz"
@@ -33,32 +36,26 @@ rule filter_calibration_regions:
     log:
         str(APPLY_LOG_DIR / "variants" / "filter_calibration_regions.log")
     params:
-        calibration_regions=(
-            lambda wc, input: str(input.calibration_regions[0])
-            if input.calibration_regions
-            else ""
+        region_args=(
+            lambda wc, input: optional_regions_argument(
+                input.calibration_regions[0] if input.calibration_regions else None
+            )
         ),
-        calibration_regions_enabled="true" if optional_apply_resource("calibration_regions") else "false"
+        calibration_message=(
+            "Restricting variants to generated calibration regions"
+            if optional_apply_resource("calibration_regions")
+            else "Calibration regions resource not configured; retaining all variants"
+        )
     shell:
         """
-        if {params.calibration_regions_enabled}; then
-            echo "Restricting variants to generated calibration regions" > {log:q}
-            bcftools view \
-                --threads {threads} \
-                --regions-file {params.calibration_regions:q} \
-                -Ob \
-                -o {output.bcf:q} \
-                {input.vcf:q} \
-                >> {log:q} 2>&1
-        else
-            echo "Calibration regions resource not configured; retaining all variants" > {log:q}
-            bcftools view \
-                --threads {threads} \
-                -Ob \
-                -o {output.bcf:q} \
-                {input.vcf:q} \
-                >> {log:q} 2>&1
-        fi
+        echo "{params.calibration_message}" > {log:q}
+        bcftools view \
+            --threads {threads} \
+            {params.region_args} \
+            -Ob \
+            -o {output.bcf:q} \
+            {input.vcf:q} \
+            >> {log:q} 2>&1
 
         bcftools index --threads {threads} --force {output.bcf:q} >> {log:q} 2>&1
         """
