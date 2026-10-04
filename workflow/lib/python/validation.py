@@ -460,6 +460,150 @@ def empty_ped_summary() -> dict:
     }
 
 
+class _SampleMetadataAggregation:
+    """Accumulate shared sample-metadata semantics for one input format."""
+
+    def __init__(
+        self,
+        *,
+        row_label: str,
+        source_label: str,
+        summary_label: str,
+        duplicate_column: str,
+        excluded_sample_label: str,
+        sex_label: str,
+        errors: list[str],
+        warnings: list[str],
+    ) -> None:
+        self.row_label = row_label
+        self.source_label = source_label
+        self.summary_label = summary_label
+        self.duplicate_column = duplicate_column
+        self.excluded_sample_label = excluded_sample_label
+        self.sex_label = sex_label
+        self.errors = errors
+        self.warnings = warnings
+        self.all_sample_ids: list[str] = []
+        self.sample_ids: list[str] = []
+        self.excluded_phenotype_sample_ids: list[str] = []
+        self.manifest: list[dict[str, str]] = []
+        self.sex_values: list[str] = []
+        self.phenotype_values: list[str] = []
+
+    def add_row(
+        self,
+        line_number: int,
+        family_id: str,
+        sample_id: str,
+        sex: str,
+        phenotype: str,
+    ) -> None:
+        if not family_id:
+            self.errors.append(
+                f"{self.row_label} line {line_number} has an empty family ID"
+            )
+
+        if sample_id:
+            self.all_sample_ids.append(sample_id)
+            if "/" in sample_id or "\\" in sample_id:
+                self.errors.append(
+                    f"{self.row_label} line {line_number} sample ID contains a path "
+                    f"separator: {sample_id!r}"
+                )
+            phenotype_label = {"1": "unaffected", "2": "affected"}.get(phenotype)
+            if phenotype_label is None:
+                self.excluded_phenotype_sample_ids.append(sample_id)
+            else:
+                self.sample_ids.append(sample_id)
+                self.sex_values.append(sex)
+                self.manifest.append(
+                    {
+                        "family_id": family_id or "NA",
+                        "pid": sample_id,
+                        "sex": sex if sex in {"1", "2"} else "NA",
+                        "phenotype": phenotype_label,
+                    }
+                )
+        else:
+            self.errors.append(
+                f"{self.row_label} line {line_number} has an empty sample ID"
+            )
+
+        self.phenotype_values.append(phenotype)
+
+    def finalize(self, data_rows: int, path: str | Path) -> dict:
+        if data_rows == 0:
+            self.errors.append(f"No data rows found in {self.source_label}: {path}")
+
+        duplicated = duplicate_values(self.all_sample_ids)
+        if duplicated:
+            self.errors.append(
+                f"Duplicate sample IDs found in {self.duplicate_column}: "
+                + ", ".join(duplicated)
+            )
+
+        phenotype_counts = Counter(self.phenotype_values)
+        ignored_phenotypes = sorted(
+            value for value in phenotype_counts if value not in {"1", "2"}
+        )
+        if self.excluded_phenotype_sample_ids and self.sample_ids:
+            examples = ", ".join(self.excluded_phenotype_sample_ids[:10])
+            remainder = len(self.excluded_phenotype_sample_ids) - min(
+                len(self.excluded_phenotype_sample_ids),
+                10,
+            )
+            suffix = f" (and {remainder} more)" if remainder else ""
+            self.warnings.append(
+                f"Excluded {len(self.excluded_phenotype_sample_ids)} "
+                f"{self.excluded_sample_label} sample(s) with missing or unsupported "
+                "phenotype values from all processing"
+                + (
+                    "; observed values: " + ", ".join(ignored_phenotypes)
+                    if ignored_phenotypes
+                    else ""
+                )
+                + f"; sample IDs: {examples}{suffix}"
+            )
+
+        sex_counts = Counter(self.sex_values)
+        ignored_sex = sorted(value for value in sex_counts if value not in {"1", "2"})
+        if ignored_sex:
+            self.warnings.append(
+                f"{self.sex_label} sex values other than 1 and 2 will not receive "
+                "sex-specific chromosome-X recoding: "
+                + ", ".join(ignored_sex)
+            )
+
+        if self.all_sample_ids and not self.sample_ids:
+            self.errors.append(
+                f"{self.summary_label} contains no samples with a known "
+                "phenotype (1=unaffected or 2=affected)"
+            )
+        elif self.sample_ids:
+            if phenotype_counts.get("2", 0) == 0:
+                self.errors.append(
+                    f"{self.summary_label} contains no affected individuals "
+                    "(phenotype code 2)"
+                )
+            if phenotype_counts.get("1", 0) == 0:
+                self.warnings.append(
+                    f"{self.summary_label} contains no unaffected individuals "
+                    "(phenotype code 1); the cohort report will use "
+                    "validation=no_controls"
+                )
+
+        return {
+            "manifest": self.manifest,
+            "sample_ids": self.sample_ids,
+            "all_sample_ids": self.all_sample_ids,
+            "excluded_phenotype_sample_ids": self.excluded_phenotype_sample_ids,
+            "sex_counts": dict(sorted(sex_counts.items())),
+            "phenotype_counts": dict(sorted(phenotype_counts.items())),
+            "affected_count": phenotype_counts.get("2", 0),
+            "male_count": sex_counts.get("1", 0),
+        }
+
+
 def read_ped(
     path: str | Path,
     errors: list[str],
@@ -468,12 +612,16 @@ def read_ped(
     if not require_file(path, "PED file", errors):
         return empty_ped_summary()
 
-    all_sample_ids: list[str] = []
-    sample_ids: list[str] = []
-    excluded_phenotype_sample_ids: list[str] = []
-    manifest: list[dict[str, str]] = []
-    sex_values: list[str] = []
-    phenotype_values: list[str] = []
+    summary = _SampleMetadataAggregation(
+        row_label="PED",
+        source_label="PED file",
+        summary_label="PED file",
+        duplicate_column="PED column 2",
+        excluded_sample_label="PED",
+        sex_label="PED",
+        errors=errors,
+        warnings=warnings,
+    )
     data_rows = 0
 
     try:
@@ -503,105 +651,17 @@ def read_ped(
                 sex = row[4].strip()
                 phenotype = row[5].strip()
 
-                if not family_id:
-                    errors.append(f"PED line {line_number} has an empty family ID")
-
-                if sample_id:
-                    all_sample_ids.append(sample_id)
-                    if "/" in sample_id or "\\" in sample_id:
-                        errors.append(
-                            f"PED line {line_number} sample ID contains a path "
-                            f"separator: {sample_id!r}"
-                        )
-                    phenotype_label = {
-                        "1": "unaffected",
-                        "2": "affected",
-                    }.get(phenotype)
-                    if phenotype_label is None:
-                        excluded_phenotype_sample_ids.append(sample_id)
-                    else:
-                        sample_ids.append(sample_id)
-                        sex_values.append(sex)
-                        manifest.append(
-                            {
-                                "family_id": family_id or "NA",
-                                "pid": sample_id,
-                                "sex": sex if sex in {"1", "2"} else "NA",
-                                "phenotype": phenotype_label,
-                            }
-                        )
-                else:
-                    errors.append(f"PED line {line_number} has an empty sample ID")
-
-                phenotype_values.append(phenotype)
+                summary.add_row(
+                    line_number,
+                    family_id,
+                    sample_id,
+                    sex,
+                    phenotype,
+                )
     except OSError as exc:
         errors.append(f"Could not read PED file {path}: {exc}")
 
-    if data_rows == 0:
-        errors.append(f"No data rows found in PED file: {path}")
-
-    duplicated = duplicate_values(all_sample_ids)
-    if duplicated:
-        errors.append(
-            "Duplicate sample IDs found in PED column 2: " + ", ".join(duplicated)
-        )
-
-    phenotype_counts = Counter(phenotype_values)
-    ignored_phenotypes = sorted(
-        value for value in phenotype_counts if value not in {"1", "2"}
-    )
-    if excluded_phenotype_sample_ids and sample_ids:
-        examples = ", ".join(excluded_phenotype_sample_ids[:10])
-        remainder = len(excluded_phenotype_sample_ids) - min(
-            len(excluded_phenotype_sample_ids),
-            10,
-        )
-        suffix = f" (and {remainder} more)" if remainder else ""
-        warnings.append(
-            f"Excluded {len(excluded_phenotype_sample_ids)} PED sample(s) with "
-            "missing or unsupported phenotype values from all processing"
-            + (
-                "; observed values: " + ", ".join(ignored_phenotypes)
-                if ignored_phenotypes
-                else ""
-            )
-            + f"; sample IDs: {examples}{suffix}"
-        )
-
-    sex_counts = Counter(sex_values)
-    ignored_sex = sorted(value for value in sex_counts if value not in {"1", "2"})
-    if ignored_sex:
-        warnings.append(
-            "PED sex values other than 1 and 2 will not receive sex-specific "
-            "chromosome-X recoding: "
-            + ", ".join(ignored_sex)
-        )
-
-    if all_sample_ids and not sample_ids:
-        errors.append(
-            "PED file contains no samples with a known phenotype "
-            "(1=unaffected or 2=affected)"
-        )
-    elif sample_ids:
-        if phenotype_counts.get("2", 0) == 0:
-            errors.append("PED file contains no affected individuals (phenotype code 2)")
-
-        if phenotype_counts.get("1", 0) == 0:
-            warnings.append(
-                "PED file contains no unaffected individuals (phenotype code 1); "
-                "the cohort report will use validation=no_controls"
-            )
-
-    return {
-        "manifest": manifest,
-        "sample_ids": sample_ids,
-        "all_sample_ids": all_sample_ids,
-        "excluded_phenotype_sample_ids": excluded_phenotype_sample_ids,
-        "sex_counts": dict(sorted(sex_counts.items())),
-        "phenotype_counts": dict(sorted(phenotype_counts.items())),
-        "affected_count": phenotype_counts.get("2", 0),
-        "male_count": sex_counts.get("1", 0),
-    }
+    return summary.finalize(data_rows, path)
 
 
 def read_samples_tsv(
@@ -613,12 +673,16 @@ def read_samples_tsv(
     if not require_file(path, "sample sheet", errors):
         return empty_ped_summary()
 
-    all_sample_ids: list[str] = []
-    sample_ids: list[str] = []
-    excluded_phenotype_sample_ids: list[str] = []
-    manifest: list[dict[str, str]] = []
-    sex_values: list[str] = []
-    phenotype_values: list[str] = []
+    summary = _SampleMetadataAggregation(
+        row_label="Sample sheet",
+        source_label="sample sheet",
+        summary_label="Sample sheet",
+        duplicate_column="sample sheet pid column",
+        excluded_sample_label="sample-sheet",
+        sex_label="Sample-sheet",
+        errors=errors,
+        warnings=warnings,
+    )
     data_rows = 0
     required_columns = ["family_id", "pid", "sex", "phenotype"]
 
@@ -642,95 +706,17 @@ def read_samples_tsv(
                 sex = (row.get("sex") or "").strip()
                 phenotype = (row.get("phenotype") or "").strip()
 
-                if not family_id:
-                    errors.append(f"Sample sheet line {line_number} has an empty family ID")
-                if not sample_id:
-                    errors.append(f"Sample sheet line {line_number} has an empty sample ID")
-                else:
-                    all_sample_ids.append(sample_id)
-                    if "/" in sample_id or "\\" in sample_id:
-                        errors.append(
-                            f"Sample sheet line {line_number} sample ID contains a path "
-                            f"separator: {sample_id!r}"
-                        )
-                    phenotype_label = {"1": "unaffected", "2": "affected"}.get(phenotype)
-                    if phenotype_label is None:
-                        excluded_phenotype_sample_ids.append(sample_id)
-                    else:
-                        sample_ids.append(sample_id)
-                        sex_values.append(sex)
-                        manifest.append(
-                            {
-                                "family_id": family_id or "NA",
-                                "pid": sample_id,
-                                "sex": sex if sex in {"1", "2"} else "NA",
-                                "phenotype": phenotype_label,
-                            }
-                        )
-                phenotype_values.append(phenotype)
+                summary.add_row(
+                    line_number,
+                    family_id,
+                    sample_id,
+                    sex,
+                    phenotype,
+                )
     except OSError as exc:
         errors.append(f"Could not read sample sheet {path}: {exc}")
 
-    if data_rows == 0:
-        errors.append(f"No data rows found in sample sheet: {path}")
-
-    duplicated = duplicate_values(all_sample_ids)
-    if duplicated:
-        errors.append("Duplicate sample IDs found in sample sheet pid column: " + ", ".join(duplicated))
-
-    phenotype_counts = Counter(phenotype_values)
-    ignored_phenotypes = sorted(
-        value for value in phenotype_counts if value not in {"1", "2"}
-    )
-    if excluded_phenotype_sample_ids and sample_ids:
-        examples = ", ".join(excluded_phenotype_sample_ids[:10])
-        remainder = len(excluded_phenotype_sample_ids) - min(
-            len(excluded_phenotype_sample_ids), 10
-        )
-        suffix = f" (and {remainder} more)" if remainder else ""
-        warnings.append(
-            f"Excluded {len(excluded_phenotype_sample_ids)} sample-sheet sample(s) "
-            "with missing or unsupported phenotype values from all processing"
-            + (
-                "; observed values: " + ", ".join(ignored_phenotypes)
-                if ignored_phenotypes
-                else ""
-            )
-            + f"; sample IDs: {examples}{suffix}"
-        )
-
-    sex_counts = Counter(sex_values)
-    ignored_sex = sorted(value for value in sex_counts if value not in {"1", "2"})
-    if ignored_sex:
-        warnings.append(
-            "Sample-sheet sex values other than 1 and 2 will not receive sex-specific "
-            "chromosome-X recoding: " + ", ".join(ignored_sex)
-        )
-
-    if all_sample_ids and not sample_ids:
-        errors.append(
-            "Sample sheet contains no samples with a known phenotype "
-            "(1=unaffected or 2=affected)"
-        )
-    elif sample_ids:
-        if phenotype_counts.get("2", 0) == 0:
-            errors.append("Sample sheet contains no affected individuals (phenotype code 2)")
-        if phenotype_counts.get("1", 0) == 0:
-            warnings.append(
-                "Sample sheet contains no unaffected individuals (phenotype code 1); "
-                "the cohort report will use validation=no_controls"
-            )
-
-    return {
-        "manifest": manifest,
-        "sample_ids": sample_ids,
-        "all_sample_ids": all_sample_ids,
-        "excluded_phenotype_sample_ids": excluded_phenotype_sample_ids,
-        "sex_counts": dict(sorted(sex_counts.items())),
-        "phenotype_counts": dict(sorted(phenotype_counts.items())),
-        "affected_count": phenotype_counts.get("2", 0),
-        "male_count": sex_counts.get("1", 0),
-    }
+    return summary.finalize(data_rows, path)
 
 
 def canonical_chromosome_name(name: str) -> str | None:
