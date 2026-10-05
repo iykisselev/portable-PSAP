@@ -76,6 +76,47 @@ def reference_span(position: int, reference: str) -> tuple[int, int]:
     return start, start + len(reference)
 
 
+def is_minimal_allele(reference: str, alternate: str) -> bool:
+    """Return whether a supported allele has no trim-able common bases.
+
+    VCF minimization may only trim a common prefix or suffix while both
+    alleles retain at least one base.  This deliberately does not establish
+    left alignment; use :func:`is_left_aligned_allele` for that independent
+    normalization property.
+    """
+    reference = str(reference).upper()
+    alternate = str(alternate).upper()
+    if variant_class(reference, alternate) == "unsupported":
+        return False
+    return not (
+        len(reference) > 1
+        and len(alternate) > 1
+        and (reference[0] == alternate[0] or reference[-1] == alternate[-1])
+    )
+
+
+def is_left_aligned_allele(position: int, reference: str, alternate: str) -> bool:
+    """Return whether a supported, minimal allele cannot shift one base left.
+
+    For an indel, a left shift is possible exactly when the terminal REF and
+    ALT bases agree.  The shifted representation replaces the preceding
+    reference base plus the truncated REF with that base plus the truncated
+    ALT.  Position one therefore has no possible left shift.  The caller is
+    responsible for validating REF against the configured FASTA.
+    """
+    try:
+        position = int(position)
+    except (TypeError, ValueError) as exc:
+        raise AlleleContractError("VCF position must be an integer") from exc
+    if position < 1:
+        raise AlleleContractError("VCF position must be positive")
+    reference = str(reference).upper()
+    alternate = str(alternate).upper()
+    if variant_class(reference, alternate) == "unsupported":
+        return False
+    return position == 1 or reference[-1] != alternate[-1]
+
+
 def validated_allele_key(
     chromosome: str, position: int, reference: str, alternate: str
 ) -> tuple[str, int, str, str]:

@@ -25,6 +25,7 @@ from generation_manifests import (  # noqa: E402
 from generation_partitions import (  # noqa: E402
     GenomePartition,
     build_partitions,
+    indel_candidate_owner_intervals,
     read_genome_partitions,
 )
 from generation_scope import sparse_bucket_partitions  # noqa: E402
@@ -167,6 +168,53 @@ class GenerationManifestTests(unittest.TestCase):
                     for partition in partitions
                 ],
             )
+
+    def test_indel_halo_schedules_only_the_boundary_owner_partition(self) -> None:
+        partitions = [
+            GenomePartition("1_000000000000_000000000010", "1", 0, 10, 0),
+            GenomePartition("1_000000000010_000000000020", "1", 10, 20, 1),
+            GenomePartition("1_000000000020_000000000030", "1", 20, 30, 2),
+        ]
+        callable_intervals = [("UNIT_A", "1", 10, 12)]
+        # Attach the source unit after keeping the simple genomic helper free
+        # of workflow bucket identifiers.
+        owners = [
+            ("UNIT_A", chromosome, start, end)
+            for chromosome, start, end in indel_candidate_owner_intervals(
+                [("1", 10, 12)], max_reference_length=3
+            )
+        ]
+        self.assertEqual(owners, [("UNIT_A", "1", 8, 12)])
+        self.assertEqual(
+            {0: (
+                "1_000000000000_000000000010",
+                "1_000000000010_000000000020",
+            )},
+            sparse_bucket_partitions(
+                partitions,
+                callable_intervals,
+                {"UNIT_A": 0},
+                10,
+                candidate_owner_intervals=owners,
+            ),
+        )
+
+    def test_partition_builder_includes_indel_owner_halo(self) -> None:
+        with TemporaryDirectory() as temporary:
+            fasta_index = Path(temporary) / "reference.fa.fai"
+            fasta_index.write_text("1\t30\t0\t0\t0\n", encoding="utf-8")
+            partitions = build_partitions(
+                fasta_index,
+                [("1", 10, 12)],
+                10,
+                candidate_owner_intervals=indel_candidate_owner_intervals(
+                    [("1", 10, 12)], max_reference_length=3
+                ),
+            )
+        self.assertEqual(
+            ["1_000000000000_000000000010", "1_000000000010_000000000020"],
+            [partition.identifier for partition in partitions],
+        )
 
 
 if __name__ == "__main__":

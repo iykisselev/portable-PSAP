@@ -42,18 +42,29 @@ def build_partitions(
     fasta_index: str | Path,
     testing_unit_intervals: list[tuple[str, int, int]],
     partition_size: int,
+    *,
+    candidate_owner_intervals: list[tuple[str, int, int]] | None = None,
 ) -> list[GenomePartition]:
-    """Return fixed-size windows that intersect eligible testing-unit intervals."""
+    """Return fixed-size windows that intersect eligible candidate intervals.
+
+    ``candidate_owner_intervals`` is an optional indel anchor halo.  It is
+    separate from the ordinary callable-unit intervals so downstream code can
+    preserve exact span membership while still scheduling a preceding owner
+    partition for a boundary-crossing deletion.
+    """
     if partition_size <= 0:
         raise ValueError("generation.execution.partition_size_bp must be positive")
     fasta_contigs = read_fasta_index(fasta_index)
-    chromosomes = {chromosome for chromosome, _, _ in testing_unit_intervals}
+    candidate_intervals = list(testing_unit_intervals)
+    if candidate_owner_intervals is not None:
+        candidate_intervals.extend(candidate_owner_intervals)
+    chromosomes = {chromosome for chromosome, _, _ in candidate_intervals}
     missing = sorted(chromosomes - set(fasta_contigs))
     if missing:
         raise ValueError("Testing-unit contigs are absent from the FASTA index: " + ", ".join(missing))
 
     selected_windows: dict[str, set[int]] = {}
-    for chromosome, interval_start, interval_end in testing_unit_intervals:
+    for chromosome, interval_start, interval_end in candidate_intervals:
         _, contig_length = fasta_contigs[chromosome]
         if interval_start < 0 or interval_end <= interval_start:
             raise ValueError(f"Testing-unit interval on {chromosome} is invalid")
@@ -85,6 +96,25 @@ def build_partitions(
             )
             ordinal += 1
     return partitions
+
+
+def indel_candidate_owner_intervals(
+    testing_unit_intervals: list[tuple[str, int, int]],
+    max_reference_length: int,
+) -> list[tuple[str, int, int]]:
+    """Expand unit intervals leftward for indel anchor-owner discovery.
+
+    An indel with a REF of at most ``max_reference_length`` can overlap a unit
+    while its anchor is up to ``max_reference_length - 1`` bases upstream.
+    The returned intervals are not membership intervals: exact span overlap is
+    still checked by :func:`generation_indels.indel_candidate_memberships`.
+    """
+    if max_reference_length < 1:
+        raise ValueError("Indel maximum reference length must be positive")
+    return [
+        (chromosome, max(0, start - max_reference_length + 1), end)
+        for chromosome, start, end in testing_unit_intervals
+    ]
 
 
 def read_genome_partitions(path: str | Path) -> list[GenomePartition]:

@@ -17,6 +17,8 @@ from genomic_contracts import (  # noqa: E402
     allele_key,
     allele_key_text,
     canonical_chromosome,
+    is_left_aligned_allele,
+    is_minimal_allele,
     reference_span,
     validated_allele_key,
     variant_class,
@@ -47,6 +49,10 @@ class GenomicContractTests(unittest.TestCase):
         self.assertEqual("unsupported", variant_class("A", "<DEL>"))
         self.assertEqual((0, 1), reference_span(1, "A"))
         self.assertEqual((6, 8), reference_span(7, "AC"))
+        self.assertTrue(is_minimal_allele("AC", "A"))
+        self.assertFalse(is_minimal_allele("ATC", "AC"))
+        self.assertTrue(is_left_aligned_allele(1, "A", "AA"))
+        self.assertFalse(is_left_aligned_allele(2, "A", "AA"))
 
     def test_validated_allele_key_rejects_unsupported_alleles(self) -> None:
         self.assertEqual(

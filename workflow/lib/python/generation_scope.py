@@ -34,8 +34,15 @@ def sparse_bucket_partitions(
     callable_unit_intervals: list[tuple[str, str, int, int]],
     bucket_by_unit: dict[str, int],
     partition_size: int,
+    *,
+    candidate_owner_intervals: list[tuple[str, str, int, int]] | None = None,
 ) -> dict[int, tuple[str, ...]]:
-    """Return only partition/bucket pairs with callable unit overlap."""
+    """Return only partition/bucket pairs with callable candidate overlap.
+
+    ``candidate_owner_intervals`` adds the upstream anchor halo required for
+    indels.  It is optional while the active workflow remains SNV-only, so the
+    existing sparse topology is byte-for-byte unchanged.
+    """
     partition_by_window = {
         (partition.chromosome, partition.start // partition_size): partition
         for partition in genome_partitions
@@ -43,7 +50,10 @@ def sparse_bucket_partitions(
     partition_ids_by_bucket: dict[int, set[str]] = {
         bucket_id: set() for bucket_id in set(bucket_by_unit.values())
     }
-    for unit_id, chromosome, start, end in callable_unit_intervals:
+    all_intervals = list(callable_unit_intervals)
+    if candidate_owner_intervals is not None:
+        all_intervals.extend(candidate_owner_intervals)
+    for unit_id, chromosome, start, end in all_intervals:
         bucket_id = bucket_by_unit.get(unit_id)
         if bucket_id is None:
             continue
@@ -53,7 +63,7 @@ def sparse_bucket_partitions(
             partition = partition_by_window.get((chromosome, window))
             if partition is None:
                 raise ValueError(
-                    f"Callable interval for {unit_id!r} has no generation partition"
+                    f"Candidate-owner interval for {unit_id!r} has no generation partition"
                 )
             partition_ids_by_bucket[bucket_id].add(partition.identifier)
     partition_ordinal = {
