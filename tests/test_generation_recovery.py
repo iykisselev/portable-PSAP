@@ -51,7 +51,9 @@ class GenerationRecoveryTests(unittest.TestCase):
             partitions = json.loads((prepared / "partitions.json").read_text(encoding="utf-8"))
             buckets = json.loads((prepared / "unit_buckets.json").read_text(encoding="utf-8"))
             partition_ids = [row["partition_id"] for row in partitions["partitions"]]
-            bucket_id = buckets["buckets"][0]["bucket_id"]
+            first_bucket = buckets["buckets"][0]
+            bucket_id = first_bucket["bucket_id"]
+            statistics_partition_id = first_bucket["partition_ids"][0]
             self.assertGreaterEqual(len(partition_ids), 2)
 
             state = generation / "scalable" / "partitions" / f"{partition_ids[0]}.allele_states.parquet"
@@ -71,7 +73,7 @@ class GenerationRecoveryTests(unittest.TestCase):
                 / "scalable"
                 / "calculated"
                 / "partition_statistics"
-                / f"{partition_ids[0]}.bucket-{bucket_id}.parquet"
+                / f"{statistics_partition_id}.bucket-{bucket_id}.parquet"
             )
             statistics.unlink()
             statistics_plan = self.run_workflow_assert(GENERATE_MANIFEST, outdir, dry_run=True)

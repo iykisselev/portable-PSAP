@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 PARTITION_MANIFEST_SCHEMA_VERSION = 1
-BUCKET_MANIFEST_SCHEMA_VERSION = 1
+BUCKET_MANIFEST_SCHEMA_VERSION = 2
 
 
 class GenerationManifestError(ValueError):
@@ -33,6 +33,7 @@ class BucketManifestEntry:
     identifier: str
     ordinal: int
     unit_ids: tuple[str, ...]
+    partition_ids: tuple[str, ...]
 
 
 def _load_mapping(path: str | Path, label: str) -> dict:
@@ -107,6 +108,7 @@ def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
             identifier = str(row["bucket_id"])
             entry_ordinal = int(row["ordinal"])
             unit_ids = tuple(str(value) for value in row["unit_ids"])
+            partition_ids = tuple(str(value) for value in row["partition_ids"])
         except (KeyError, TypeError, ValueError) as exc:
             raise GenerationManifestError("Bucket manifest has an invalid entry") from exc
         if (
@@ -116,6 +118,9 @@ def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
             or tuple(sorted(unit_ids)) != unit_ids
             or len(set(unit_ids)) != len(unit_ids)
             or seen_units.intersection(unit_ids)
+            or not partition_ids
+            or tuple(sorted(partition_ids)) != partition_ids
+            or len(set(partition_ids)) != len(partition_ids)
         ):
             raise GenerationManifestError("Bucket manifest has noncanonical entries")
         seen_units.update(unit_ids)
@@ -124,6 +129,7 @@ def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
                 identifier=identifier,
                 ordinal=entry_ordinal,
                 unit_ids=unit_ids,
+                partition_ids=partition_ids,
             )
         )
     return tuple(entries)

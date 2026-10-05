@@ -27,6 +27,7 @@ from generation_partitions import (  # noqa: E402
     build_partitions,
     read_genome_partitions,
 )
+from generation_scope import sparse_bucket_partitions  # noqa: E402
 
 
 class GenerationManifestTests(unittest.TestCase):
@@ -61,6 +62,7 @@ class GenerationManifestTests(unittest.TestCase):
                             "bucket_id": "00000",
                             "ordinal": 0,
                             "unit_ids": ["UNIT_A", "UNIT_B"],
+                            "partition_ids": ["1_000000000000_000000000010"],
                         }
                     ],
                 },
@@ -75,6 +77,10 @@ class GenerationManifestTests(unittest.TestCase):
             self.assertIsInstance(read_genome_partitions(partitions)[0], GenomePartition)
             self.assertEqual(("00000",), bucket_ids(buckets))
             self.assertEqual(("UNIT_A", "UNIT_B"), bucket_from_manifest(buckets, "00000").unit_ids)
+            self.assertEqual(
+                ("1_000000000000_000000000010",),
+                bucket_from_manifest(buckets, "00000").partition_ids,
+            )
 
     def test_duplicate_or_unsorted_bucket_units_are_rejected(self) -> None:
         with TemporaryDirectory() as temporary:
@@ -87,12 +93,35 @@ class GenerationManifestTests(unittest.TestCase):
                             "bucket_id": "00000",
                             "ordinal": 0,
                             "unit_ids": ["UNIT_B", "UNIT_B"],
+                            "partition_ids": ["1_000000000000_000000000010"],
                         }
                     ],
                 },
             )
             with self.assertRaisesRegex(GenerationManifestError, "noncanonical"):
                 bucket_ids(path)
+
+    def test_sparse_bucket_map_omits_nonoverlapping_partition_pairs(self) -> None:
+        partitions = [
+            GenomePartition("1_000000000000_000000000010", "1", 0, 10, 0),
+            GenomePartition("1_000000000010_000000000020", "1", 10, 20, 1),
+            GenomePartition("1_000000000020_000000000030", "1", 20, 30, 2),
+        ]
+        self.assertEqual(
+            {
+                0: (
+                    "1_000000000000_000000000010",
+                    "1_000000000010_000000000020",
+                ),
+                1: ("1_000000000020_000000000030",),
+            },
+            sparse_bucket_partitions(
+                partitions,
+                [("UNIT_A", "1", 8, 12), ("UNIT_B", "1", 25, 28)],
+                {"UNIT_A": 0, "UNIT_B": 1},
+                10,
+            ),
+        )
 
     def test_partitions_cover_only_windows_with_eligible_testing_units(self) -> None:
         with TemporaryDirectory() as temporary:

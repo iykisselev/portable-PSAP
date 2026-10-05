@@ -1,7 +1,12 @@
 """Shared paths and wildcard helpers for generation rules."""
 
 from generation_context import GenerationRuleContext
-from generation_manifests import bucket_ids, partition_ids
+from generation_manifests import (
+    bucket_from_manifest,
+    bucket_ids,
+    partition_ids,
+    read_bucket_manifest,
+)
 
 
 GENERATION_CONTEXT = GenerationRuleContext.from_workflow_plan(WORKFLOW_PLAN)
@@ -62,18 +67,23 @@ def generation_statistics_shards(wildcards):
     bucket_id = str(wildcards.bucket)
     if bucket_id not in generation_bucket_ids(wildcards):
         raise ValueError(f"Unknown generation bucket {bucket_id!r}")
+    bucket = bucket_from_manifest(
+        generation_scope_artifact(wildcards, "buckets"), bucket_id
+    )
     return [
         GENERATION_CONTEXT.statistics_artifact(partition_id, bucket_id)
-        for partition_id in generation_partition_ids(wildcards)
+        for partition_id in bucket.partition_ids
     ]
 
 
 def generation_statistics_artifacts(wildcards):
     """Return every partition-by-bucket statistic file needed for recovery."""
     return [
-        GENERATION_CONTEXT.statistics_artifact(partition_id, bucket_id)
-        for partition_id in generation_partition_ids(wildcards)
-        for bucket_id in generation_bucket_ids(wildcards)
+        GENERATION_CONTEXT.statistics_artifact(partition_id, bucket.identifier)
+        for bucket in read_bucket_manifest(
+            generation_scope_artifact(wildcards, "buckets")
+        )
+        for partition_id in bucket.partition_ids
     ]
 
 

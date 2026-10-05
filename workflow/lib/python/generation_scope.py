@@ -13,7 +13,7 @@ from generation_manifests import (
     BUCKET_MANIFEST_SCHEMA_VERSION,
     PARTITION_MANIFEST_SCHEMA_VERSION,
 )
-from generation_partitions import build_partitions, read_fasta_index
+from generation_partitions import GenomePartition, build_partitions, read_fasta_index
 from generation_population import validate_population_af_headers
 from generation_prep import (
     retention_rows,
@@ -27,6 +27,42 @@ from generation_prep import (
 from generation_probability import unit_bucket_frame
 from generation_resource_policy import check_unindexed_fixture
 from io_contracts import resource_inventory, write_json_atomic, write_parquet_atomic
+
+
+def sparse_bucket_partitions(
+    genome_partitions: list[GenomePartition],
+    callable_unit_intervals: list[tuple[str, str, int, int]],
+    bucket_by_unit: dict[str, int],
+    partition_size: int,
+) -> dict[int, tuple[str, ...]]:
+    """Return only partition/bucket pairs with callable unit overlap."""
+    partition_by_window = {
+        (partition.chromosome, partition.start // partition_size): partition
+        for partition in genome_partitions
+    }
+    partition_ids_by_bucket: dict[int, set[str]] = {
+        bucket_id: set() for bucket_id in set(bucket_by_unit.values())
+    }
+    for unit_id, chromosome, start, end in callable_unit_intervals:
+        bucket_id = bucket_by_unit.get(unit_id)
+        if bucket_id is None:
+            continue
+        first_window = start // partition_size
+        last_window = (end - 1) // partition_size
+        for window in range(first_window, last_window + 1):
+            partition = partition_by_window.get((chromosome, window))
+            if partition is None:
+                raise ValueError(
+                    f"Callable interval for {unit_id!r} has no generation partition"
+                )
+            partition_ids_by_bucket[bucket_id].add(partition.identifier)
+    partition_ordinal = {
+        partition.identifier: partition.ordinal for partition in genome_partitions
+    }
+    return {
+        bucket_id: tuple(sorted(identifiers, key=partition_ordinal.__getitem__))
+        for bucket_id, identifiers in partition_ids_by_bucket.items()
+    }
 
 
 def prepare_generation_scope(
@@ -107,7 +143,7 @@ def prepare_generation_scope(
         inputs.fasta_fai,
         [
             (chromosome, start, end)
-            for unit_id, chromosome, start, end in unit_intervals
+            for unit_id, chromosome, start, end in callable_unit_intervals
             if unit_id in eligible_unit_ids
         ],
         int(params.partition_size),
@@ -161,11 +197,22 @@ def prepare_generation_scope(
             ],
         },
     )
-    unit_ids_by_bucket: dict[int, list[str]] = {}
-    for unit_id, bucket_id in unit_bucket_frame(
+    bucket_assignments = unit_bucket_frame(
         unit_retention_frame, int(params.unit_bucket_size)
-    ).iter_rows():
+    )
+    bucket_by_unit = {
+        str(unit_id): int(bucket_id)
+        for unit_id, bucket_id in bucket_assignments.iter_rows()
+    }
+    unit_ids_by_bucket: dict[int, list[str]] = {}
+    for unit_id, bucket_id in bucket_by_unit.items():
         unit_ids_by_bucket.setdefault(int(bucket_id), []).append(str(unit_id))
+    partition_ids_by_bucket = sparse_bucket_partitions(
+        genome_partitions,
+        callable_unit_intervals,
+        bucket_by_unit,
+        int(params.partition_size),
+    )
     write_json_atomic(
         outputs.buckets,
         {
@@ -177,6 +224,7 @@ def prepare_generation_scope(
                     "ordinal": ordinal,
                     "unit_count": len(unit_ids),
                     "unit_ids": unit_ids,
+                    "partition_ids": list(partition_ids_by_bucket[ordinal]),
                 }
                 for ordinal, unit_ids in sorted(unit_ids_by_bucket.items())
             ],
