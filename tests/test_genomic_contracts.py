@@ -12,7 +12,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
-from genomic_contracts import allele_key, allele_key_text, canonical_chromosome  # noqa: E402
+from genomic_contracts import (  # noqa: E402
+    AlleleContractError,
+    allele_key,
+    allele_key_text,
+    canonical_chromosome,
+    reference_span,
+    validated_allele_key,
+    variant_class,
+)
 from validation import canonical_chromosome_name  # noqa: E402
 
 
@@ -30,6 +38,25 @@ class GenomicContractTests(unittest.TestCase):
         self.assertEqual(canonical_chromosome_name(" chr1 "), "1")
         self.assertEqual(canonical_chromosome_name("chrX"), "X")
         self.assertIsNone(canonical_chromosome_name("chrM"))
+
+    def test_variant_classes_and_reference_spans_follow_vcf_semantics(self) -> None:
+        self.assertEqual("snv", variant_class("A", "T"))
+        self.assertEqual("indel", variant_class("A", "AT"))
+        self.assertEqual("indel", variant_class("AT", "A"))
+        self.assertEqual("unsupported", variant_class("AT", "GC"))
+        self.assertEqual("unsupported", variant_class("A", "<DEL>"))
+        self.assertEqual((0, 1), reference_span(1, "A"))
+        self.assertEqual((6, 8), reference_span(7, "AC"))
+
+    def test_validated_allele_key_rejects_unsupported_alleles(self) -> None:
+        self.assertEqual(
+            ("1", 7, "AC", "A"),
+            validated_allele_key("chr1", 7, "ac", "a"),
+        )
+        with self.assertRaisesRegex(AlleleContractError, "SNV or length-changing"):
+            validated_allele_key("1", 7, "AC", "GT")
+        with self.assertRaisesRegex(AlleleContractError, "position must be positive"):
+            validated_allele_key("1", 0, "A", "T")
 
     def test_r_and_python_contracts_match(self) -> None:
         rscript = shutil.which("Rscript")

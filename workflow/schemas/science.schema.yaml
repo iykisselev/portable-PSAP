@@ -69,7 +69,24 @@ properties:
       minimum_retained_fraction: {type: number, minimum: 0, maximum: 1}
       variant_classes:
         type: array
-        const: [snv]
+        oneOf:
+          - const: [snv]
+          - const: [snv, indel]
+      indels:
+        type: object
+        additionalProperties: false
+        required:
+          - candidate_universe
+          - membership
+          - mask_policy
+          - max_reference_length
+          - max_alternate_length
+        properties:
+          candidate_universe: {const: score_resource}
+          membership: {const: reference_span_overlap}
+          mask_policy: {const: reference_span_contained}
+          max_reference_length: {type: integer, minimum: 1}
+          max_alternate_length: {type: integer, minimum: 1}
       score_bin_width: {type: number, exclusiveMinimum: 0}
       mutation_conversion: {const: de_novo_proxy}
       x_chromosome:

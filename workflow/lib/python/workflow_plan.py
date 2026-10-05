@@ -238,6 +238,11 @@ class GenerationSettings:
     score_bin_width: float
     mutation_conversion: str
     variant_classes: tuple[str, ...]
+    indel_candidate_universe: str
+    indel_membership: str
+    indel_mask_policy: str
+    indel_max_reference_length: int
+    indel_max_alternate_length: int
     x_af_policy: str
     x_mutation_rate_policy: str
 
@@ -250,12 +255,14 @@ class GenerationPlan:
     log_dir: Path
     population_vcf: FileBinding
     score_snv: FileBinding
+    score_indel: FileBinding | None
     exclusion: FileBinding
     testing_unit_bed: FileBinding
     fasta: FastaBinding
     par_regions: FileBinding
     exclusions: tuple[ExclusionBinding, ...]
     mutation_rate: FileBinding | None
+    mutation_rate_indel: FileBinding | None
     unobserved_policy: str
     af_source: Mapping[str, str]
     partition_size_bp: int
@@ -536,7 +543,15 @@ def _generation_plan(
             ),
             exclusions=_frozen_binding_mapping({}),
             cadd_snv=FileBinding.from_config(generation.get("score_snv"), "generation.score_snv"),
-            cadd_indel=None,
+            cadd_indel=(
+                FileBinding.from_config(
+                    generation.get("score_indel"),
+                    "generation.score_indel",
+                    required=False,
+                )
+                if generation.get("score_indel") is not None
+                else None
+            ),
         )
         par_regions = FileBinding.from_config(generation.get("par_regions"), "generation.par_regions")
         exclusions = tuple(
@@ -564,6 +579,13 @@ def _generation_plan(
         FileBinding.from_config(generation["mutation_rate"], "generation.mutation_rate")
         if generation.get("mutation_rate") is not None else None
     )
+    mutation_rate_indel = (
+        FileBinding.from_config(
+            generation["mutation_rate_indel"], "generation.mutation_rate_indel"
+        )
+        if generation.get("mutation_rate_indel") is not None
+        else None
+    )
     allow_unindexed_fixtures = execution.get("allow_unindexed_fixture_inputs", False)
     if not isinstance(allow_unindexed_fixtures, bool):
         raise WorkflowPlanError("generation.execution.allow_unindexed_fixture_inputs must be a boolean")
@@ -585,12 +607,14 @@ def _generation_plan(
         log_dir=output_root / "logs" / "generate" / prefix,
         population_vcf=population_vcf,
         score_snv=resources.cadd_snv,
+        score_indel=resources.cadd_indel,
         exclusion=resources.exclusion,
         testing_unit_bed=resources.testing_unit_bed,
         fasta=resources.fasta,
         par_regions=par_regions,
         exclusions=exclusions,
         mutation_rate=mutation_rate,
+        mutation_rate_indel=mutation_rate_indel,
         unobserved_policy=_required(
             generation.get("unobserved_policy"), "generation.unobserved_policy"
         ),
@@ -697,6 +721,9 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
     x_chromosome = _mapping(
         generation_settings_config.get("x_chromosome"), "generation_settings.x_chromosome"
     )
+    indels = _mapping(
+        generation_settings_config.get("indels", {}), "generation_settings.indels"
+    )
     settings = GenerationSettings(
         minimum_retained_fraction=_number(
             generation_settings_config.get("minimum_retained_fraction"),
@@ -713,12 +740,41 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
             "generation_settings.mutation_conversion",
         ),
         variant_classes=tuple(generation_settings_config.get("variant_classes", [])),
+        indel_candidate_universe=str(indels.get("candidate_universe", "score_resource")),
+        indel_membership=str(indels.get("membership", "reference_span_overlap")),
+        indel_mask_policy=str(indels.get("mask_policy", "reference_span_contained")),
+        indel_max_reference_length=_number(
+            indels.get("max_reference_length", 50),
+            "generation_settings.indels.max_reference_length",
+            int,
+        ),
+        indel_max_alternate_length=_number(
+            indels.get("max_alternate_length", 50),
+            "generation_settings.indels.max_alternate_length",
+            int,
+        ),
         x_af_policy=_required(x_chromosome.get("af_policy"), "generation_settings.x_chromosome.af_policy"),
         x_mutation_rate_policy=_required(
             x_chromosome.get("mutation_rate_policy"),
             "generation_settings.x_chromosome.mutation_rate_policy",
         ),
     )
+    if mode in {"generate", "full"}:
+        expected_classes = ("snv", "indel") if model.include_indels else ("snv",)
+        if settings.variant_classes != expected_classes:
+            raise WorkflowPlanError(
+                "generation_settings.variant_classes must be "
+                f"{list(expected_classes)!r} when model.include_indels is "
+                f"{model.include_indels!r}"
+            )
+    if (
+        settings.indel_candidate_universe != "score_resource"
+        or settings.indel_membership != "reference_span_overlap"
+        or settings.indel_mask_policy != "reference_span_contained"
+        or settings.indel_max_reference_length < 1
+        or settings.indel_max_alternate_length < 1
+    ):
+        raise WorkflowPlanError("generation_settings.indels has an unsupported policy")
     reference_metadata = _reference_metadata(normalized)
     report_config = _mapping(normalized.get("report"), "report")
     candidate_id = _mapping(report_config.get("candidate_id"), "report.candidate_id")

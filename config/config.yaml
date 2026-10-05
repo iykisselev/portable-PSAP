@@ -40,7 +40,13 @@ report:
 # remain in the null-distribution contract and are not selected here.
 generation_settings:
   minimum_retained_fraction: 0.5  # retained fraction of supported, non-PAR unit bases after all interval exclusions
-  variant_classes: [snv]  # initial preparation scope; indel generation is rejected
+  variant_classes: [snv]  # current generation universe; indel execution remains disabled until its staged implementation is complete
+  indels:
+    candidate_universe: score_resource  # configured CADD indel resource will define the finite candidate catalog
+    membership: reference_span_overlap  # test-unit assignment will use the complete REF span
+    mask_policy: reference_span_contained  # do not admit alleles crossing calibration-mask boundaries
+    max_reference_length: 50  # planned small-indel REF-length limit
+    max_alternate_length: 50  # planned small-indel ALT-length limit
   score_bin_width: 0.05  # generated-grid width; score_max is included in the final bin
   mutation_conversion: de_novo_proxy  # D2-selected proxy; p_effective = per-allele mu
   x_chromosome:

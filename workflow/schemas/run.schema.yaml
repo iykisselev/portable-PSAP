@@ -125,10 +125,12 @@ $defs:
     properties:
       population_vcf: {$ref: "#/$defs/indexed_genomic_binding"}
       mutation_rate: {$ref: "#/$defs/indexed_genomic_binding"}
+      mutation_rate_indel: {$ref: "#/$defs/indexed_genomic_binding"}
       unobserved_policy: {enum: [zero, mutation_rate]}
       af_source: {$ref: "#/$defs/af_source"}
       execution: {$ref: "#/$defs/generation_execution"}
       score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
+      score_indel: {$ref: "#/$defs/indexed_genomic_binding"}
       exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
       testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
       par_regions: {$ref: "#/$defs/indexed_genomic_binding"}
@@ -147,6 +149,7 @@ $defs:
       - type: object
         properties:
           score_snv: false
+          score_indel: false
           exclusion: false
           testing_unit_bed: false
           par_regions: false

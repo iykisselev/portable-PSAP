@@ -114,6 +114,37 @@ class WorkflowPlanTests(unittest.TestCase):
         self.assertEqual("AF_CUSTOM", plan.generation.af_source["overall"])
         self.assertEqual(5_000_000, plan.generation.partition_size_bp)
 
+    def test_generation_plan_exposes_staged_indel_contract_bindings(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["generation"]["score_indel"] = {
+            "data": "tests/smoke/data/cadd_indel.tsv",
+            "index": None,
+        }
+        manifest["generation"]["mutation_rate_indel"] = {
+            "data": "tests/null_distribution/mutation_rates.tsv",
+            "index": None,
+        }
+        plan = build_workflow_plan(manifest)
+
+        assert plan.generation is not None
+        self.assertEqual("tests/smoke/data/cadd_indel.tsv", plan.generation.score_indel.data)
+        self.assertEqual(
+            "tests/null_distribution/mutation_rates.tsv",
+            plan.generation.mutation_rate_indel.data,
+        )
+        settings = plan.generation_settings
+        self.assertEqual("score_resource", settings.indel_candidate_universe)
+        self.assertEqual("reference_span_overlap", settings.indel_membership)
+        self.assertEqual("reference_span_contained", settings.indel_mask_policy)
+        self.assertEqual(50, settings.indel_max_reference_length)
+        self.assertEqual(50, settings.indel_max_alternate_length)
+
+    def test_generation_rejects_indel_variant_class_before_execution_is_ready(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["generation_settings"]["variant_classes"] = ["snv", "indel"]
+        with self.assertRaisesRegex(WorkflowPlanError, "variant_classes must be"):
+            build_workflow_plan(manifest)
+
     def test_mutation_rate_policy_resolves_its_declared_binding(self) -> None:
         plan = build_workflow_plan(
             self.manifest("tests/null_distribution/mutation.run.yaml")
