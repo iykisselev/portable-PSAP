@@ -70,6 +70,12 @@ def validate_model_inputs(
                 components=bundle_components,
             )
             roles = metadata["model_assumptions"]["roles"]
+            variant_classes = metadata["model_assumptions"].get("variant_classes", [])
+            bundle_has_indels = "indel" in variant_classes
+            if bool(settings["include_indels"]) != bundle_has_indels:
+                errors.append(
+                    "Generated lookup variant classes do not match model.include_indels"
+                )
             if bool(settings["hemizygote"]) != ("hem_chrX" in roles):
                 errors.append("Generated lookup HEM role does not match model.hemizygote")
             if metadata.get("assembly") != assembly:

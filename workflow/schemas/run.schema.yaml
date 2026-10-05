@@ -179,7 +179,7 @@ $defs:
           - excluded_units
         properties:
           type: {const: bundle}
-          contract: {enum: [generated_bundle_v1, generated_bundle_v2]}
+          contract: {enum: [generated_bundle_v1, generated_bundle_v2, generated_bundle_v3]}
           tables: {$ref: "#/$defs/lookup_table_paths"}
           metadata: {type: string, minLength: 1}
           validation: {type: string, minLength: 1}

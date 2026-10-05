@@ -354,6 +354,36 @@ class ValidationTests(unittest.TestCase):
         self.assertIs(report["summary"]["hemizygote_model"], True)
         self.assertIs(report["summary"]["include_indels"], False)
 
+    def test_generated_bundle_variant_classes_must_match_the_model(self) -> None:
+        metadata = {
+            "model_assumptions": {"roles": ["het", "hom"], "variant_classes": ["snv"]},
+            "assembly": "GRCh38",
+            "testing_unit_type": "gene",
+            "binning": {"score_max": 20.0, "bin_width": 0.1},
+        }
+        with (
+            patch("validation_model.validate_lookup_files", return_value=[]),
+            patch("validation_model.validate_lookup_unit_overlap", return_value={}),
+            patch("validation_model.verify_bundle_certificate", return_value=metadata),
+        ):
+            report = validate_model_inputs(
+                score_max=20.0,
+                assembly="GRCh38",
+                unit="gene",
+                hemizygote_model=False,
+                include_indels=True,
+                testing_unit_bed="units.bed",
+                lookup_tables={"het": "het.tsv", "hom": "hom.tsv", "hem_chrX": ""},
+                lookup_contract="generated_bundle_v3",
+                lookup_bin_width=0.1,
+                bundle_certificate={"metadata": "metadata.json", "validation": "validation.json", "marker": "validation.ok"},
+                bundle_components={},
+            )
+        self.assertIn(
+            "Generated lookup variant classes do not match model.include_indels",
+            report["errors"],
+        )
+
     def test_staging_accepts_a_declared_nonconventional_index(self) -> None:
         with TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
