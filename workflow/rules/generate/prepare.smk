@@ -18,6 +18,16 @@ checkpoint prepare_generation_scope:
             if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
             else []
         ),
+        score_indel=(
+            [GENERATION_CONTEXT.plan.score_indel.data]
+            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
+            else []
+        ),
+        score_indel_index=(
+            generation_index(GENERATION_CONTEXT.plan.score_indel)
+            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
+            else []
+        ),
         exclusion=(
             [GENERATION_CONTEXT.plan.exclusion.data]
             if GENERATION_CONTEXT.plan.exclusion.data
@@ -82,7 +92,10 @@ rule prepare_generation_partition:
         af_tags=dict(GENERATION_CONTEXT.plan.af_source),
         x_af_policy=WORKFLOW_PLAN.generation_settings.x_af_policy,
         hemizygote=WORKFLOW_PLAN.model.hemizygote,
-        compression=GENERATION_CONTEXT.plan.parquet_compression
+        compression=GENERATION_CONTEXT.plan.parquet_compression,
+        include_indels=WORKFLOW_PLAN.model.include_indels,
+        indel_max_reference_length=WORKFLOW_PLAN.generation_settings.indel_max_reference_length,
+        indel_max_alternate_length=WORKFLOW_PLAN.generation_settings.indel_max_alternate_length
     threads: 1
     resources:
         mem_mb=policy_resources("prepare_generation_partition").mem_mb,

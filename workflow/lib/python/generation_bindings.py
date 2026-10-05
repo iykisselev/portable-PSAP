@@ -68,6 +68,8 @@ class GenerationPartitionInputs:
     score_snv_index: PathLike | None
     fasta: PathLike
     fasta_fai: PathLike
+    score_indel: PathLike | None = None
+    score_indel_index: PathLike | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,9 @@ class GenerationPartitionParameters:
     x_af_policy: str
     hemizygote: bool
     compression: str
+    include_indels: bool = False
+    indel_max_reference_length: int = 1
+    indel_max_alternate_length: int = 1
 
 
 @dataclass(frozen=True)

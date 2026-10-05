@@ -33,6 +33,8 @@ def main() -> None:
             population_vcf_index=(str(snakemake.input.population_vcf_index[0]) if snakemake.input.population_vcf_index else None),
             score_snv=str(snakemake.input.score_snv),
             score_snv_index=(str(snakemake.input.score_snv_index[0]) if snakemake.input.score_snv_index else None),
+            score_indel=(str(snakemake.input.score_indel[0]) if snakemake.input.score_indel else None),
+            score_indel_index=(str(snakemake.input.score_indel_index[0]) if snakemake.input.score_indel_index else None),
             fasta=str(snakemake.input.fasta),
             fasta_fai=str(snakemake.input.fasta_fai),
         ),
@@ -46,6 +48,9 @@ def main() -> None:
             x_af_policy=str(snakemake.params.x_af_policy),
             hemizygote=snakemake.params.hemizygote,
             compression=str(snakemake.params.compression),
+            include_indels=bool(snakemake.params.include_indels),
+            indel_max_reference_length=int(snakemake.params.indel_max_reference_length),
+            indel_max_alternate_length=int(snakemake.params.indel_max_alternate_length),
         ),
         str(snakemake.wildcards.partition),
     )
