@@ -158,6 +158,20 @@ class GenerationPreparationTests(unittest.TestCase):
             invalid["state_reason"].str.contains("scalar selected AF on a multiallelic record").all()
         )
 
+    def test_multiallelic_selected_af_sum_must_not_exceed_one(self) -> None:
+        with TemporaryDirectory() as temporary:
+            population = Path(temporary) / "population.vcf"
+            population.write_text(
+                "##fileformat=VCFv4.2\n"
+                "##INFO=<ID=AF,Number=A,Type=Float,Description=\"AF\">\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+                "1\t2\t.\tA\tC,G\t.\tPASS\tAF=0.75,0.75\n",
+                encoding="utf-8",
+            )
+            rows = population_rows(population, None, "1", 0, 10, {"overall": "AF"})
+        self.assertEqual(rows["allele_state"].unique().to_list(), ["invalid"])
+        self.assertTrue(rows["state_reason"].str.contains("AF sum exceeds 1").all())
+
     def test_effective_mask_subtracts_exclusions_from_supported_nonpar_scope(self) -> None:
         scope = supported_scope_mask(
             {"1": 10},

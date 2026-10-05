@@ -239,6 +239,25 @@ def population_rows(
             )
             continue
         selected = {role: values for role, (values, _) in selected_with_provenance.items()}
+        invalid_sum_roles = [
+            role for role, values in selected.items() if sum(values) > 1 + 1e-12
+        ]
+        if invalid_sum_roles:
+            reason = (
+                "Population VCF selected AF sum exceeds 1 for "
+                + ", ".join(sorted(invalid_sum_roles))
+                + f" at {record_chromosome}:{position}"
+            )
+            records.extend(
+                {
+                    "CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3],
+                    "allele_state": "invalid", "af": None, "af_overall": None,
+                    "af_female": None, "af_male": None, "state_reason": reason,
+                    "af_zero_imputed_tags": None,
+                }
+                for key in keys
+            )
+            continue
         imputed_tags = tuple(
             configured_tags[role]
             for role, (_, imputed) in selected_with_provenance.items()
