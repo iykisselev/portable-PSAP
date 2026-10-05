@@ -6,6 +6,7 @@ import gzip
 import math
 from pathlib import Path
 from typing import Iterator
+import warnings
 
 import polars as pl
 
@@ -22,6 +23,7 @@ POPULATION_SCHEMA = {
     "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String,
     "allele_state": pl.String, "af": pl.Float64, "af_overall": pl.Float64,
     "af_female": pl.Float64, "af_male": pl.Float64, "state_reason": pl.String,
+    "af_zero_imputed_tags": pl.String,
 }
 
 
@@ -96,6 +98,12 @@ def population_info_number(path: str | Path, info_tag: str) -> str:
     return population_info_definition(path, info_tag)[0]
 
 
+def validate_population_af_headers(path: str | Path, af_tags: dict[str, str]) -> None:
+    """Confirm every configured population AF tag is declared before partition work."""
+    for info_tag in sorted(set(af_tags.values())):
+        population_info_definition(path, info_tag)
+
+
 def selected_af_values(
     values_by_tag: dict[str, str],
     tag: str,
@@ -132,6 +140,26 @@ def selected_af_values(
     return parsed
 
 
+def selected_af_values_or_zero(
+    values_by_tag: dict[str, str],
+    tag: str,
+    number: str,
+    alternates: list[str],
+    chromosome: str,
+    position: int,
+) -> tuple[list[float], bool]:
+    """Read an AF field, treating an absent INFO tag as zero for every ALT.
+
+    gnomAD omits population-specific INFO tags when no allele was observed in
+    that population.  A present-but-empty or malformed value remains invalid.
+    """
+    if tag not in values_by_tag:
+        return [0.0] * len(alternates), True
+    return selected_af_values(
+        values_by_tag, tag, number, alternates, chromosome, position
+    ), False
+
+
 def population_rows(
     path: str | Path,
     index: str | Path | None,
@@ -158,6 +186,7 @@ def population_rows(
             configured_tags["male"] = af_tags["male"]
     definitions = {role: population_info_definition(path, tag) for role, tag in configured_tags.items()}
     records: list[dict[str, object]] = []
+    imputed_records: list[tuple[str, int, tuple[str, ...]]] = []
     for raw in indexed_lines(path, index, chromosome, start, end):
         if raw.startswith("#"):
             continue
@@ -176,6 +205,7 @@ def population_rows(
                     "CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3],
                     "allele_state": "rejected", "af": None, "af_overall": None,
                     "af_female": None, "af_male": None, "state_reason": "non_pass_filter",
+                    "af_zero_imputed_tags": None,
                 }
                 for key in keys
             )
@@ -190,8 +220,11 @@ def population_rows(
             if hemizygote:
                 required_roles.append("male")
         try:
-            selected = {
-                role: selected_af_values(values_by_tag, configured_tags[role], definitions[role][0], alternates, record_chromosome, position)
+            selected_with_provenance = {
+                role: selected_af_values_or_zero(
+                    values_by_tag, configured_tags[role], definitions[role][0],
+                    alternates, record_chromosome, position,
+                )
                 for role in required_roles
             }
         except ValueError as exc:
@@ -200,10 +233,19 @@ def population_rows(
                     "CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3],
                     "allele_state": "invalid", "af": None, "af_overall": None,
                     "af_female": None, "af_male": None, "state_reason": str(exc),
+                    "af_zero_imputed_tags": None,
                 }
                 for key in keys
             )
             continue
+        selected = {role: values for role, (values, _) in selected_with_provenance.items()}
+        imputed_tags = tuple(
+            configured_tags[role]
+            for role, (_, imputed) in selected_with_provenance.items()
+            if imputed
+        )
+        if imputed_tags:
+            imputed_records.append((record_chromosome, position, imputed_tags))
         for alternate_index, key in enumerate(keys):
             records.append(
                 {
@@ -212,7 +254,20 @@ def population_rows(
                     "af_overall": selected["overall"][alternate_index],
                     "af_female": selected.get("female", [None] * len(keys))[alternate_index],
                     "af_male": selected.get("male", [None] * len(keys))[alternate_index],
-                    "state_reason": "valid_selected_af",
+                    "state_reason": "selected_af_zero_imputed" if imputed_tags else "valid_selected_af",
+                    "af_zero_imputed_tags": ",".join(imputed_tags) if imputed_tags else None,
                 }
             )
+    if imputed_records:
+        examples = ", ".join(
+            f"{chromosome}:{position} INFO/{','.join(tags)}"
+            for chromosome, position, tags in imputed_records[:10]
+        )
+        warnings.warn(
+            "Population VCF omitted configured AF INFO tag(s) for "
+            f"{len(imputed_records)} passing record(s); using AF=0 for their alternate allele(s). "
+            f"The final bundle will record any affected calibration alleles. Examples: {examples}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return pl.DataFrame(records, schema=POPULATION_SCHEMA, strict=False)

@@ -123,6 +123,15 @@ def rejected_rows(paths):
             yield chromosome, position, reference, alternate, reason
 
 
+def zero_imputed_af_rows(paths):
+    """Expose calibration alleles whose omitted population AF tag became zero."""
+    for chromosome, position, reference, alternate, tags in parquet_rows(
+        paths, ["CHROM", "POS", "REF", "ALT", "af_zero_imputed_tags"]
+    ):
+        if tags:
+            yield chromosome, position, reference, alternate, tags
+
+
 def finalize_generated_bundle(
     inputs: BundleFinalizationInputs,
     outputs: BundleFinalizationOutputs,
@@ -151,6 +160,11 @@ def finalize_generated_bundle(
     rejected_count, excluded_alleles = write_gzip_tsv_atomic(
         outputs.excluded_alleles, ["#CHROM", "POS", "REF", "ALT", "exclusion_reason"], rejected_rows(inputs.allele_states)
     )
+    zero_imputation_count, population_af_zero_imputations = write_gzip_tsv_atomic(
+        outputs.population_af_zero_imputations,
+        ["#CHROM", "POS", "REF", "ALT", "imputed_info_tags"],
+        zero_imputed_af_rows(inputs.allele_states),
+    )
     resource_record = json.loads(Path(inputs.resource_identities).read_text(encoding="utf-8"))
     resources = {
         name: {"identity": params.resource_ids.get(name, name), "path": row["path"], "sha256": row["sha256"]}
@@ -159,7 +173,9 @@ def finalize_generated_bundle(
     components = {
         "lookup_het": lookup_het, "lookup_hom": lookup_hom,
         "eligible_testing_units": eligible_bed, "calibration_regions": calibration_regions,
-        "excluded_alleles": excluded_alleles, "excluded_units": excluded_units,
+        "excluded_alleles": excluded_alleles,
+        "population_af_zero_imputations": population_af_zero_imputations,
+        "excluded_units": excluded_units,
     }
     if params.hemizygote:
         assert lookup_hem is not None
@@ -184,7 +200,11 @@ def finalize_generated_bundle(
                 "hemizygote_role": "hem_chrX" if params.hemizygote else None,
                 "x_chromosome": {"af_policy": params.x_af_policy, "mutation_rate_policy": params.x_mutation_rate_policy, "hemizygote_scope": "non_PAR_chrX_only"},
             },
-            "counts": {"eligible_units": len(eligible), "excluded_units": len(excluded), "excluded_alleles": rejected_count, "calibration_intervals": calibration_count},
+            "counts": {
+                "eligible_units": len(eligible), "excluded_units": len(excluded),
+                "excluded_alleles": rejected_count, "calibration_intervals": calibration_count,
+                "population_af_zero_imputations": zero_imputation_count,
+            },
             "resource_identities": resources, "components": components,
             "validation_artifacts": dict(VALIDATION_ARTIFACT_FILENAMES),
         },

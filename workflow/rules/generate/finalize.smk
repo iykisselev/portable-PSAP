@@ -32,6 +32,9 @@ rule finalize_null_distribution_bundle:
         excluded_alleles=ensure(
             GENERATION_CONTEXT.bundle_paths["excluded_alleles"], non_empty=True
         ),
+        population_af_zero_imputations=ensure(
+            GENERATION_CONTEXT.bundle_paths["population_af_zero_imputations"], non_empty=True
+        ),
         excluded_units=ensure(GENERATION_CONTEXT.bundle_paths["excluded_units"], non_empty=True),
         metadata=ensure(GENERATION_CONTEXT.bundle_paths["metadata"], non_empty=True)
     params:
@@ -84,6 +87,9 @@ rule validate_null_distribution_bundle:
         eligible_bed=rules.finalize_null_distribution_bundle.output.eligible_bed,
         calibration_regions=rules.finalize_null_distribution_bundle.output.calibration_regions,
         excluded_alleles=rules.finalize_null_distribution_bundle.output.excluded_alleles,
+        population_af_zero_imputations=(
+            rules.finalize_null_distribution_bundle.output.population_af_zero_imputations
+        ),
         excluded_units=rules.finalize_null_distribution_bundle.output.excluded_units,
         metadata=rules.finalize_null_distribution_bundle.output.metadata,
         schema=str(Path(workflow.basedir) / "schemas" / "null_distribution_bundle.schema.yaml")

@@ -32,6 +32,7 @@ checkpoint prepare_generation_scope:
         minimum_retained_fraction=WORKFLOW_PLAN.generation_settings.minimum_retained_fraction,
         partition_size=GENERATION_CONTEXT.plan.partition_size_bp,
         unit_bucket_size=GENERATION_CONTEXT.plan.unit_bucket_size,
+        af_tags=dict(GENERATION_CONTEXT.plan.af_source),
         compression=GENERATION_CONTEXT.plan.parquet_compression,
         exclusions=GENERATION_CONTEXT.exclusion_paths_by_id()
     threads: 1

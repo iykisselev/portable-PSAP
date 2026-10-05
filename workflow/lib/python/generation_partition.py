@@ -77,7 +77,10 @@ def prepare_generation_partition(
             pl.when(pl.col("allele_state").is_null()).then(pl.lit("absent")).otherwise(pl.col("allele_state")).alias("allele_state"),
             pl.when(pl.col("state_reason").is_null()).then(pl.lit("not_present_in_population_panel")).otherwise(pl.col("state_reason")).alias("state_reason"),
         )
-        .select(*ALLELE_COLUMNS, "allele_state", "af", "af_overall", "af_female", "af_male", "state_reason")
+        .select(
+            *ALLELE_COLUMNS, "allele_state", "af", "af_overall", "af_female",
+            "af_male", "state_reason", "af_zero_imputed_tags",
+        )
     )
     invalid = states.filter(pl.col("allele_state") == "invalid")
     if invalid.height:

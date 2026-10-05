@@ -71,6 +71,7 @@ def main() -> None:
             partition_size=int(snakemake.params.partition_size),
             unit_bucket_size=int(snakemake.params.unit_bucket_size),
             compression=str(snakemake.params.compression),
+            af_tags=dict(snakemake.params.af_tags),
         ),
     )
 

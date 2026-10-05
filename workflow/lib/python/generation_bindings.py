@@ -8,7 +8,7 @@ explicit instead of relying on anonymous attribute bags.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
@@ -49,6 +49,7 @@ class GenerationScopeParameters:
     partition_size: int
     unit_bucket_size: int
     compression: str
+    af_tags: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -148,6 +149,7 @@ class BundleFinalizationOutputs:
     eligible_bed: PathLike
     calibration_regions: PathLike
     excluded_alleles: PathLike
+    population_af_zero_imputations: PathLike
     excluded_units: PathLike
     metadata: PathLike
 
@@ -178,6 +180,7 @@ class BundleValidationInputs:
     eligible_bed: PathLike
     calibration_regions: PathLike
     excluded_alleles: PathLike
+    population_af_zero_imputations: PathLike
     excluded_units: PathLike
     metadata: PathLike
     schema: PathLike

@@ -29,6 +29,8 @@ class GenerateWorkflowFixtureTests(unittest.TestCase):
             self.assertEqual("mutation_rate", metadata["model_assumptions"]["unobserved_policy"])
             self.assertEqual("de_novo_proxy", metadata["model_assumptions"]["mutation_conversion"])
             self.assertEqual("sex_averaged_proxy", metadata["model_assumptions"]["x_chromosome"]["mutation_rate_policy"])
+            self.assertIn("population_af_zero_imputations", metadata["components"])
+            self.assertTrue((bundle / "population_af_zero_imputations.tsv.gz").is_file())
             self.assertEqual("ok", validation["status"])
             self.assertTrue((bundle / "validation.ok").is_file())
 

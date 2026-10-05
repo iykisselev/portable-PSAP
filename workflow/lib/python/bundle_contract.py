@@ -30,6 +30,7 @@ BUNDLE_COMPONENT_FILENAMES: Mapping[str, str] = MappingProxyType(
         "eligible_bed": "eligible_testing_units.bed.gz",
         "calibration_regions": "calibration_regions.bed.gz",
         "excluded_alleles": "excluded_alleles.tsv.gz",
+        "population_af_zero_imputations": "population_af_zero_imputations.tsv.gz",
         "excluded_units": "excluded_units.tsv.gz",
         "metadata": "metadata.json",
         "validation": VALIDATION_ARTIFACT_FILENAMES["report"],
@@ -68,4 +69,3 @@ def require_supported_contract(contract: str) -> str:
             f"Unsupported generated bundle contract {contract!r}; supported contracts: {supported}"
         )
     return contract
-

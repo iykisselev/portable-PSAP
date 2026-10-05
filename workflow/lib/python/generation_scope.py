@@ -14,6 +14,7 @@ from generation_manifests import (
     PARTITION_MANIFEST_SCHEMA_VERSION,
 )
 from generation_partitions import build_partitions, read_fasta_index
+from generation_population import validate_population_af_headers
 from generation_prep import (
     retention_rows,
     effective_calibration_mask,
@@ -42,6 +43,7 @@ def prepare_generation_scope(
     ):
         if path is not None and index is None:
             check_unindexed_fixture(path)
+    validate_population_af_headers(inputs.population_vcf, dict(params.af_tags))
     units_by_id = read_bed_units(inputs.testing_units)
     par_intervals = read_intervals(inputs.par_regions)
     excluded_intervals = read_intervals(inputs.exclusion) if inputs.exclusion else {}

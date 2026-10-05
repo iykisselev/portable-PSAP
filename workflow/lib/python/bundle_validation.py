@@ -76,7 +76,9 @@ def validate_generated_bundle(
         "lookup_het": inputs.lookup_het, "lookup_hom": inputs.lookup_hom,
         "eligible_testing_units": inputs.eligible_bed,
         "calibration_regions": inputs.calibration_regions,
-        "excluded_alleles": inputs.excluded_alleles, "excluded_units": inputs.excluded_units,
+        "excluded_alleles": inputs.excluded_alleles,
+        "population_af_zero_imputations": inputs.population_af_zero_imputations,
+        "excluded_units": inputs.excluded_units,
     }
     hemizygote = "hem_chrX" in metadata["model_assumptions"]["roles"]
     if hemizygote:
@@ -102,6 +104,7 @@ def validate_generated_bundle(
         "eligible_units": len(expected_ids), "excluded_units": data_row_count(components["excluded_units"]),
         "excluded_alleles": data_row_count(components["excluded_alleles"]),
         "calibration_intervals": data_row_count(components["calibration_regions"]),
+        "population_af_zero_imputations": data_row_count(components["population_af_zero_imputations"]),
     }
     if metadata["counts"] != observed_counts:
         raise ValueError(f"Bundle exclusion/scope counts differ from metadata: {observed_counts!r}")

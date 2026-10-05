@@ -6,6 +6,7 @@ import json
 import random
 import sys
 import unittest
+import warnings
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -23,7 +24,7 @@ from generation_prep import (  # noqa: E402
     supported_scope_mask,
     subtract_intervals,
 )
-from generation_population import population_rows  # noqa: E402
+from generation_population import population_rows, validate_population_af_headers  # noqa: E402
 from generation_probability import role_probability_expression  # noqa: E402
 from generation_bindings import (  # noqa: E402
     GenerationScopeInputs,
@@ -79,7 +80,9 @@ class GenerationPreparationTests(unittest.TestCase):
                 mask=directory / "mask",
                 resource_identities=directory / "resource_identities",
             )
-            params = GenerationScopeParameters(0.5, 10, 250, "zstd")
+            params = GenerationScopeParameters(
+                0.5, 10, 250, "zstd", {"overall": "AF_CUSTOM"}
+            )
             prepare_generation_scope(inputs, outputs, params)
             rows = {row["testing_unit_id"]: row for row in pl.read_parquet(outputs.units).to_dicts()}
             self.assertEqual(rows["UNIT_OVERLAP"]["supported_bases"], 10)
@@ -96,14 +99,16 @@ class GenerationPreparationTests(unittest.TestCase):
             )
 
     def test_configured_info_tag_preserves_zero_and_rejects_other_states(self) -> None:
-        rows = population_rows(
-            ROOT / "tests/null_distribution/population_af.vcf",
-            None,
-            "1",
-            0,
-            60,
-            {"overall": "AF_CUSTOM"},
-        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            rows = population_rows(
+                ROOT / "tests/null_distribution/population_af.vcf",
+                None,
+                "1",
+                0,
+                60,
+                {"overall": "AF_CUSTOM"},
+            )
         states = {
             (row["POS"], row["REF"], row["ALT"]): row
             for row in rows.to_dicts()
@@ -114,6 +119,17 @@ class GenerationPreparationTests(unittest.TestCase):
         self.assertEqual(states[(40, "C", "T")]["state_reason"], "non_pass_filter")
         self.assertEqual(states[(30, "G", "A")]["allele_state"], "invalid")
         self.assertIn("missing selected AF", states[(30, "G", "A")]["state_reason"])
+        self.assertEqual(states[(50, "A", "C")]["af"], 0.0)
+        self.assertEqual(states[(50, "A", "G")]["af_zero_imputed_tags"], "AF_CUSTOM")
+        self.assertEqual(states[(50, "A", "C")]["state_reason"], "selected_af_zero_imputed")
+        self.assertTrue(any("using AF=0" in str(warning.message) for warning in caught))
+
+    def test_configured_af_header_is_required_before_partition_work(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no INFO header for configured tag 'AF_MISSING'"):
+            validate_population_af_headers(
+                ROOT / "tests/null_distribution/population_af.vcf",
+                {"overall": "AF_CUSTOM", "female": "AF_MISSING"},
+            )
 
     def test_union_retention_does_not_double_count_overlapping_unit_intervals(self) -> None:
         units = read_bed_units(ROOT / "tests/null_distribution/testing_units.bed")
@@ -126,14 +142,16 @@ class GenerationPreparationTests(unittest.TestCase):
         self.assertEqual(rows["UNIT_X_MIXED_PAR"][2:6], (8, 8, 1.0, "eligible"))
 
     def test_multiallelic_scalar_tag_is_not_split_into_alt_frequencies(self) -> None:
-        rows = population_rows(
-            ROOT / "tests/null_distribution/population_af.vcf",
-            None,
-            "1",
-            0,
-            60,
-            {"overall": "AF_SCALAR"},
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            rows = population_rows(
+                ROOT / "tests/null_distribution/population_af.vcf",
+                None,
+                "1",
+                0,
+                60,
+                {"overall": "AF_SCALAR"},
+            )
         invalid = rows.filter((pl.col("POS") == 50) & pl.col("ALT").is_in(["C", "G"]))
         self.assertEqual(invalid["allele_state"].unique().to_list(), ["invalid"])
         self.assertTrue(

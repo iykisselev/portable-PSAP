@@ -83,6 +83,7 @@ properties:
       excluded_units: {type: integer, minimum: 0}
       excluded_alleles: {type: integer, minimum: 0}
       calibration_intervals: {type: integer, minimum: 0}
+      population_af_zero_imputations: {type: integer, minimum: 0}
   resource_identities:
     type: object
     minProperties: 6
@@ -104,6 +105,7 @@ properties:
       eligible_testing_units: {$ref: "#/$defs/component"}
       calibration_regions: {$ref: "#/$defs/component"}
       excluded_alleles: {$ref: "#/$defs/component"}
+      population_af_zero_imputations: {$ref: "#/$defs/component"}
       excluded_units: {$ref: "#/$defs/component"}
   validation_artifacts:
     type: object
