@@ -13,7 +13,12 @@ from generation_manifests import (
     BUCKET_MANIFEST_SCHEMA_VERSION,
     PARTITION_MANIFEST_SCHEMA_VERSION,
 )
-from generation_partitions import GenomePartition, build_partitions, read_fasta_index
+from generation_partitions import (
+    GenomePartition,
+    build_partitions,
+    indel_candidate_owner_intervals,
+    read_fasta_index,
+)
 from generation_population import validate_population_af_headers
 from generation_prep import (
     retention_rows,
@@ -86,6 +91,7 @@ def prepare_generation_scope(
         (inputs.population_vcf, inputs.population_vcf_index),
         (inputs.score_snv, inputs.score_snv_index),
         (inputs.mutation_rate, inputs.mutation_rate_index),
+        (inputs.score_indel if params.include_indels else None, inputs.score_indel_index),
     ):
         if path is not None and index is None:
             check_unindexed_fixture(path)
@@ -149,14 +155,41 @@ def prepare_generation_scope(
     eligible_unit_ids = set(
         unit_retention_frame.filter(pl.col("status") == "eligible")["testing_unit_id"].to_list()
     )
+    eligible_callable_unit_intervals = [
+        (unit_id, chromosome, start, end)
+        for unit_id, chromosome, start, end in callable_unit_intervals
+        if unit_id in eligible_unit_ids
+    ]
+    indel_owner_intervals: list[tuple[str, str, int, int]] = []
+    if params.include_indels:
+        if inputs.score_indel is None:
+            raise ValueError("Indel generation requires generation.score_indel")
+        if params.indel_max_reference_length < 1:
+            raise ValueError("Indel maximum reference length must be positive")
+        indel_owner_intervals = [
+            (unit_id, chromosome, start, end)
+            for (unit_id, chromosome, _, _), (chromosome, start, end) in zip(
+                eligible_callable_unit_intervals,
+                indel_candidate_owner_intervals(
+                    [
+                        (chromosome, start, end)
+                        for _, chromosome, start, end in eligible_callable_unit_intervals
+                    ],
+                    params.indel_max_reference_length,
+                ),
+            )
+        ]
     genome_partitions = build_partitions(
         inputs.fasta_fai,
         [
             (chromosome, start, end)
-            for unit_id, chromosome, start, end in callable_unit_intervals
-            if unit_id in eligible_unit_ids
+            for _, chromosome, start, end in eligible_callable_unit_intervals
         ],
         int(params.partition_size),
+        candidate_owner_intervals=[
+            (chromosome, start, end)
+            for _, chromosome, start, end in indel_owner_intervals
+        ],
     )
     write_parquet_atomic(unit_retention_frame, outputs.units, params.compression)
     write_parquet_atomic(
@@ -222,6 +255,7 @@ def prepare_generation_scope(
         callable_unit_intervals,
         bucket_by_unit,
         int(params.partition_size),
+        candidate_owner_intervals=indel_owner_intervals if params.include_indels else None,
     )
     write_json_atomic(
         outputs.buckets,
@@ -252,6 +286,8 @@ def prepare_generation_scope(
     input_resource_paths.update(inputs.exclusions)
     if inputs.mutation_rate:
         input_resource_paths["mutation_rate"] = inputs.mutation_rate
+    if params.include_indels and inputs.score_indel:
+        input_resource_paths["score_indel"] = inputs.score_indel
     write_json_atomic(
         outputs.resource_identities,
         {

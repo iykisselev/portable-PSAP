@@ -98,6 +98,55 @@ class GenerationPreparationTests(unittest.TestCase):
                 [partition["partition_id"] for partition in partitions],
             )
 
+    def test_indel_scope_wiring_adds_only_the_required_owner_halo_partition(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            fasta = directory / "reference.fa"
+            fasta_index = directory / "reference.fa.fai"
+            units = directory / "units.bed"
+            population = directory / "population.vcf"
+            scores = directory / "scores.tsv"
+            indels = directory / "indels.tsv"
+            par_regions = directory / "par.bed"
+            fasta.write_text(">1\n" + "A" * 30 + "\n", encoding="utf-8")
+            fasta_index.write_text("1\t30\t0\t0\t0\n", encoding="utf-8")
+            units.write_text("1\t10\t12\tUNIT\n", encoding="utf-8")
+            population.write_text(
+                "##INFO=<ID=AF,Number=A,Type=Float,Description=\"AF\">\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n",
+                encoding="utf-8",
+            )
+            scores.write_text("1\t11\tA\tC\t0\t20\n", encoding="utf-8")
+            indels.write_text("1\t9\tA\tAT\t0\t20\n", encoding="utf-8")
+            par_regions.write_text("", encoding="utf-8")
+            inputs = GenerationScopeInputs(
+                population_vcf=population, population_vcf_index=None,
+                score_snv=scores, score_snv_index=None,
+                exclusion=None, exclusions={}, testing_units=units, par_regions=par_regions,
+                fasta=fasta, fasta_fai=fasta_index, mutation_rate=None, mutation_rate_index=None,
+                score_indel=indels, score_indel_index=None,
+            )
+            outputs = GenerationScopeOutputs(
+                partitions=directory / "partitions.json", buckets=directory / "buckets.json",
+                units=directory / "units.parquet", unit_intervals=directory / "unit_intervals.parquet",
+                masked_unit_intervals=directory / "masked.parquet", mask=directory / "mask.parquet",
+                resource_identities=directory / "resources.json",
+            )
+            prepare_generation_scope(
+                inputs, outputs,
+                GenerationScopeParameters(0.5, 10, 10, "zstd", {"overall": "AF"}, True, 3),
+            )
+            partitions = json.loads(outputs.partitions.read_text(encoding="utf-8"))["partitions"]
+            buckets = json.loads(outputs.buckets.read_text(encoding="utf-8"))["buckets"]
+        self.assertEqual(
+            ["1_000000000000_000000000010", "1_000000000010_000000000020"],
+            [entry["partition_id"] for entry in partitions],
+        )
+        self.assertEqual(
+            ["1_000000000000_000000000010", "1_000000000010_000000000020"],
+            buckets[0]["partition_ids"],
+        )
+
     def test_configured_info_tag_preserves_zero_and_rejects_other_states(self) -> None:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")

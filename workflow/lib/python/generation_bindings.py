@@ -30,6 +30,8 @@ class GenerationScopeInputs:
     fasta_fai: PathLike
     mutation_rate: PathLike | None
     mutation_rate_index: PathLike | None
+    score_indel: PathLike | None = None
+    score_indel_index: PathLike | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,8 @@ class GenerationScopeParameters:
     unit_bucket_size: int
     compression: str
     af_tags: Mapping[str, str] = field(default_factory=dict)
+    include_indels: bool = False
+    indel_max_reference_length: int = 1
 
 
 @dataclass(frozen=True)

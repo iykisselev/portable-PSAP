@@ -8,6 +8,16 @@ checkpoint prepare_generation_scope:
         population_vcf_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.population_vcf),
         score_snv=GENERATION_CONTEXT.plan.score_snv.data,
         score_snv_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.score_snv),
+        score_indel=(
+            [GENERATION_CONTEXT.plan.score_indel.data]
+            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
+            else []
+        ),
+        score_indel_index=(
+            generation_index(GENERATION_CONTEXT.plan.score_indel)
+            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
+            else []
+        ),
         exclusion=(
             [GENERATION_CONTEXT.plan.exclusion.data]
             if GENERATION_CONTEXT.plan.exclusion.data
@@ -34,6 +44,8 @@ checkpoint prepare_generation_scope:
         unit_bucket_size=GENERATION_CONTEXT.plan.unit_bucket_size,
         af_tags=dict(GENERATION_CONTEXT.plan.af_source),
         compression=GENERATION_CONTEXT.plan.parquet_compression,
+        include_indels=WORKFLOW_PLAN.model.include_indels,
+        indel_max_reference_length=WORKFLOW_PLAN.generation_settings.indel_max_reference_length,
         exclusions=GENERATION_CONTEXT.exclusion_paths_by_id()
     threads: 1
     resources:

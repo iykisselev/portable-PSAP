@@ -56,6 +56,11 @@ def main() -> None:
                 if snakemake.input.mutation_rate_index
                 else None
             ),
+            score_indel=(str(snakemake.input.score_indel[0]) if snakemake.input.score_indel else None),
+            score_indel_index=(
+                str(snakemake.input.score_indel_index[0])
+                if snakemake.input.score_indel_index else None
+            ),
         ),
         GenerationScopeOutputs(
             partitions=str(snakemake.output.partitions),
@@ -72,6 +77,8 @@ def main() -> None:
             unit_bucket_size=int(snakemake.params.unit_bucket_size),
             compression=str(snakemake.params.compression),
             af_tags=dict(snakemake.params.af_tags),
+            include_indels=bool(snakemake.params.include_indels),
+            indel_max_reference_length=int(snakemake.params.indel_max_reference_length),
         ),
     )
 
