@@ -15,6 +15,7 @@ import yaml
 from generation_bindings import BundleValidationInputs, BundleValidationOutputs
 from bundle_certificate import BundleCertificateError, validate_bundle_component
 from bundle_contract import HEM_COMPONENT, VALIDATION_ARTIFACT_FILENAMES
+from indel_bundle_contract import validate_indel_bundle_metadata
 from io_contracts import sha256_file, write_text_atomic
 
 
@@ -68,6 +69,8 @@ def validate_generated_bundle(
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     schema = yaml.safe_load(Path(inputs.schema).read_text(encoding="utf-8"))
     jsonschema.Draft202012Validator(schema).validate(metadata)
+    if metadata["contract"] == "generated_bundle_v3":
+        validate_indel_bundle_metadata(metadata)
     binning = metadata["binning"]
     expected_count = int((Decimal(str(binning["score_max"])) / Decimal(str(binning["bin_width"]))).to_integral_value(rounding=ROUND_CEILING))
     if binning["bin_count"] != expected_count:

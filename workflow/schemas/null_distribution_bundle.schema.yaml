@@ -15,8 +15,8 @@ required:
   - components
   - validation_artifacts
 properties:
-  schema_version: {enum: [1, 2]}
-  contract: {enum: [generated_bundle_v1, generated_bundle_v2]}
+  schema_version: {enum: [1, 2, 3]}
+  contract: {enum: [generated_bundle_v1, generated_bundle_v2, generated_bundle_v3]}
   assembly: {enum: [GRCh37, GRCh38]}
   contig_convention: {const: canonical_without_chr_prefix}
   testing_unit_type: {enum: [gene, cadd_region, coding_cadd_region]}
@@ -58,7 +58,9 @@ properties:
         uniqueItems: true
       variant_classes:
         type: array
-        const: [snv]
+        oneOf:
+          - const: [snv]
+          - const: [snv, indel]
       unobserved_policy: {enum: [zero, mutation_rate]}
       mutation_conversion: {type: [string, "null"]}
       allele_events_independent: {const: true}
@@ -106,7 +108,27 @@ properties:
       calibration_regions: {$ref: "#/$defs/component"}
       excluded_alleles: {$ref: "#/$defs/component"}
       population_af_zero_imputations: {$ref: "#/$defs/component"}
+      candidate_audit: {$ref: "#/$defs/component"}
       excluded_units: {$ref: "#/$defs/component"}
+  indel_universe:
+    type: object
+    additionalProperties: false
+    required: [candidate_universe, normalization, reference_span, membership, mask_policy, max_reference_length, max_alternate_length]
+    properties:
+      candidate_universe: {const: score_resource}
+      normalization: {const: vcf_minimal_left_aligned_v1}
+      reference_span: {const: zero_based_half_open_ref_span_v1}
+      membership: {const: reference_span_overlap}
+      mask_policy: {const: reference_span_contained}
+      max_reference_length: {type: integer, minimum: 1}
+      max_alternate_length: {type: integer, minimum: 1}
+  variant_class_counts:
+    type: object
+    additionalProperties: false
+    required: [snv, indel]
+    properties:
+      snv: {$ref: "#/$defs/variant_class_count"}
+      indel: {$ref: "#/$defs/variant_class_count"}
   validation_artifacts:
     type: object
     additionalProperties: false
@@ -132,6 +154,15 @@ $defs:
       path: {type: string, minLength: 1, pattern: "^[^/]+$"}
       sha256: {$ref: "#/$defs/sha256"}
       bytes: {type: integer, minimum: 1}
+  variant_class_count:
+    type: object
+    additionalProperties: false
+    required: [retained, rejected, observed, absent]
+    properties:
+      retained: {type: integer, minimum: 0}
+      rejected: {type: integer, minimum: 0}
+      observed: {type: integer, minimum: 0}
+      absent: {type: integer, minimum: 0}
 allOf:
   - if:
       properties: {contract: {const: generated_bundle_v1}}
@@ -147,6 +178,17 @@ allOf:
       properties:
         schema_version: {const: 2}
         model_assumptions: {required: [x_chromosome]}
+  - if:
+      properties: {contract: {const: generated_bundle_v3}}
+      required: [contract]
+    then:
+      required: [indel_universe, variant_class_counts]
+      properties:
+        schema_version: {const: 3}
+        model_assumptions:
+          properties: {variant_classes: {const: [snv, indel]}}
+        resource_identities: {required: [score_snv, score_indel]}
+        components: {required: [candidate_audit]}
   - if:
       properties:
         model_assumptions:
