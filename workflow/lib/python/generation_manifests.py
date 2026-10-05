@@ -46,6 +46,23 @@ def _load_mapping(path: str | Path, label: str) -> dict:
     return value
 
 
+def _partition_identifier_sort_key(identifier: str) -> tuple[str, int, int]:
+    """Return the ordering used by the partition producer for one identifier."""
+    fields = identifier.rsplit("_", 2)
+    if len(fields) != 3:
+        raise ValueError("Partition identifier has the wrong shape")
+    chromosome, raw_start, raw_end = fields
+    start, end = int(raw_start), int(raw_end)
+    if (
+        not chromosome
+        or start < 0
+        or end <= start
+        or identifier != f"{chromosome}_{start:012d}_{end:012d}"
+    ):
+        raise ValueError("Partition identifier is noncanonical")
+    return chromosome, start, end
+
+
 def read_partition_manifest(path: str | Path) -> tuple[PartitionManifestEntry, ...]:
     """Read and validate the compact partition-discovery manifest."""
     manifest = _load_mapping(path, "partition")
@@ -109,6 +126,9 @@ def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
             entry_ordinal = int(row["ordinal"])
             unit_ids = tuple(str(value) for value in row["unit_ids"])
             partition_ids = tuple(str(value) for value in row["partition_ids"])
+            partition_keys = tuple(
+                _partition_identifier_sort_key(value) for value in partition_ids
+            )
         except (KeyError, TypeError, ValueError) as exc:
             raise GenerationManifestError("Bucket manifest has an invalid entry") from exc
         if (
@@ -119,7 +139,7 @@ def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
             or len(set(unit_ids)) != len(unit_ids)
             or seen_units.intersection(unit_ids)
             or not partition_ids
-            or tuple(sorted(partition_ids)) != partition_ids
+            or tuple(sorted(partition_keys)) != partition_keys
             or len(set(partition_ids)) != len(partition_ids)
         ):
             raise GenerationManifestError("Bucket manifest has noncanonical entries")

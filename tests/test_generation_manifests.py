@@ -101,6 +101,28 @@ class GenerationManifestTests(unittest.TestCase):
             with self.assertRaisesRegex(GenerationManifestError, "noncanonical"):
                 bucket_ids(path)
 
+    def test_bucket_partitions_use_producer_chromosome_order(self) -> None:
+        with TemporaryDirectory() as temporary:
+            path = self.write(
+                Path(temporary) / "buckets.json",
+                {
+                    "schema_version": BUCKET_MANIFEST_SCHEMA_VERSION,
+                    "buckets": [
+                        {
+                            "bucket_id": "00000",
+                            "ordinal": 0,
+                            "unit_ids": ["UNIT_A"],
+                            "partition_ids": [
+                                "1_000000000000_000000000010",
+                                "10_000000000000_000000000010",
+                                "2_000000000000_000000000010",
+                            ],
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(("00000",), bucket_ids(path))
+
     def test_sparse_bucket_map_omits_nonoverlapping_partition_pairs(self) -> None:
         partitions = [
             GenomePartition("1_000000000000_000000000010", "1", 0, 10, 0),
