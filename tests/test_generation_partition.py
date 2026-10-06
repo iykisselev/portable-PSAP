@@ -133,7 +133,7 @@ class GenerationPartitionTests(unittest.TestCase):
             self.prepare()
         self.assertEqual(read_scores.call_args.kwargs["intervals"], [(0, 2), (4, 6)])
         scores = pl.read_parquet(self.outputs.allele_scores)
-        expected = score_rows(self.inputs.score_snv, None, "1", 0, 10).filter(pl.col("POS").is_in([1, 2, 5, 6]))
+        expected = score_rows(self.inputs.score_snv, None, "1", 0, 10).filter(pl.col("POS").is_in([1, 2, 5, 6])).with_columns(pl.lit("snv").alias("variant_class"))
         assert_frame_equal(scores.sort(ALLELE_COLUMNS), expected.sort(ALLELE_COLUMNS))
         memberships = pl.read_parquet(self.outputs.allele_membership)
         self.assertEqual(memberships.height, 15)
@@ -196,7 +196,11 @@ class GenerationPartitionTests(unittest.TestCase):
         indel = memberships.filter((pl.col("POS") == 1) & (pl.col("ALT") == "AT"))
         self.assertEqual(indel.select("testing_unit_id", "variant_class").rows(), [("a", "indel")])
         scores = pl.read_parquet(self.outputs.allele_scores)
-        self.assertEqual(scores.filter((pl.col("POS") == 1) & (pl.col("ALT") == "AT"))["score"].to_list(), [21.0])
+        indel_score = scores.filter((pl.col("POS") == 1) & (pl.col("ALT") == "AT"))
+        self.assertEqual(indel_score["score"].to_list(), [21.0])
+        self.assertEqual(indel_score["variant_class"].to_list(), ["indel"])
+        states = pl.read_parquet(self.outputs.allele_states)
+        self.assertEqual(states.filter((pl.col("POS") == 1) & (pl.col("ALT") == "AT"))["variant_class"].to_list(), ["indel"])
 
     def test_indel_span_rejection_is_retained_in_candidate_audit(self):
         indels = self.directory / "score_indel"
@@ -226,8 +230,8 @@ class GenerationPartitionTests(unittest.TestCase):
                     self.prepare()
                     scores.assert_not_called()
                     population.assert_not_called()
-                assert_frame_equal(pl.read_parquet(self.outputs.allele_states), pl.DataFrame(schema=POPULATION_SCHEMA))
-                assert_frame_equal(pl.read_parquet(self.outputs.allele_scores), pl.DataFrame(schema=SCORE_SCHEMA))
+                assert_frame_equal(pl.read_parquet(self.outputs.allele_states), pl.DataFrame(schema={**POPULATION_SCHEMA, "variant_class": pl.String}))
+                assert_frame_equal(pl.read_parquet(self.outputs.allele_scores), pl.DataFrame(schema={**SCORE_SCHEMA, "variant_class": pl.String}))
                 assert_frame_equal(pl.read_parquet(self.outputs.allele_membership), pl.DataFrame(schema={
                     "testing_unit_id": pl.String, "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String,
                     "variant_class": pl.String,

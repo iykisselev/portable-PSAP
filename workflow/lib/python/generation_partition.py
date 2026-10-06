@@ -25,6 +25,8 @@ def prepare_generation_partition(
     partition_id: str,
 ) -> None:
     """Materialize canonical states, memberships, and scores for one partition."""
+    state_schema = {**POPULATION_SCHEMA, "variant_class": pl.String}
+    output_score_schema = {**SCORE_SCHEMA, "variant_class": pl.String}
     partition = partition_from_manifest(inputs.partitions, partition_id)
     units = pl.read_parquet(inputs.units)
     eligible_units = units.filter(pl.col("status") == "eligible").select("testing_unit_id").sort("testing_unit_id")
@@ -89,11 +91,14 @@ def prepare_generation_partition(
         how="vertical",
     )
     candidates = memberships.select(ALLELE_COLUMNS).unique(maintain_order=True)
+    candidate_classes = memberships.select(*ALLELE_COLUMNS, "variant_class").unique(
+        maintain_order=True
+    )
     if candidates.is_empty():
         # Keep the same artifact contract without opening either large resource.
-        write_parquet_atomic(pl.DataFrame(schema=POPULATION_SCHEMA), outputs.allele_states, params.compression)
+        write_parquet_atomic(pl.DataFrame(schema=state_schema), outputs.allele_states, params.compression)
         write_parquet_atomic(memberships, outputs.allele_membership, params.compression)
-        write_parquet_atomic(pl.DataFrame(schema=SCORE_SCHEMA), outputs.allele_scores, params.compression)
+        write_parquet_atomic(pl.DataFrame(schema=output_score_schema), outputs.allele_scores, params.compression)
         write_parquet_atomic(indel_rejections, outputs.candidate_audit, params.compression)
         return
     candidate_intervals = intersect_intervals([(start, end) for _, start, end in intervals], mask)
@@ -105,7 +110,9 @@ def prepare_generation_partition(
     matched_score_keys = candidates.join(scores.select(ALLELE_COLUMNS), on=ALLELE_COLUMNS, how="inner")
     if matched_score_keys.select(ALLELE_COLUMNS).is_duplicated().any():
         raise ValueError(f"Score resource has duplicate calibration alleles in {partition.identifier}")
-    scored = candidates.join(scores, on=ALLELE_COLUMNS, how="inner")
+    scored = candidates.join(scores, on=ALLELE_COLUMNS, how="inner").join(
+        candidate_classes, on=ALLELE_COLUMNS, how="inner"
+    )
     if scored.height != candidates.height:
         missing = candidates.join(scores.select(ALLELE_COLUMNS), on=ALLELE_COLUMNS, how="anti")
         examples = ", ".join(f"{row[0]}:{row[1]}:{row[2]}:{row[3]}" for row in missing.head(10).iter_rows())
@@ -122,9 +129,10 @@ def prepare_generation_partition(
             pl.when(pl.col("allele_state").is_null()).then(pl.lit("absent")).otherwise(pl.col("allele_state")).alias("allele_state"),
             pl.when(pl.col("state_reason").is_null()).then(pl.lit("not_present_in_population_panel")).otherwise(pl.col("state_reason")).alias("state_reason"),
         )
+        .join(candidate_classes, on=ALLELE_COLUMNS, how="inner")
         .select(
             *ALLELE_COLUMNS, "allele_state", "af", "af_overall", "af_female",
-            "af_male", "state_reason", "af_zero_imputed_tags",
+            "af_male", "state_reason", "af_zero_imputed_tags", "variant_class",
         )
     )
     invalid = states.filter(pl.col("allele_state") == "invalid")
