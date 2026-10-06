@@ -180,6 +180,23 @@ class GenerationPartitionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate allele states"):
             self.prepare()
 
+    def test_indel_candidate_is_added_with_span_overlap_membership(self):
+        indels = self.directory / "score_indel"
+        indels.write_text("1\t1\tA\tAT\t0\t21\n", encoding="utf-8")
+        self.inputs = GenerationPartitionInputs(**{
+            **vars(self.inputs), "score_indel": indels, "score_indel_index": None,
+        })
+        self.params = GenerationPartitionParameters(**{
+            **vars(self.params), "include_indels": True,
+            "indel_max_reference_length": 3, "indel_max_alternate_length": 3,
+        })
+        self.prepare()
+        memberships = pl.read_parquet(self.outputs.allele_membership)
+        indel = memberships.filter((pl.col("POS") == 1) & (pl.col("ALT") == "AT"))
+        self.assertEqual(indel.select("testing_unit_id", "variant_class").rows(), [("a", "indel")])
+        scores = pl.read_parquet(self.outputs.allele_scores)
+        self.assertEqual(scores.filter((pl.col("POS") == 1) & (pl.col("ALT") == "AT"))["score"].to_list(), [21.0])
+
     def test_empty_candidates_write_typed_outputs_without_resource_reads(self):
         for scenario in ("no_overlap", "all_n", "no_eligible_units"):
             with self.subTest(scenario=scenario):
@@ -195,6 +212,7 @@ class GenerationPartitionTests(unittest.TestCase):
                 assert_frame_equal(pl.read_parquet(self.outputs.allele_scores), pl.DataFrame(schema=SCORE_SCHEMA))
                 assert_frame_equal(pl.read_parquet(self.outputs.allele_membership), pl.DataFrame(schema={
                     "testing_unit_id": pl.String, "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String,
+                    "variant_class": pl.String,
                 }))
 
 

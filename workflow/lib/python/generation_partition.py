@@ -14,6 +14,7 @@ from generation_population import POPULATION_SCHEMA, population_rows
 from generation_prep import intersect_intervals
 from generation_reference import ReferenceReader, membership_rows
 from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
+from generation_indels import indel_candidate_memberships, indel_score_rows
 from io_contracts import write_parquet_atomic
 
 
@@ -42,9 +43,50 @@ def prepare_generation_partition(
     )
     reference = ReferenceReader(inputs.fasta, inputs.fasta_fai)
     try:
-        memberships = membership_rows(partition, mask, intervals, reference)
+        snv_memberships = membership_rows(partition, mask, intervals, reference).with_columns(
+            pl.lit("snv").alias("variant_class")
+        )
+        indel_scores = pl.DataFrame(schema=SCORE_SCHEMA)
+        indel_memberships = pl.DataFrame(schema=snv_memberships.schema)
+        if params.include_indels:
+            if inputs.score_indel is None:
+                raise ValueError("Indel generation requires an indel score resource")
+            halo_end = partition.end + params.indel_max_reference_length - 1
+            all_intervals = (
+                pl.read_parquet(inputs.unit_intervals)
+                .filter(
+                    (pl.col("CHROM") == partition.chromosome)
+                    & (pl.col("START") < halo_end)
+                    & (pl.col("END") > partition.start)
+                )
+                .join(eligible_units, on="testing_unit_id", how="inner")
+                .select("testing_unit_id", "START", "END")
+                .rows()
+            )
+            indel_mask = (
+                pl.read_parquet(inputs.mask)
+                .filter(
+                    (pl.col("CHROM") == partition.chromosome)
+                    & (pl.col("START") < halo_end)
+                    & (pl.col("END") > partition.start)
+                )
+                .select("START", "END")
+                .rows()
+            )
+            catalog = indel_score_rows(
+                inputs.score_indel, inputs.score_indel_index, partition.chromosome,
+                partition.start, partition.end, reference,
+                max_reference_length=params.indel_max_reference_length,
+                max_alternate_length=params.indel_max_alternate_length,
+            )
+            indel_memberships, _ = indel_candidate_memberships(catalog, indel_mask, all_intervals)
+            indel_scores = catalog.select(*ALLELE_COLUMNS, "score")
     finally:
         reference.close()
+    memberships = pl.concat(
+        [snv_memberships, indel_memberships.select(*snv_memberships.columns)],
+        how="vertical",
+    )
     candidates = memberships.select(ALLELE_COLUMNS).unique(maintain_order=True)
     if candidates.is_empty():
         # Keep the same artifact contract without opening either large resource.
@@ -57,6 +99,7 @@ def prepare_generation_partition(
         inputs.score_snv, inputs.score_snv_index, partition.chromosome, partition.start, partition.end,
         intervals=candidate_intervals,
     )
+    scores = pl.concat([scores, indel_scores], how="vertical")
     matched_score_keys = candidates.join(scores.select(ALLELE_COLUMNS), on=ALLELE_COLUMNS, how="inner")
     if matched_score_keys.select(ALLELE_COLUMNS).is_duplicated().any():
         raise ValueError(f"Score resource has duplicate calibration alleles in {partition.identifier}")
