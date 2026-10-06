@@ -394,7 +394,14 @@ def indel_mutation_assignments(
         raise ValueError("Indel states contain duplicate allele keys")
     if policy == "mutation_rate":
         if rates is None:
-            raise IndelCandidateError("Indel mutation-rate fallback requires a separate mutation-rate resource")
+            return states.select(
+                *allele_columns,
+                pl.when(pl.col("allele_state") == "absent").then(pl.lit(0.0)).otherwise(pl.lit(None)).alias("mu"),
+                pl.when(pl.col("allele_state") == "absent")
+                .then(pl.lit("absent_zero_no_indel_mutation_rate"))
+                .otherwise(pl.lit("observed_or_rejected"))
+                .alias("assignment_source"),
+            ).cast(INDEL_MUTATION_ASSIGNMENT_SCHEMA)
         missing_rates = sorted(set(INDEL_MUTATION_RATE_SCHEMA) - set(rates.columns))
         if missing_rates:
             raise ValueError("Indel mutation rates are missing columns: " + ", ".join(missing_rates))

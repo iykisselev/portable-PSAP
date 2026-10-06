@@ -50,17 +50,20 @@ def calculate_partition_statistics(
         )
     else:
         rates = mutation_rate_rows(inputs.mutation_rate, inputs.mutation_rate_index, partition.chromosome, partition.start, partition.end)
-        if params.x_mutation_rate_policy == "reject" and events.filter((pl.col("CHROM") == "X") & (pl.col("allele_state") == "absent")).height:
+        needs_snv_rate = (pl.col("allele_state") == "absent") & (pl.col("variant_class") != "indel")
+        if params.x_mutation_rate_policy == "reject" and events.filter((pl.col("CHROM") == "X") & needs_snv_rate).height:
             raise ValueError(
                 "mutation_rate fallback encountered absent chrX alleles, but generation_settings.x_chromosome.mutation_rate_policy is reject"
             )
         events = events.join(rates, on=ALLELE_COLUMNS, how="left")
-        missing_rates = events.filter((pl.col("allele_state") == "absent") & pl.col("mu").is_null())
+        missing_rates = events.filter(needs_snv_rate & pl.col("mu").is_null())
         if missing_rates.height:
             raise ValueError(f"Mutation-rate resource is missing {missing_rates.height} absent alleles in {partition.identifier}")
         events = events.with_columns(
-            pl.when(pl.col("allele_state") == "absent").then(pl.col("mu")).otherwise(female_af).alias("effective_af_standard"),
-            pl.when(pl.col("allele_state") == "absent").then(pl.col("mu")).otherwise(male_af).alias("effective_af_hem"),
+            pl.when((pl.col("allele_state") == "absent") & (pl.col("variant_class") == "indel")).then(pl.lit(0.0))
+            .when(pl.col("allele_state") == "absent").then(pl.col("mu")).otherwise(female_af).alias("effective_af_standard"),
+            pl.when((pl.col("allele_state") == "absent") & (pl.col("variant_class") == "indel")).then(pl.lit(0.0))
+            .when(pl.col("allele_state") == "absent").then(pl.col("mu")).otherwise(male_af).alias("effective_af_hem"),
         )
     role_events = {
         "het": events.with_columns(pl.col("effective_af_standard").alias("effective_af")),

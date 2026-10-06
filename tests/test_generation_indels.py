@@ -182,6 +182,9 @@ class GenerationIndelTests(unittest.TestCase):
         self.assertIsNone(by_position[2]["mu"])
         zero = indel_mutation_assignments(states, None, "zero")
         self.assertEqual(zero.filter(pl.col("POS") == 4)["mu"].to_list(), [0.0])
+        no_rate = indel_mutation_assignments(states, None, "mutation_rate")
+        no_rate_absent = no_rate.filter(pl.col("POS") == 4).row(0, named=True)
+        self.assertEqual((no_rate_absent["mu"], no_rate_absent["assignment_source"]), (0.0, "absent_zero_no_indel_mutation_rate"))
         with self.assertRaisesRegex(IndelCandidateError, "missing 1 absent"):
             indel_mutation_assignments(states, pl.DataFrame(schema=INDEL_MUTATION_RATE_SCHEMA), "mutation_rate")
 
