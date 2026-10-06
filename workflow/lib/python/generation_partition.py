@@ -14,7 +14,7 @@ from generation_population import POPULATION_SCHEMA, population_rows
 from generation_prep import intersect_intervals
 from generation_reference import ReferenceReader, membership_rows
 from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
-from generation_indels import indel_candidate_memberships, indel_score_rows
+from generation_indels import INDEL_REJECTION_SCHEMA, indel_candidate_memberships, indel_score_rows
 from io_contracts import write_parquet_atomic
 
 
@@ -48,6 +48,7 @@ def prepare_generation_partition(
         )
         indel_scores = pl.DataFrame(schema=SCORE_SCHEMA)
         indel_memberships = pl.DataFrame(schema=snv_memberships.schema)
+        indel_rejections = pl.DataFrame(schema=INDEL_REJECTION_SCHEMA)
         if params.include_indels:
             if inputs.score_indel is None:
                 raise ValueError("Indel generation requires an indel score resource")
@@ -79,7 +80,7 @@ def prepare_generation_partition(
                 max_reference_length=params.indel_max_reference_length,
                 max_alternate_length=params.indel_max_alternate_length,
             )
-            indel_memberships, _ = indel_candidate_memberships(catalog, indel_mask, all_intervals)
+            indel_memberships, indel_rejections = indel_candidate_memberships(catalog, indel_mask, all_intervals)
             indel_scores = catalog.select(*ALLELE_COLUMNS, "score")
     finally:
         reference.close()
@@ -93,6 +94,7 @@ def prepare_generation_partition(
         write_parquet_atomic(pl.DataFrame(schema=POPULATION_SCHEMA), outputs.allele_states, params.compression)
         write_parquet_atomic(memberships, outputs.allele_membership, params.compression)
         write_parquet_atomic(pl.DataFrame(schema=SCORE_SCHEMA), outputs.allele_scores, params.compression)
+        write_parquet_atomic(indel_rejections, outputs.candidate_audit, params.compression)
         return
     candidate_intervals = intersect_intervals([(start, end) for _, start, end in intervals], mask)
     scores = score_rows(
@@ -137,3 +139,4 @@ def prepare_generation_partition(
     write_parquet_atomic(states, outputs.allele_states, params.compression)
     write_parquet_atomic(memberships, outputs.allele_membership, params.compression)
     write_parquet_atomic(scored, outputs.allele_scores, params.compression)
+    write_parquet_atomic(indel_rejections, outputs.candidate_audit, params.compression)

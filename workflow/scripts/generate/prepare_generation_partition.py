@@ -42,6 +42,7 @@ def main() -> None:
             allele_states=str(snakemake.output.allele_states),
             allele_membership=str(snakemake.output.allele_membership),
             allele_scores=str(snakemake.output.allele_scores),
+            candidate_audit=str(snakemake.output.candidate_audit),
         ),
         GenerationPartitionParameters(
             af_tags=dict(snakemake.params.af_tags),

@@ -77,6 +77,7 @@ class GenerationPartitionOutputs:
     allele_states: PathLike
     allele_membership: PathLike
     allele_scores: PathLike
+    candidate_audit: PathLike
 
 
 @dataclass(frozen=True)

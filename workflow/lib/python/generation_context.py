@@ -121,6 +121,7 @@ class GenerationRuleContext:
             "allele_states": "allele_states.parquet",
             "allele_membership": "allele_membership.parquet",
             "allele_scores": "allele_scores.parquet",
+            "candidate_audit": "candidate_audit.parquet",
         }
         return str(self.partition_dir / f"{partition_id}.{suffixes[artifact_name]}")
 

@@ -90,7 +90,7 @@ def generation_statistics_artifacts(wildcards):
 def generation_outputs(wildcards):
     """Return recoverable outputs of one generation run after certification."""
     outputs = []
-    for artifact_name in ("allele_states", "allele_membership", "allele_scores"):
+    for artifact_name in ("allele_states", "allele_membership", "allele_scores", "candidate_audit"):
         outputs.extend(generation_partition_artifacts(wildcards, artifact_name))
     outputs.extend(generation_statistics_artifacts(wildcards))
     for artifact_name in ("lookup_het", "lookup_hom", "diagnostics"):

@@ -87,7 +87,8 @@ rule prepare_generation_partition:
     output:
         allele_states=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_states.parquet"),
         allele_membership=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_membership.parquet"),
-        allele_scores=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_scores.parquet")
+        allele_scores=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_scores.parquet"),
+        candidate_audit=str(GENERATION_CONTEXT.partition_dir / "{partition}.candidate_audit.parquet")
     params:
         af_tags=dict(GENERATION_CONTEXT.plan.af_source),
         x_af_policy=WORKFLOW_PLAN.generation_settings.x_af_policy,
