@@ -32,6 +32,8 @@ class GenerationScopeInputs:
     mutation_rate_index: PathLike | None
     score_indel: PathLike | None = None
     score_indel_index: PathLike | None = None
+    mutation_rate_indel: PathLike | None = None
+    mutation_rate_indel_index: PathLike | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,8 @@ class PartitionStatisticsInputs:
     allele_scores: PathLike
     mutation_rate: PathLike | None
     mutation_rate_index: PathLike | None
+    mutation_rate_indel: PathLike | None = None
+    mutation_rate_indel_index: PathLike | None = None
 
 
 @dataclass(frozen=True)

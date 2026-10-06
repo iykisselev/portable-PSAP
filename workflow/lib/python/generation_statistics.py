@@ -56,13 +56,24 @@ def calculate_partition_statistics(
                 "mutation_rate fallback encountered absent chrX alleles, but generation_settings.x_chromosome.mutation_rate_policy is reject"
             )
         events = events.join(rates, on=ALLELE_COLUMNS, how="left")
+        if inputs.mutation_rate_indel is not None:
+            indel_rates = mutation_rate_rows(
+                inputs.mutation_rate_indel,
+                inputs.mutation_rate_indel_index,
+                partition.chromosome,
+                partition.start,
+                partition.end,
+            ).rename({"mu": "mu_indel"})
+            events = events.join(indel_rates, on=ALLELE_COLUMNS, how="left")
+        else:
+            events = events.with_columns(pl.lit(None, dtype=pl.Float64).alias("mu_indel"))
         missing_rates = events.filter(needs_snv_rate & pl.col("mu").is_null())
         if missing_rates.height:
             raise ValueError(f"Mutation-rate resource is missing {missing_rates.height} absent alleles in {partition.identifier}")
         events = events.with_columns(
-            pl.when((pl.col("allele_state") == "absent") & (pl.col("variant_class") == "indel")).then(pl.lit(0.0))
+            pl.when((pl.col("allele_state") == "absent") & (pl.col("variant_class") == "indel")).then(pl.col("mu_indel").fill_null(0.0))
             .when(pl.col("allele_state") == "absent").then(pl.col("mu")).otherwise(female_af).alias("effective_af_standard"),
-            pl.when((pl.col("allele_state") == "absent") & (pl.col("variant_class") == "indel")).then(pl.lit(0.0))
+            pl.when((pl.col("allele_state") == "absent") & (pl.col("variant_class") == "indel")).then(pl.col("mu_indel").fill_null(0.0))
             .when(pl.col("allele_state") == "absent").then(pl.col("mu")).otherwise(male_af).alias("effective_af_hem"),
         )
     role_events = {

@@ -33,6 +33,8 @@ def main() -> None:
             allele_scores=str(snakemake.input.allele_scores),
             mutation_rate=(str(snakemake.input.mutation_rate[0]) if snakemake.input.mutation_rate else None),
             mutation_rate_index=(str(snakemake.input.mutation_rate_index[0]) if snakemake.input.mutation_rate_index else None),
+            mutation_rate_indel=(str(snakemake.input.mutation_rate_indel[0]) if snakemake.input.mutation_rate_indel else None),
+            mutation_rate_indel_index=(str(snakemake.input.mutation_rate_indel_index[0]) if snakemake.input.mutation_rate_indel_index else None),
         ),
         PartitionStatisticsOutputs(statistics=str(snakemake.output.statistics)),
         PartitionStatisticsParameters(

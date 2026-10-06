@@ -99,6 +99,14 @@ class GenerationRuleContext:
             return [self.plan.mutation_rate.index]
         return []
 
+    def indel_mutation_rate_data(self) -> list[str]:
+        return [self.plan.mutation_rate_indel.data] if self.plan.mutation_rate_indel else []
+
+    def indel_mutation_rate_index(self) -> list[str]:
+        if self.plan.mutation_rate_indel and self.plan.mutation_rate_indel.index:
+            return [self.plan.mutation_rate_indel.index]
+        return []
+
     def exclusion_data(self) -> list[str]:
         """Return exclusion dependencies in deterministic identifier order."""
         return [

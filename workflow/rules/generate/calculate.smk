@@ -10,7 +10,9 @@ rule calculate_partition_null_distribution:
         allele_membership=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_membership.parquet"),
         allele_scores=str(GENERATION_CONTEXT.partition_dir / "{partition}.allele_scores.parquet"),
         mutation_rate=lambda wc: generation_mutation_rate_data(),
-        mutation_rate_index=lambda wc: generation_mutation_rate_index()
+        mutation_rate_index=lambda wc: generation_mutation_rate_index(),
+        mutation_rate_indel=lambda wc: GENERATION_CONTEXT.indel_mutation_rate_data(),
+        mutation_rate_indel_index=lambda wc: GENERATION_CONTEXT.indel_mutation_rate_index()
     output:
         statistics=str(
             GENERATION_CONTEXT.statistics_dir / "{partition}.bucket-{bucket}.parquet"
