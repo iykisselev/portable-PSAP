@@ -46,6 +46,7 @@ def main() -> None:
             units=str(snakemake.input.units),
             masked_unit_intervals=str(snakemake.input.masked_unit_intervals),
             allele_states=tuple(_paths(snakemake.input.allele_states)),
+            candidate_audit=tuple(_paths(snakemake.input.candidate_audit)),
             effective_mask=str(snakemake.input.effective_mask),
             resource_identities=str(snakemake.input.resource_identities),
         ),

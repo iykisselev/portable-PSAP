@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from collections import defaultdict
+from itertools import chain
 import json
 import math
 from pathlib import Path
@@ -123,6 +124,14 @@ def rejected_rows(paths):
             yield chromosome, position, reference, alternate, reason
 
 
+def candidate_audit_rows(paths):
+    """Expose structural indel candidate rejections for the public audit."""
+    for chromosome, position, reference, alternate, reason in parquet_rows(
+        paths, ["CHROM", "POS", "REF", "ALT", "rejection_reason"]
+    ):
+        yield chromosome, position, reference, alternate, reason
+
+
 def zero_imputed_af_rows(paths):
     """Expose calibration alleles whose omitted population AF tag became zero."""
     for chromosome, position, reference, alternate, tags in parquet_rows(
@@ -158,7 +167,8 @@ def finalize_generated_bundle(
         outputs.calibration_regions, ["#CHROM", "START", "END", "source"], parquet_rows([inputs.effective_mask], ["CHROM", "START", "END", "mask_state"])
     )
     rejected_count, excluded_alleles = write_gzip_tsv_atomic(
-        outputs.excluded_alleles, ["#CHROM", "POS", "REF", "ALT", "exclusion_reason"], rejected_rows(inputs.allele_states)
+        outputs.excluded_alleles, ["#CHROM", "POS", "REF", "ALT", "exclusion_reason"],
+        chain(rejected_rows(inputs.allele_states), candidate_audit_rows(inputs.candidate_audit))
     )
     zero_imputation_count, population_af_zero_imputations = write_gzip_tsv_atomic(
         outputs.population_af_zero_imputations,

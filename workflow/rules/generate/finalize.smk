@@ -15,6 +15,7 @@ rule finalize_null_distribution_bundle:
         units=lambda wc: generation_scope_artifact(wc, "units"),
         masked_unit_intervals=lambda wc: generation_scope_artifact(wc, "masked_unit_intervals"),
         allele_states=lambda wc: generation_partition_artifacts(wc, "allele_states"),
+        candidate_audit=lambda wc: generation_partition_artifacts(wc, "candidate_audit"),
         effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
         resource_identities=lambda wc: generation_scope_artifact(wc, "resource_identities")
     output:

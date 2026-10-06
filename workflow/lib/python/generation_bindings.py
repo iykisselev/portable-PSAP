@@ -151,6 +151,7 @@ class BundleFinalizationInputs:
     units: PathLike
     masked_unit_intervals: PathLike
     allele_states: tuple[PathLike, ...]
+    candidate_audit: tuple[PathLike, ...]
     effective_mask: PathLike
     resource_identities: PathLike
 
