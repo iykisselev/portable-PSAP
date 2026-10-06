@@ -44,7 +44,5 @@ def validate_indel_bundle_metadata(metadata: Mapping[str, object]) -> None:
             )
     if not {"score_snv", "score_indel"}.issubset(resources):
         raise IndelBundleContractError("generated_bundle_v3 lacks SNV or indel score identities")
-    if assumptions.get("unobserved_policy") == "mutation_rate" and "mutation_rate_indel" not in resources:
-        raise IndelBundleContractError("generated_bundle_v3 lacks the indel mutation-rate identity")
     if "candidate_audit" not in components:
         raise IndelBundleContractError("generated_bundle_v3 lacks its candidate audit component")

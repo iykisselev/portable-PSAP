@@ -33,10 +33,20 @@ def calculate_partition_statistics(
     events = (
         memberships.join(selected_units, on="testing_unit_id", how="inner")
         .with_columns(pl.lit(bucket.ordinal).alias("unit_bucket"))
-        .join(scores, on=ALLELE_COLUMNS, how="inner")
-        .join(states, on=ALLELE_COLUMNS, how="inner")
+        .join(scores, on=ALLELE_COLUMNS, how="inner", suffix="_score")
+        .join(states, on=ALLELE_COLUMNS, how="inner", suffix="_state")
         .filter(pl.col("allele_state") != "rejected")
     )
+    class_mismatch = events.filter(
+        (pl.col("variant_class") != pl.col("variant_class_score"))
+        | (pl.col("variant_class") != pl.col("variant_class_state"))
+    )
+    if class_mismatch.height:
+        raise ValueError(
+            "Allele membership, score, and population state disagree on variant class "
+            f"in {partition.identifier}"
+        )
+    events = events.drop("variant_class_score", "variant_class_state")
     if params.x_af_policy not in {"sex_specific", "overall_proxy"}:
         raise ValueError(f"Unsupported X chromosome AF policy {params.x_af_policy!r}")
     female_af = pl.when(pl.col("CHROM") == "X").then(

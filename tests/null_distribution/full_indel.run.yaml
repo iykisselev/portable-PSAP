@@ -1,0 +1,45 @@
+outdir: /tmp/portable-psap-full-indel-fixture
+
+workflow:
+  mode: full
+
+run:
+  apply_prefix: indel-fixture
+  generation_prefix: indel-fixture
+
+model:
+  include_indels: true
+  hemizygote: true
+
+generation_settings:
+  variant_classes: [snv, indel]
+
+inputs:
+  vcf: {data: tests/smoke/data/cohort.vcf, index: null}
+  ped: null
+  samples: tests/smoke/data/samples.tsv
+
+bindings:
+  reference:
+    fasta:
+      data: tests/smoke/data/reference.fa
+      fai: tests/smoke/data/reference.fa.fai
+      gzi: null
+    exclusion: {data: tests/null_distribution/exclusion.bed, index: null}
+    testing_unit_bed: {data: tests/null_distribution/testing_units.bed, index: null}
+    exclusions:
+      gnomad-r2-notpass: {data: tests/smoke/data/exclude_full_span.bed, index: null}
+      par-regions: {data: tests/null_distribution/par_regions.bed, index: null}
+    cadd:
+      snv: {data: tests/null_distribution/generation_scores.tsv, index: null}
+      indel: {data: tests/smoke/data/cadd_indel.tsv, index: null}
+
+generation:
+  execution:
+    allow_unindexed_fixture_inputs: true  # Small, uncompressed test resources only.
+  unobserved_policy: zero
+  population_vcf: {data: tests/null_distribution/population_af.vcf, index: null}
+  af_source:
+    overall: AF_CUSTOM
+    female: AF_FEMALE
+    male: AF_MALE

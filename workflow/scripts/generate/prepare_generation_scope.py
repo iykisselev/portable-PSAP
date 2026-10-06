@@ -61,6 +61,14 @@ def main() -> None:
                 str(snakemake.input.score_indel_index[0])
                 if snakemake.input.score_indel_index else None
             ),
+            mutation_rate_indel=(
+                str(snakemake.input.mutation_rate_indel[0])
+                if snakemake.input.mutation_rate_indel else None
+            ),
+            mutation_rate_indel_index=(
+                str(snakemake.input.mutation_rate_indel_index[0])
+                if snakemake.input.mutation_rate_indel_index else None
+            ),
         ),
         GenerationScopeOutputs(
             partitions=str(snakemake.output.partitions),

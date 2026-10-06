@@ -5,12 +5,15 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 import sys
+from tempfile import TemporaryDirectory
+
+import polars as pl
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
-from bundle_finalization import classify_units  # noqa: E402
+from bundle_finalization import classify_units, variant_class_counts  # noqa: E402
 
 class BundleFinalizationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -85,6 +88,32 @@ class BundleFinalizationTests(unittest.TestCase):
         eligible, excluded = classify_units(units, diagnostics, hemizygote=True)
         self.assertEqual(eligible, ["AUTO"])
         self.assertEqual(excluded, [("X_UNIT", "zero_event_mass_hem_chrX")])
+
+    def test_variant_class_counts_include_structural_indel_rejections(self) -> None:
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            states = directory / "states.parquet"
+            audit = directory / "audit.parquet"
+            pl.DataFrame(
+                {
+                    "variant_class": ["snv", "snv", "snv", "indel", "indel"],
+                    "allele_state": ["observed", "absent", "rejected", "observed", "rejected"],
+                }
+            ).write_parquet(states)
+            pl.DataFrame(
+                {
+                    "CHROM": ["1"], "POS": [3], "REF": ["AA"], "ALT": ["A"],
+                    "rejection_reason": ["crosses_mask_boundary"],
+                }
+            ).write_parquet(audit)
+
+            self.assertEqual(
+                {
+                    "snv": {"retained": 2, "rejected": 1, "observed": 1, "absent": 1},
+                    "indel": {"retained": 1, "rejected": 2, "observed": 1, "absent": 0},
+                },
+                variant_class_counts([states], [audit]),
+            )
 
 
 if __name__ == "__main__":

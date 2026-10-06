@@ -71,11 +71,10 @@ class IndelBundleContractTests(unittest.TestCase):
         validate_indel_bundle_metadata(document)
         self.assertTrue(is_supported_contract("generated_bundle_v3"))
 
-    def test_v3_mutation_fallback_requires_an_indel_rate_identity(self) -> None:
+    def test_v3_mutation_fallback_allows_zero_for_unobserved_indels_without_a_rate(self) -> None:
         document = metadata()
         document["model_assumptions"]["unobserved_policy"] = "mutation_rate"  # type: ignore[index]
-        with self.assertRaisesRegex(IndelBundleContractError, "indel mutation-rate identity"):
-            validate_indel_bundle_metadata(document)
+        validate_indel_bundle_metadata(document)
 
     def test_v3_refuses_a_partial_indel_universe(self) -> None:
         document = deepcopy(metadata())

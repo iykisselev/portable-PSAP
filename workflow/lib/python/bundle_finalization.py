@@ -21,6 +21,8 @@ from bundle_contract import (
     CURRENT_GENERATED_BUNDLE_CONTRACT,
     CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION,
     FIXED_WIDTH_BINNING_ALGORITHM,
+    INDEL_GENERATED_BUNDLE_CONTRACT,
+    INDEL_GENERATED_BUNDLE_SCHEMA_VERSION,
     VALIDATION_ARTIFACT_FILENAMES,
 )
 from io_contracts import write_gzip_tsv_atomic, write_json_atomic
@@ -132,6 +134,27 @@ def candidate_audit_rows(paths):
         yield chromosome, position, reference, alternate, reason
 
 
+def variant_class_counts(state_paths, audit_paths) -> dict[str, dict[str, int]]:
+    """Count retained, population-rejected, and structural candidates by class."""
+    counts = {
+        variant_class: {name: 0 for name in ("retained", "rejected", "observed", "absent")}
+        for variant_class in ("snv", "indel")
+    }
+    for variant_class, state in parquet_rows(state_paths, ["variant_class", "allele_state"]):
+        if variant_class not in counts:
+            raise ValueError(f"Unsupported variant class in allele states: {variant_class!r}")
+        if state in {"observed", "absent"}:
+            counts[variant_class]["retained"] += 1
+            counts[variant_class][state] += 1
+        elif state == "rejected":
+            counts[variant_class]["rejected"] += 1
+        else:
+            raise ValueError(f"Unsupported allele state in bundle finalization: {state!r}")
+    for _ in candidate_audit_rows(audit_paths):
+        counts["indel"]["rejected"] += 1
+    return counts
+
+
 def zero_imputed_af_rows(paths):
     """Expose calibration alleles whose omitted population AF tag became zero."""
     for chromosome, position, reference, alternate, tags in parquet_rows(
@@ -147,6 +170,9 @@ def finalize_generated_bundle(
     params: BundleFinalizationParameters,
 ) -> None:
     """Build a certified public bundle from bounded generation artifacts."""
+    combined_indel_bundle = params.variant_classes == ("snv", "indel")
+    if params.variant_classes not in {("snv",), ("snv", "indel")}:
+        raise ValueError(f"Unsupported generated variant classes: {params.variant_classes!r}")
     units = pl.read_parquet(inputs.units).to_dicts()
     eligible, excluded = classify_units(units, list(diagnostics_rows(inputs.diagnostics)), hemizygote=params.hemizygote)
     eligible_set = set(eligible)
@@ -195,32 +221,54 @@ def finalize_generated_bundle(
     if params.hemizygote:
         assert lookup_hem is not None
         components["lookup_hem_chrX"] = lookup_hem
+    metadata = {
+        "schema_version": (
+            INDEL_GENERATED_BUNDLE_SCHEMA_VERSION
+            if combined_indel_bundle
+            else CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION
+        ),
+        "contract": (
+            INDEL_GENERATED_BUNDLE_CONTRACT
+            if combined_indel_bundle
+            else CURRENT_GENERATED_BUNDLE_CONTRACT
+        ),
+        "assembly": params.assembly,
+        "contig_convention": CANONICAL_CONTIG_CONVENTION,
+        "testing_unit_type": params.testing_unit_type,
+        "af_info_tags": dict(params.af_tags),
+        "binning": {"algorithm": FIXED_WIDTH_BINNING_ALGORITHM, "score_max": params.score_max, "bin_width": params.bin_width, "bin_count": params.bin_count, "maximum_in_final_bin": True},
+        "model_assumptions": {
+            "minimum_retained_fraction": params.minimum_retained_fraction,
+            "retention_denominator": "supported_non_PAR_unit_bases_before_interval_exclusions",
+            "roles": ["het", "hom"] + (["hem_chrX"] if params.hemizygote else []),
+            "variant_classes": list(params.variant_classes), "unobserved_policy": params.policy,
+            "mutation_conversion": params.conversion if params.policy == "mutation_rate" else None,
+            "allele_events_independent": True, "par_policy": "excluded_before_event_assignment",
+            "hemizygote_role": "hem_chrX" if params.hemizygote else None,
+            "x_chromosome": {"af_policy": params.x_af_policy, "mutation_rate_policy": params.x_mutation_rate_policy, "hemizygote_scope": "non_PAR_chrX_only"},
+        },
+        "counts": {
+            "eligible_units": len(eligible), "excluded_units": len(excluded),
+            "excluded_alleles": rejected_count, "calibration_intervals": calibration_count,
+            "population_af_zero_imputations": zero_imputation_count,
+        },
+        "resource_identities": resources, "components": components,
+        "validation_artifacts": dict(VALIDATION_ARTIFACT_FILENAMES),
+    }
+    if combined_indel_bundle:
+        metadata["indel_universe"] = {
+            "candidate_universe": params.indel_candidate_universe,
+            "normalization": "vcf_minimal_left_aligned_v1",
+            "reference_span": "zero_based_half_open_ref_span_v1",
+            "membership": params.indel_membership,
+            "mask_policy": params.indel_mask_policy,
+            "max_reference_length": params.indel_max_reference_length,
+            "max_alternate_length": params.indel_max_alternate_length,
+        }
+        metadata["variant_class_counts"] = variant_class_counts(
+            inputs.allele_states, inputs.candidate_audit
+        )
     write_json_atomic(
         outputs.metadata,
-        {
-            "schema_version": CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION,
-            "contract": CURRENT_GENERATED_BUNDLE_CONTRACT,
-            "assembly": params.assembly,
-            "contig_convention": CANONICAL_CONTIG_CONVENTION,
-            "testing_unit_type": params.testing_unit_type,
-            "af_info_tags": dict(params.af_tags),
-            "binning": {"algorithm": FIXED_WIDTH_BINNING_ALGORITHM, "score_max": params.score_max, "bin_width": params.bin_width, "bin_count": params.bin_count, "maximum_in_final_bin": True},
-            "model_assumptions": {
-                "minimum_retained_fraction": params.minimum_retained_fraction,
-                "retention_denominator": "supported_non_PAR_unit_bases_before_interval_exclusions",
-                "roles": ["het", "hom"] + (["hem_chrX"] if params.hemizygote else []),
-                "variant_classes": list(params.variant_classes), "unobserved_policy": params.policy,
-                "mutation_conversion": params.conversion if params.policy == "mutation_rate" else None,
-                "allele_events_independent": True, "par_policy": "excluded_before_event_assignment",
-                "hemizygote_role": "hem_chrX" if params.hemizygote else None,
-                "x_chromosome": {"af_policy": params.x_af_policy, "mutation_rate_policy": params.x_mutation_rate_policy, "hemizygote_scope": "non_PAR_chrX_only"},
-            },
-            "counts": {
-                "eligible_units": len(eligible), "excluded_units": len(excluded),
-                "excluded_alleles": rejected_count, "calibration_intervals": calibration_count,
-                "population_af_zero_imputations": zero_imputation_count,
-            },
-            "resource_identities": resources, "components": components,
-            "validation_artifacts": dict(VALIDATION_ARTIFACT_FILENAMES),
-        },
+        metadata,
     )

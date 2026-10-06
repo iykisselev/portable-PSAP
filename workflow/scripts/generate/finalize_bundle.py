@@ -77,6 +77,11 @@ def main() -> None:
             hemizygote=snakemake.params.hemizygote,
             variant_classes=tuple(snakemake.params.variant_classes),
             resource_ids=dict(snakemake.params.resource_ids),
+            indel_candidate_universe=str(snakemake.params.indel_candidate_universe),
+            indel_membership=str(snakemake.params.indel_membership),
+            indel_mask_policy=str(snakemake.params.indel_mask_policy),
+            indel_max_reference_length=int(snakemake.params.indel_max_reference_length),
+            indel_max_alternate_length=int(snakemake.params.indel_max_alternate_length),
         ),
     )
 

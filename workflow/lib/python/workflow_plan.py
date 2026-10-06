@@ -20,6 +20,7 @@ from config_validation import ConfigurationValidationError, validate_configurati
 from bundle_contract import (
     BUNDLE_COMPONENT_FILENAMES,
     CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
+    INDEL_GENERATED_BUNDLE_CONTRACT,
 )
 
 
@@ -488,7 +489,11 @@ def _lookup_source(
         tables=tables,
         score_max=model.score_max,
         bin_width=settings.score_bin_width
-        if contract in {"generated_bundle_v1", GENERATED_BUNDLE_CONTRACT}
+        if contract in {
+            "generated_bundle_v1",
+            GENERATED_BUNDLE_CONTRACT,
+            INDEL_GENERATED_BUNDLE_CONTRACT,
+        }
         else None,
         metadata=metadata,
         validation=validation,
@@ -505,6 +510,7 @@ def _generation_plan(
     *,
     output_root: Path,
     mode: str,
+    include_indels: bool,
     configured_reference: ReferenceBindings | None,
     reference_metadata: ReferenceMetadata,
 ) -> GenerationPlan:
@@ -586,6 +592,11 @@ def _generation_plan(
         if generation.get("mutation_rate_indel") is not None
         else None
     )
+    if include_indels and resources.cadd_indel is None:
+        key = "bindings.reference.cadd.indel" if mode == "full" else "generation.score_indel"
+        raise WorkflowPlanError(f"Indel generation requires {key}")
+    if include_indels and reference_metadata.cadd_indel_id is None:
+        raise WorkflowPlanError("Indel generation requires reference.cadd.indel.id")
     allow_unindexed_fixtures = execution.get("allow_unindexed_fixture_inputs", False)
     if not isinstance(allow_unindexed_fixtures, bool):
         raise WorkflowPlanError("generation.execution.allow_unindexed_fixture_inputs must be a boolean")
@@ -593,8 +604,18 @@ def _generation_plan(
         ("generation.population_vcf", population_vcf),
         ("bindings.reference.cadd.snv" if mode == "full" else "generation.score_snv", resources.cadd_snv),
     ]
+    if include_indels:
+        assert resources.cadd_indel is not None
+        partition_resources.append(
+            (
+                "bindings.reference.cadd.indel" if mode == "full" else "generation.score_indel",
+                resources.cadd_indel,
+            )
+        )
     if mutation_rate is not None:
         partition_resources.append(("generation.mutation_rate", mutation_rate))
+    if mutation_rate_indel is not None:
+        partition_resources.append(("generation.mutation_rate_indel", mutation_rate_indel))
     for key, resource in partition_resources:
         try:
             check_generation_index_binding(
@@ -645,7 +666,11 @@ def _generated_lookup_source(
         tables["hem_chrX"] = bundle_paths["lookup_hem"]
     return LookupSource(
         source_type="bundle",
-        contract=GENERATED_BUNDLE_CONTRACT,
+        contract=(
+            INDEL_GENERATED_BUNDLE_CONTRACT
+            if model.include_indels
+            else GENERATED_BUNDLE_CONTRACT
+        ),
         tables=_frozen_mapping(tables),
         score_max=model.score_max,
         bin_width=settings.score_bin_width,
@@ -799,6 +824,7 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
             normalized,
             output_root=output_root,
             mode=mode,
+            include_indels=model.include_indels,
             configured_reference=configured_reference,
             reference_metadata=reference_metadata,
         )

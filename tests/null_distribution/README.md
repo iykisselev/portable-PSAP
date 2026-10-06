@@ -12,7 +12,10 @@ are deliberately small enough to inspect and calculate by hand.
 - `generation_scores.tsv` covers every possible SNV in the effective
   calibration mask. Removing any required row is a hard preparation failure.
 
-The workflow produces `generated_bundle_v2`, which uses the fixed-width
+SNV-only generation produces `generated_bundle_v2`, which uses the fixed-width
 decimal-safe generated grid, certified X-policy metadata and an optional
-`lookup_hem_chrX.tsv.gz` component. Its bin mapping is deliberately distinct
-from the existing `external_legacy_v0` mapping.
+`lookup_hem_chrX.tsv.gz` component. Combined SNV/indel generation produces
+`generated_bundle_v3`, adding score identities for both classes, the indel
+candidate-universe contract, class-specific candidate counts, and a certified
+candidate audit. Its bin mapping is deliberately distinct from the existing
+`external_legacy_v0` mapping.

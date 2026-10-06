@@ -92,6 +92,7 @@ def prepare_generation_scope(
         (inputs.score_snv, inputs.score_snv_index),
         (inputs.mutation_rate, inputs.mutation_rate_index),
         (inputs.score_indel if params.include_indels else None, inputs.score_indel_index),
+        (inputs.mutation_rate_indel, inputs.mutation_rate_indel_index),
     ):
         if path is not None and index is None:
             check_unindexed_fixture(path)
@@ -286,6 +287,8 @@ def prepare_generation_scope(
     input_resource_paths.update(inputs.exclusions)
     if inputs.mutation_rate:
         input_resource_paths["mutation_rate"] = inputs.mutation_rate
+    if inputs.mutation_rate_indel:
+        input_resource_paths["mutation_rate_indel"] = inputs.mutation_rate_indel
     if params.include_indels and inputs.score_indel:
         input_resource_paths["score_indel"] = inputs.score_indel
     write_json_atomic(

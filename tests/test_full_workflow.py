@@ -21,6 +21,7 @@ from workflow_test_utils import (
 
 BASELINE_PATH = ROOT / "tests" / "workflow_baseline.json"
 FULL_MANIFEST = "tests/null_distribution/full.run.yaml"
+FULL_INDEL_MANIFEST = "tests/null_distribution/full_indel.run.yaml"
 
 
 @unittest.skipUnless(SNAKEMAKE, "Snakemake is required for workflow E2E tests")
@@ -126,6 +127,21 @@ class FullWorkflowFixtureTests(unittest.TestCase):
             self.assertEqual(
                 self.baseline["resume_dry_run_jobs"], planned_job_count(resumed)
             )
+
+    def test_full_indel_fixture_consumes_the_generated_v3_bundle(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="portable-psap-full-indel-workflow-") as temporary:
+            outdir = Path(temporary) / "output"
+            result = run_workflow(FULL_INDEL_MANIFEST, outdir)
+            output = command_output(result)
+            self.assertEqual(0, result.returncode, output[-6000:])
+
+            bundle = outdir / "generate" / "indel-fixture" / "bundle"
+            model = outdir / "apply" / "indel-fixture" / "validation" / "model.json"
+            metadata = json.loads((bundle / "metadata.json").read_text(encoding="utf-8"))
+            model_validation = json.loads(model.read_text(encoding="utf-8"))
+            self.assertEqual("generated_bundle_v3", metadata["contract"])
+            self.assertEqual("generated_bundle_v3", model_validation["summary"]["lookup_contract"])
+            self.assertTrue((bundle / "validation.ok").is_file())
 
 
 if __name__ == "__main__":

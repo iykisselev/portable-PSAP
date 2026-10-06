@@ -53,14 +53,21 @@ rule finalize_null_distribution_bundle:
         x_mutation_rate_policy=WORKFLOW_PLAN.generation_settings.x_mutation_rate_policy,
         hemizygote=WORKFLOW_PLAN.model.hemizygote,
         variant_classes=list(WORKFLOW_PLAN.generation_settings.variant_classes),
+        indel_candidate_universe=WORKFLOW_PLAN.generation_settings.indel_candidate_universe,
+        indel_membership=WORKFLOW_PLAN.generation_settings.indel_membership,
+        indel_mask_policy=WORKFLOW_PLAN.generation_settings.indel_mask_policy,
+        indel_max_reference_length=WORKFLOW_PLAN.generation_settings.indel_max_reference_length,
+        indel_max_alternate_length=WORKFLOW_PLAN.generation_settings.indel_max_alternate_length,
         resource_ids={
             "fasta": WORKFLOW_PLAN.reference.fasta_id,
             "exclusion": WORKFLOW_PLAN.reference.exclusion_id,
             "testing_units": WORKFLOW_PLAN.reference.testing_unit_id,
             "score_snv": WORKFLOW_PLAN.reference.cadd_snv_id,
+            "score_indel": WORKFLOW_PLAN.reference.cadd_indel_id or "score_indel",
             "population_vcf": f"population_vcf:{GENERATION_CONTEXT.plan.af_source['overall']}",
             "par_regions": "par_regions",
             "mutation_rate": "mutation_rate",
+            "mutation_rate_indel": "mutation_rate_indel",
         }
     threads: 1
     resources:

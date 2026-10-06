@@ -447,10 +447,12 @@ lookup_source:
 
 A certified bundle uses `type: bundle` and supplies its tables, metadata,
 validation report, marker, eligible units, calibration mask, excluded alleles,
-and excluded units. Contracts `generated_bundle_v1` and `generated_bundle_v2`
-are readable, although this version writes only `generated_bundle_v2`. A v1
-bundle cannot be silently upgraded to v2 and should be regenerated when v2
-semantics are required.
+and excluded units. Contracts `generated_bundle_v1`, `generated_bundle_v2`,
+and `generated_bundle_v3` are readable. SNV-only generation writes v2, while
+combined SNV/indel generation writes v3 with the indel candidate-universe,
+class-specific counts, score identities, and candidate audit. A bundle cannot
+be silently upgraded across contract versions and should be regenerated when
+the newer semantics are required.
 
 ### Apply stages
 

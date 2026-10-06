@@ -40,7 +40,7 @@ report:
 # remain in the null-distribution contract and are not selected here.
 generation_settings:
   minimum_retained_fraction: 0.5  # retained fraction of supported, non-PAR unit bases after all interval exclusions
-  variant_classes: [snv]  # current generation universe; indel execution remains disabled until its staged implementation is complete
+  variant_classes: [snv]  # generated universe; use [snv, indel] with an indel score binding for combined null generation
   indels:
     candidate_universe: score_resource  # configured CADD indel resource will define the finite candidate catalog
     membership: reference_span_overlap  # test-unit assignment will use the complete REF span

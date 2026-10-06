@@ -21,6 +21,7 @@ from workflow_plan import (  # noqa: E402
     build_workflow_plan,
     normalize_run_config,
 )
+from bundle_contract import INDEL_GENERATED_BUNDLE_CONTRACT  # noqa: E402
 
 
 def load_yaml(path: Path) -> dict:
@@ -144,6 +145,32 @@ class WorkflowPlanTests(unittest.TestCase):
         manifest["generation_settings"]["variant_classes"] = ["snv", "indel"]
         with self.assertRaisesRegex(WorkflowPlanError, "variant_classes must be"):
             build_workflow_plan(manifest)
+
+    def test_generate_plan_activates_the_combined_indel_contract(self) -> None:
+        manifest = self.manifest("tests/null_distribution/generate.run.yaml")
+        manifest["model"]["include_indels"] = True
+        manifest["generation_settings"]["variant_classes"] = ["snv", "indel"]
+        manifest["generation"]["score_indel"] = {
+            "data": "tests/smoke/data/cadd_indel.tsv",
+            "index": None,
+        }
+        plan = build_workflow_plan(manifest)
+
+        assert plan.generation is not None
+        self.assertEqual("tests/smoke/data/cadd_indel.tsv", plan.generation.score_indel.data)
+
+    def test_full_plan_uses_v3_lookup_contract_for_combined_generation(self) -> None:
+        manifest = self.manifest("tests/null_distribution/full.run.yaml")
+        manifest["model"]["include_indels"] = True
+        manifest["generation_settings"]["variant_classes"] = ["snv", "indel"]
+        manifest["bindings"]["reference"]["cadd"]["indel"] = {
+            "data": "tests/smoke/data/cadd_indel.tsv",
+            "index": None,
+        }
+        plan = build_workflow_plan(manifest)
+
+        assert plan.apply is not None
+        self.assertEqual(INDEL_GENERATED_BUNDLE_CONTRACT, plan.apply.lookup_source.contract)
 
     def test_mutation_rate_policy_resolves_its_declared_binding(self) -> None:
         plan = build_workflow_plan(

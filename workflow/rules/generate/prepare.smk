@@ -18,16 +18,6 @@ checkpoint prepare_generation_scope:
             if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
             else []
         ),
-        score_indel=(
-            [GENERATION_CONTEXT.plan.score_indel.data]
-            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
-            else []
-        ),
-        score_indel_index=(
-            generation_index(GENERATION_CONTEXT.plan.score_indel)
-            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
-            else []
-        ),
         exclusion=(
             [GENERATION_CONTEXT.plan.exclusion.data]
             if GENERATION_CONTEXT.plan.exclusion.data
@@ -39,7 +29,9 @@ checkpoint prepare_generation_scope:
         fasta=GENERATION_CONTEXT.plan.fasta.data,
         fasta_fai=GENERATION_CONTEXT.plan.fasta.fai,
         mutation_rate=lambda wc: generation_mutation_rate_data(),
-        mutation_rate_index=lambda wc: generation_mutation_rate_index()
+        mutation_rate_index=lambda wc: generation_mutation_rate_index(),
+        mutation_rate_indel=lambda wc: GENERATION_CONTEXT.indel_mutation_rate_data(),
+        mutation_rate_indel_index=lambda wc: GENERATION_CONTEXT.indel_mutation_rate_index()
     output:
         partitions=GENERATION_CONTEXT.scope_paths["partitions"],
         buckets=GENERATION_CONTEXT.scope_paths["buckets"],
@@ -82,6 +74,16 @@ rule prepare_generation_partition:
         population_vcf_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.population_vcf),
         score_snv=GENERATION_CONTEXT.plan.score_snv.data,
         score_snv_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.score_snv),
+        score_indel=(
+            [GENERATION_CONTEXT.plan.score_indel.data]
+            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
+            else []
+        ),
+        score_indel_index=(
+            generation_index(GENERATION_CONTEXT.plan.score_indel)
+            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
+            else []
+        ),
         fasta=GENERATION_CONTEXT.plan.fasta.data,
         fasta_fai=GENERATION_CONTEXT.plan.fasta.fai
     output:

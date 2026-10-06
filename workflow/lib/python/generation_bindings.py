@@ -186,6 +186,11 @@ class BundleFinalizationParameters:
     hemizygote: bool
     variant_classes: tuple[str, ...]
     resource_ids: Mapping[str, str]
+    indel_candidate_universe: str = "score_resource"
+    indel_membership: str = "reference_span_overlap"
+    indel_mask_policy: str = "reference_span_contained"
+    indel_max_reference_length: int = 1
+    indel_max_alternate_length: int = 1
 
 
 @dataclass(frozen=True)

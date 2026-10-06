@@ -280,6 +280,12 @@ $defs:
   generate_mode:
     allOf:
       - {$ref: "#/$defs/generate_policy"}
+      - if:
+          properties: {model: {properties: {include_indels: {const: true}}, required: [include_indels]}}
+          required: [model]
+        then:
+          properties:
+            generation: {required: [score_indel]}
     type: object
     required: [generation]
     properties:
@@ -287,21 +293,25 @@ $defs:
       inputs: false
       bindings: false
       run: {required: [generation_prefix]}
-      model:
-        properties:
-          include_indels: {const: false}
       generation: {$ref: "#/$defs/standalone_generation_binding"}
   full_mode:
     allOf:
       - {$ref: "#/$defs/generate_policy"}
+      - if:
+          properties: {model: {properties: {include_indels: {const: true}}, required: [include_indels]}}
+          required: [model]
+        then:
+          properties:
+            bindings:
+              properties:
+                reference:
+                  properties:
+                    cadd: {required: [indel]}
     type: object
     required: [inputs, bindings, generation]
     properties:
       workflow: {properties: {mode: {const: full}}, required: [mode]}
       run: {required: [apply_prefix, generation_prefix]}
-      model:
-        properties:
-          include_indels: {const: false}
       bindings:
         properties:
           reference: {$ref: "#/$defs/full_reference_binding"}
