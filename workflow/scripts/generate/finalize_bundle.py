@@ -57,6 +57,7 @@ def main() -> None:
             eligible_bed=str(snakemake.output.eligible_bed),
             calibration_regions=str(snakemake.output.calibration_regions),
             excluded_alleles=str(snakemake.output.excluded_alleles),
+            candidate_audit=str(snakemake.output.candidate_audit),
             population_af_zero_imputations=str(snakemake.output.population_af_zero_imputations),
             excluded_units=str(snakemake.output.excluded_units),
             metadata=str(snakemake.output.metadata),

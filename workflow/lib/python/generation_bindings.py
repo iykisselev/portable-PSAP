@@ -164,6 +164,7 @@ class BundleFinalizationOutputs:
     eligible_bed: PathLike
     calibration_regions: PathLike
     excluded_alleles: PathLike
+    candidate_audit: PathLike
     population_af_zero_imputations: PathLike
     excluded_units: PathLike
     metadata: PathLike
@@ -195,6 +196,7 @@ class BundleValidationInputs:
     eligible_bed: PathLike
     calibration_regions: PathLike
     excluded_alleles: PathLike
+    candidate_audit: PathLike
     population_af_zero_imputations: PathLike
     excluded_units: PathLike
     metadata: PathLike

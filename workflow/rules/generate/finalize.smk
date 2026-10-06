@@ -33,6 +33,7 @@ rule finalize_null_distribution_bundle:
         excluded_alleles=ensure(
             GENERATION_CONTEXT.bundle_paths["excluded_alleles"], non_empty=True
         ),
+        candidate_audit=ensure(GENERATION_CONTEXT.bundle_paths["candidate_audit"], non_empty=True),
         population_af_zero_imputations=ensure(
             GENERATION_CONTEXT.bundle_paths["population_af_zero_imputations"], non_empty=True
         ),
@@ -88,6 +89,7 @@ rule validate_null_distribution_bundle:
         eligible_bed=rules.finalize_null_distribution_bundle.output.eligible_bed,
         calibration_regions=rules.finalize_null_distribution_bundle.output.calibration_regions,
         excluded_alleles=rules.finalize_null_distribution_bundle.output.excluded_alleles,
+        candidate_audit=rules.finalize_null_distribution_bundle.output.candidate_audit,
         population_af_zero_imputations=(
             rules.finalize_null_distribution_bundle.output.population_af_zero_imputations
         ),

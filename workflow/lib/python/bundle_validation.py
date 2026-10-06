@@ -80,6 +80,7 @@ def validate_generated_bundle(
         "eligible_testing_units": inputs.eligible_bed,
         "calibration_regions": inputs.calibration_regions,
         "excluded_alleles": inputs.excluded_alleles,
+        "candidate_audit": inputs.candidate_audit,
         "population_af_zero_imputations": inputs.population_af_zero_imputations,
         "excluded_units": inputs.excluded_units,
     }

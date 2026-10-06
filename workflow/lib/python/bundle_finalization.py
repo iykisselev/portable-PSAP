@@ -170,6 +170,10 @@ def finalize_generated_bundle(
         outputs.excluded_alleles, ["#CHROM", "POS", "REF", "ALT", "exclusion_reason"],
         chain(rejected_rows(inputs.allele_states), candidate_audit_rows(inputs.candidate_audit))
     )
+    _, candidate_audit = write_gzip_tsv_atomic(
+        outputs.candidate_audit, ["#CHROM", "POS", "REF", "ALT", "rejection_reason"],
+        candidate_audit_rows(inputs.candidate_audit),
+    )
     zero_imputation_count, population_af_zero_imputations = write_gzip_tsv_atomic(
         outputs.population_af_zero_imputations,
         ["#CHROM", "POS", "REF", "ALT", "imputed_info_tags"],
@@ -184,6 +188,7 @@ def finalize_generated_bundle(
         "lookup_het": lookup_het, "lookup_hom": lookup_hom,
         "eligible_testing_units": eligible_bed, "calibration_regions": calibration_regions,
         "excluded_alleles": excluded_alleles,
+        "candidate_audit": candidate_audit,
         "population_af_zero_imputations": population_af_zero_imputations,
         "excluded_units": excluded_units,
     }
