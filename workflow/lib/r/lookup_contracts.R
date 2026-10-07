@@ -1,5 +1,13 @@
+lookup_row_index <- function(lookup, ids) {
+  if (!is.null(lookup$row_of)) {
+    return(unname(lookup$row_of[as.character(ids)]))
+  }
+  match(ids, lookup$ids)
+}
+
+
 require_lookup_units <- function(variants, lookup, model) {
-  lookup_row <- match(variants$.testing_unit_id, lookup$ids)
+  lookup_row <- lookup_row_index(lookup, variants$.testing_unit_id)
   missing <- is.na(lookup_row)
 
   if (any(missing)) {
@@ -24,7 +32,7 @@ require_lookup_units <- function(variants, lookup, model) {
     )
   }
 
-  invisible(TRUE)
+  invisible(lookup_row)
 }
 
 
@@ -84,46 +92,22 @@ resolve_lookup_contract <- function(
   if (!is_supported_generated_bundle_contract(contract)) {
     abort("Unsupported lookup contract: %s", contract)
   }
-  if (is.null(metadata_path) || !file.exists(metadata_path)) {
-    abort("Generated bundle requires a metadata.json path")
+  # The validate_model workflow barrier verifies the generated-bundle
+  # certificate and its components.  Scoring only needs the already-resolved
+  # numeric grid, so do not re-read the certificate for every sample.
+  if (is.null(expected_score_max) || !is.finite(as.numeric(expected_score_max)) ||
+      as.numeric(expected_score_max) <= 0) {
+    abort("Generated lookup source requires a positive resolved score_max")
   }
-  metadata <- jsonlite::fromJSON(metadata_path, simplifyVector = TRUE)
-  if (!identical(metadata$contract, contract)) {
-    abort("Unsupported generated bundle contract: %s", metadata$contract)
-  }
-  required <- c("score_max", "bin_width", "bin_count", "algorithm")
-  if (is.null(metadata$binning) || !all(required %in% names(metadata$binning))) {
-    abort("Generated bundle metadata is missing grid fields")
-  }
-  grid <- metadata$binning
-  if (!identical(grid$algorithm, FIXED_WIDTH_BINNING_ALGORITHM)) {
-    abort("Generated bundle uses an unsupported binning algorithm: %s", grid$algorithm)
-  }
-  if (grid$bin_count != fixed_width_bin_count(grid$score_max, grid$bin_width)) {
-    abort("Generated bundle metadata has inconsistent bin_count")
-  }
-  if (!is.null(expected_score_max) && abs(grid$score_max - as.numeric(expected_score_max)) > 1e-12) {
-    abort("Generated bundle score_max differs from the resolved lookup source")
-  }
-  if (!is.null(expected_bin_width) && nzchar(as.character(expected_bin_width)) &&
-      abs(grid$bin_width - as.numeric(expected_bin_width)) > 1e-15) {
-    abort("Generated bundle bin_width differs from the resolved lookup source")
-  }
-  if (is.null(validation_path) || is.null(marker_path) ||
-      !file.exists(validation_path) || !file.exists(marker_path)) {
-    abort("Generated bundle requires validation.json and validation.ok")
-  }
-  validation <- jsonlite::fromJSON(validation_path, simplifyVector = TRUE)
-  marker <- strsplit(trimws(readLines(marker_path, warn = FALSE)), "\t", fixed = TRUE)[[1L]]
-  if (!identical(validation$status, "ok") || length(marker) != 3L ||
-      marker[[1L]] != contract || marker[[2L]] != validation$metadata_sha256) {
-    abort("Generated bundle validation marker is inconsistent")
+  if (is.null(expected_bin_width) || !nzchar(as.character(expected_bin_width)) ||
+      !is.finite(as.numeric(expected_bin_width)) || as.numeric(expected_bin_width) <= 0) {
+    abort("Generated lookup source requires a positive resolved bin_width")
   }
   normalized_metadata <- list(
-    score_max = as.numeric(grid$score_max),
-    bin_width = as.numeric(grid$bin_width),
-    bin_count = as.integer(grid$bin_count),
-    algorithm = grid$algorithm
+    score_max = as.numeric(expected_score_max),
+    bin_width = as.numeric(expected_bin_width),
+    bin_count = fixed_width_bin_count(as.numeric(expected_score_max), as.numeric(expected_bin_width)),
+    algorithm = FIXED_WIDTH_BINNING_ALGORITHM
   )
   list(
     type = contract,
@@ -146,7 +130,8 @@ validate_generated_lookup <- function(lookup, metadata, role) {
   if (any(!is.finite(lookup$values)) || any(lookup$values < 0 | lookup$values > 1)) {
     abort("Generated %s lookup has values outside [0, 1]", role)
   }
-  if (any(apply(lookup$values, 1, function(x) any(diff(x) > 1e-12)))) {
+  if (ncol(lookup$values) > 1L &&
+      any(lookup$values[, -1L, drop = FALSE] - lookup$values[, -ncol(lookup$values), drop = FALSE] > 1e-12)) {
     abort("Generated %s lookup survival values are not nonincreasing", role)
   }
   invisible(TRUE)

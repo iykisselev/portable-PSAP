@@ -4,13 +4,11 @@ empty_reference <- function() {
   data.table(pid = character(), phenotype = character(), sex = numeric(), unit = character(), model = character(), variant_key = character(), PSAP = numeric())
 }
 
-
-make_evidence <- function(variants, row_filter, model, unit = variants$unit) {
+make_evidence <- function(variants, row_filter, model) {
   selected <- variants[row_filter]
   if (nrow(selected) == 0L) return(NULL)
-  selected[, .(unit = unit[row_filter], model = model, variant_key)]
+  selected[, .(unit, model = model, variant_key)]
 }
-
 
 derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
   variants <- fread(path, sep = "\t", header = TRUE, quote = "", data.table = TRUE, showProgress = FALSE)

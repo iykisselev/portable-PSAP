@@ -341,6 +341,22 @@ generated_scores <- lookup_psap(
     metadata = generated_contract$metadata
 )
 stopifnot(identical(generated_scores, c(1, 1, 1, 0.75, 0.5, 0.5)))
+prepared_lookup_paths <- list(
+    het = tempfile(fileext = ".rds"),
+    hom = tempfile(fileext = ".rds"),
+    hem_chrX = tempfile(fileext = ".rds")
+)
+prepare_psap_lookups(
+    list(
+        paths = list(het = generated_path, hom = generated_path, hem_chrX = generated_path),
+        metadata = generated_contract$metadata
+    ),
+    prepared_lookup_paths,
+    hemizygote_model = TRUE
+)
+stopifnot(
+    identical(read_prepared_lookup(prepared_lookup_paths$het)$row_of, c(`unit-1` = 1L))
+)
 hem_scored <- score_variants(
     data.table(
         Key = "X:2:A>C",
@@ -351,7 +367,7 @@ hem_scored <- score_variants(
     ),
     list(
         type = "generated_bundle_v2",
-        paths = list(het = generated_path, hom = generated_path, hem_chrX = generated_path),
+        paths = prepared_lookup_paths,
         score_max = 6,
         metadata = list(score_max = 6, bin_width = 2, bin_count = 3, algorithm = "fixed_width_decimal_v1")
     ),
@@ -394,4 +410,35 @@ report_fixture <- validate_candidates(
 stopifnot(
     report_fixture$detail[variant_key == "1:1:A>G", validation] == "control_match",
     report_fixture$detail[variant_key == "1:2:A>C", validation] == "ok"
+)
+
+compatibility_candidates <- data.table(
+    candidate_id = c("dom", "rec-match", "rec-mismatch"),
+    pid = "affected",
+    phenotype = "affected",
+    sex = 2,
+    unit = "unit-a",
+    model = c("DOM-het", "REC-hom", "REC-hom"),
+    variant_key = c("1:3:A>G", "1:3:A>G", "1:4:A>C"),
+    PSAP = 0.1
+)
+compatibility_controls <- data.table(
+    pid = c("rec-control", "dom-control"),
+    phenotype = "unaffected",
+    sex = 1,
+    unit = "unit-a",
+    model = c("REC-hom", "DOM-het"),
+    variant_key = c("1:3:A>G", "1:4:A>C"),
+    PSAP = 0.2
+)
+compatibility_report <- validate_candidates(compatibility_candidates, compatibility_controls)
+stopifnot(
+    all(compatibility_report$detail[candidate_id %in% c("dom", "rec-match"), validation] == "control_match"),
+    compatibility_report$detail[candidate_id == "rec-mismatch", validation] == "ok"
+)
+no_controls_report <- validate_candidates(compatibility_candidates, compatibility_controls[0])
+stopifnot(
+    all(no_controls_report$detail$validation == "no_controls"),
+    all(no_controls_report$detail$control_count == 0L),
+    all(is.na(no_controls_report$detail$control_pids))
 )

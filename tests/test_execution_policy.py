@@ -38,14 +38,13 @@ class ExecutionPolicyTests(unittest.TestCase):
             "validate_model",
             "merge_validation",
             "require_valid_inputs",
+            "split_genotypes",
             "extract_gt",
-            "standardize_gt",
-            "apply_sex_model",
-            "join_sample_annotations",
+            "prepare_sample_genotypes",
             "annotate_variants",
             "summarize_annotations",
             "require_valid_annotations",
-            "prepare_testing_units",
+            "prepare_lookups",
             "filter_calibration_regions",
             "filter_excluded_records",
             "build_sample_candidates",
@@ -74,7 +73,7 @@ class ExecutionPolicyTests(unittest.TestCase):
         declared_rule_names = set()
         for rule_file in (ROOT / "workflow" / "rules").rglob("*.smk"):
             for line in rule_file.read_text(encoding="utf-8").splitlines():
-                match = re.match(r"(?:rule|checkpoint) ([A-Za-z_][A-Za-z0-9_]*):", line)
+                match = re.match(r"\s*(?:rule|checkpoint) ([A-Za-z_][A-Za-z0-9_]*):", line)
                 if match:
                     declared_rule_names.add(match.group(1))
         self.assertEqual(

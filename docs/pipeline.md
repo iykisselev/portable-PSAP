@@ -495,21 +495,22 @@ SNVs use the SNV table; indels use the indel table only when enabled.
 
 `summarize_annotations` and `require_valid_annotations` stop the pipeline when
 an enabled source unexpectedly annotates no relevant records.
-`prepare_testing_units` normalizes annotation output to one row for each
-allele/unit pair.
+The annotated VCF retains CADD and testing-unit IDs in INFO fields for direct
+per-sample extraction.
 
 #### 5. Per-sample genotype processing
 
 For each sample:
 
-1. `extract_gt` removes reference-homozygous and missing calls while extracting
-   allele and GT fields.
-2. `standardize_gt` normalizes phased and unphased diploid notation and retains
-   supported haploid X/Y calls.
-3. `apply_sex_model` assigns sex-aware classes. Male X/Y alternate calls can
-   become `hem`; female X calls become `het_female` or `hom_female`; invalid
-   ploidy/sex combinations are removed or rejected.
-4. `join_sample_annotations` joins genotype rows to CADD and unit annotations.
+1. `split_genotypes` reads the annotated VCF once, retains GT plus CADD and
+   testing-unit INFO fields, and writes temporary per-sample VCFs.
+2. `extract_gt` removes reference-homozygous and missing calls while extracting
+   allele, GT, CADD, and testing-unit fields. Its raw table is temporary.
+3. `prepare_sample_genotypes` normalizes diploid notation, retains supported
+   haploid X/Y calls, assigns sex-aware classes, and joins genotype rows to CADD
+   and unit annotations in memory. Male X/Y alternate calls can become `hem`;
+   female X calls become `het_female` or `hom_female`; invalid ploidy/sex
+   combinations are removed or rejected.
 
 #### 6. PSAP scoring
 

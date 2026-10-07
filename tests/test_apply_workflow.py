@@ -56,6 +56,21 @@ class ApplyWorkflowFixtureTests(unittest.TestCase):
 
             apply_dir = outdir / "apply" / "smoke"
             cohort = apply_dir / "cohort"
+            self.assertFalse((apply_dir / "standardized").exists())
+            self.assertFalse((apply_dir / "sex_classified").exists())
+            self.assertFalse(
+                any((apply_dir / "raw").rglob("*.tsv.gz")),
+                "temporary extracted genotype tables were retained",
+            )
+            self.assertFalse(
+                any((apply_dir / "raw").rglob("*.vcf.gz")),
+                "temporary split genotype VCFs were retained",
+            )
+            for role in ("het", "hom", "hem_chrX"):
+                self.assertTrue(
+                    (apply_dir / "prepared" / "lookups" / f"{role}.rds").is_file(),
+                    f"missing prepared lookup for {role}",
+                )
             for filename, digest in expected_digests().items():
                 report = cohort / filename
                 self.assertTrue(report.is_file(), f"missing workflow output: {report}")

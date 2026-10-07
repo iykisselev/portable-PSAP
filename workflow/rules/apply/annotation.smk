@@ -7,11 +7,11 @@ ANNOTATION_QC_OK = ANNOTATION_DIR / f"{TESTING_UNIT}.annotation_qc.ok"
 
 rule annotate_variants:
     """
-    Attach CADD and the configured testing-unit annotation to the filtered VCF.
+    Attach CADD and the configured testing-unit annotation to retained variants.
     """
     input:
-        vcf=rules.filter_excluded_records.output.vcf,
-        vcf_csi=rules.filter_excluded_records.output.csi,
+        vcf=FILTERED_VCF,
+        vcf_csi=FILTERED_VCF_INDEX,
         cadd_snv=apply_resource("cadd_snv").staged_data,
         cadd_snv_index=apply_resource("cadd_snv").staged_index,
         cadd_indel=(
@@ -97,26 +97,3 @@ rule require_valid_annotations:
         str(APPLY_LOG_DIR / "annotation" / "require_valid_annotations.log")
     script:
         str(APPLY_SCRIPT_DIR / "require_valid_report.py")
-
-
-rule prepare_testing_units:
-    """
-    Normalize the configured testing-unit annotation table.
-    """
-    input:
-        annotations=rules.annotate_variants.output.annotations,
-        annotation_qc=rules.require_valid_annotations.output.ok
-    output:
-        unit_table=ensure(str(TESTING_UNIT_TABLE), non_empty=True)
-    threads: 4
-    resources:
-        mem_mb=policy_resources("prepare_testing_units").mem_mb,
-        runtime=policy_resources("prepare_testing_units").runtime
-    conda:
-        env("r")
-    envmodules: *mod("r")
-    container: sif("r")
-    log:
-        str(APPLY_LOG_DIR / "annotation" / "prepare_testing_units.log")
-    script:
-        str(APPLY_SCRIPT_DIR / "prepare_testing_units.R")

@@ -16,7 +16,7 @@ read_scoring_variants <- function(path) {
 }
 
 
-read_lookup <- function(path) {
+read_lookup <- function(path, metadata = NULL, role = NULL) {
   lookup <- fread(path, sep = "\t", header = FALSE, quote = "", colClasses = "character", data.table = TRUE, showProgress = FALSE)
   if (ncol(lookup) < 2 || nrow(lookup) == 0) {
     abort("PSAP lookup table must contain an ID column and score columns: %s", path)
@@ -24,18 +24,54 @@ read_lookup <- function(path) {
   ids <- trimws(as.character(lookup[[1]]))
   values <- lookup[, -1, with = FALSE]
   value_matrix <- matrix(suppressWarnings(as.numeric(unlist(values, use.names = FALSE))), nrow = nrow(values), ncol = ncol(values))
-  invalid_rows <- apply(value_matrix, 1, function(row) any(is.na(row)))
+  invalid_rows <- rowSums(is.na(value_matrix)) > 0L
   if (identical(tolower(ids[[1L]]), "testing_unit_id") || (invalid_rows[1] && any(!invalid_rows[-1]))) {
     ids <- ids[-1]
     value_matrix <- value_matrix[-1, , drop = FALSE]
   }
   if (anyNA(value_matrix)) abort("PSAP lookup table contains non-numeric score values: %s", path)
   if (anyDuplicated(ids)) abort("PSAP lookup table contains duplicate testing-unit IDs: %s", path)
-  list(ids = ids, values = value_matrix)
+  lookup <- list(
+    ids = ids,
+    values = value_matrix,
+    row_of = setNames(seq_along(ids), ids)
+  )
+  if (!is.null(metadata)) {
+    validate_generated_lookup(lookup, metadata, if (is.null(role)) "selected" else role)
+  }
+  lookup
 }
 
 
-lookup_psap <- function(variants, lookup, score_max, score_column = "CADD_PHRED", lookup_contract = "external_legacy_v0", metadata = NULL, lookup_role = "selected") {
+prepare_psap_lookups <- function(lookup_source, output_paths, hemizygote_model) {
+  roles <- c("het", "hom")
+  if (hemizygote_model) roles <- c(roles, "hem_chrX")
+  for (role in roles) {
+    output <- output_paths[[role]]
+    if (is.null(output) || !nzchar(output)) {
+      abort("Missing prepared output path for %s lookup", role)
+    }
+    dir.create(dirname(output), recursive = TRUE, showWarnings = FALSE)
+    saveRDS(
+      read_lookup(lookup_source$paths[[role]], lookup_source$metadata, role),
+      output,
+      version = 2
+    )
+  }
+  invisible(output_paths)
+}
+
+
+read_prepared_lookup <- function(path) {
+  lookup <- readRDS(path)
+  if (!is.list(lookup) || !all(c("ids", "values", "row_of") %in% names(lookup))) {
+    abort("Prepared PSAP lookup has an invalid structure: %s", path)
+  }
+  lookup
+}
+
+
+lookup_psap <- function(variants, lookup, score_max, score_column = "CADD_PHRED", lookup_contract = "external_legacy_v0", metadata = NULL, lookup_role = "selected", row_index = NULL) {
   score <- pmin(pmax(variants[[score_column]], 0), score_max)
   if (identical(lookup_contract, "external_legacy_v0")) {
     score_grid <- seq(0, score_max, length.out = ncol(lookup$values))
@@ -43,12 +79,11 @@ lookup_psap <- function(variants, lookup, score_max, score_column = "CADD_PHRED"
     score_bin[score_bin < 1] <- 1
     score_bin[score_bin > ncol(lookup$values)] <- ncol(lookup$values)
   } else if (is_supported_generated_bundle_contract(lookup_contract)) {
-    validate_generated_lookup(lookup, metadata, lookup_role)
     score_bin <- generated_lookup_bin(score, metadata$score_max, metadata$bin_width)
   } else {
     abort("Unsupported lookup contract: %s", lookup_contract)
   }
-  row_index <- match(variants$.testing_unit_id, lookup$ids)
+  if (is.null(row_index)) row_index <- lookup_row_index(lookup, variants$.testing_unit_id)
   if (anyNA(row_index)) {
     missing_ids <- head(unique(variants$.testing_unit_id[is.na(row_index)]), 5)
     abort("PSAP lookup table is missing testing-unit ID(s): %s", paste(missing_ids, collapse = ", "))
@@ -66,9 +101,9 @@ select_highest <- function(variants) {
 score_model <- function(variants, model, genotype_class, lookup, lookup_source, lookup_role) {
   selected <- variants[gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id)]
   if (nrow(selected) == 0) return(NULL)
-  require_lookup_units(selected, lookup, model)
   selected <- select_highest(selected)
-  selected[, PSAP := lookup_psap(selected, lookup, lookup_source$score_max, lookup_contract = lookup_source$type, metadata = lookup_source$metadata, lookup_role = lookup_role)]
+  row_index <- require_lookup_units(selected, lookup, model)
+  selected[, PSAP := lookup_psap(selected, lookup, lookup_source$score_max, lookup_contract = lookup_source$type, metadata = lookup_source$metadata, lookup_role = lookup_role, row_index = row_index)]
   selected[, .(Key = as.character(Key), unit = as.character(.testing_unit_id), `Dz.Model` = as.character(model), PSAP = as.numeric(PSAP))]
 }
 
@@ -79,7 +114,12 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
   variants[, gt_class := tolower(trimws(as.character(gt_class)))]
   definitions <- DISEASE_MODELS[DISEASE_MODELS$lookup != "hem_chrX", ]
   lookup_names <- unique(definitions$lookup)
-  lookups <- setNames(lapply(lookup_names, function(name) read_lookup(lookup_source$paths[[name]])), lookup_names)
+  lookups <- setNames(
+    lapply(lookup_names, function(name) {
+      read_prepared_lookup(lookup_source$paths[[name]])
+    }),
+    lookup_names
+  )
   results <- lapply(seq_len(nrow(definitions)), function(index) {
     definition <- definitions[index, ]
     score_model(variants, definition$model, definition$genotype_class, lookups[[definition$lookup]], lookup_source, definition$lookup)
@@ -88,7 +128,7 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
     hem_variants <- copy(variants)
     hem_variants[, .chromosome := canonical_chromosome(CHROM)]
     hem_definition <- DISEASE_MODELS[DISEASE_MODELS$lookup == "hem_chrX", , drop = FALSE]
-    hem_lookup <- read_lookup(lookup_source$paths[[hem_definition$lookup]])
+    hem_lookup <- read_prepared_lookup(lookup_source$paths[[hem_definition$lookup]])
     results <- c(results, list(score_model(hem_variants[.chromosome == "X" & gt_class == "hem"], hem_definition$model, hem_definition$genotype_class, hem_lookup, lookup_source, hem_definition$lookup)))
   }
   results <- Filter(Negate(is.null), results)

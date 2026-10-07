@@ -10,10 +10,6 @@ options(scipen = 999)
 
 
 workflow_config <- function() {
-  optional_input <- function(name) {
-    values <- as.character(snakemake@input[[name]])
-    if (length(values)) values else NULL
-  }
   hemizygote_model <- require_boolean(snakemake@params[["hemizygote"]], "model.hemizygote")
   hem_chrX <- as.character(snakemake@input[["lookup_hem_chrx"]])
   if (length(hem_chrX) == 0L) hem_chrX <- ""
@@ -23,11 +19,8 @@ workflow_config <- function() {
   lookup_source <- resolve_lookup_contract(
     as.character(snakemake@params[["lookup_contract"]]),
     list(het = snakemake@input[["lookup_het"]], hom = snakemake@input[["lookup_hom"]], hem_chrX = hem_chrX[[1L]]),
-    metadata_path = optional_input("lookup_metadata"), validation_path = optional_input("lookup_validation"),
-    marker_path = optional_input("lookup_marker"), expected_score_max = score_max,
-    expected_bin_width = as.character(snakemake@params[["lookup_bin_width"]]),
-    eligible_units = optional_input("eligible_units"), calibration_mask = optional_input("calibration_mask"),
-    excluded_alleles = optional_input("excluded_alleles"), excluded_units = optional_input("excluded_units")
+    expected_score_max = score_max,
+    expected_bin_width = as.character(snakemake@params[["lookup_bin_width"]])
   )
   list(input = snakemake@input[["annotated_gt"]], lookup_source = lookup_source,
        hemizygote_model = hemizygote_model, output = snakemake@output[["psap"]], threads = snakemake@threads)

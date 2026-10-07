@@ -19,6 +19,11 @@ read_controls <- function(path) {
   controls <- fread(path, sep = "\t", header = TRUE, quote = "", data.table = TRUE, showProgress = FALSE)
   require_columns(controls, required, "Control reference")
   controls <- controls[, required, with = FALSE]
+  # ``fread`` infers logical columns for a header-only control table.  Keep
+  # join-key types stable when the cohort has no non-reference controls.
+  character_columns <- setdiff(required, "PSAP")
+  controls[, (character_columns) := lapply(.SD, as.character), .SDcols = character_columns]
+  controls[, PSAP := suppressWarnings(as.numeric(PSAP))]
   if (any(controls$phenotype != "unaffected")) abort("Control reference contains rows not labelled unaffected")
   unique(controls, by = c("pid", "unit", "model", "variant_key"))
 }
@@ -57,15 +62,6 @@ build_candidate_groups <- function(candidates) {
 }
 
 
-validate_one_candidate <- function(group, controls) {
-  if (nrow(controls) == 0L) return(list(validation = "no_controls", control_count = 0L, control_pids = NA_character_))
-  relevant <- controls[controls$unit == group$unit[[1]] & variant_key %in% group$variant_keys[[1]]]
-  relevant <- relevant[relevant$model %in% compatible_control_models(group$model[[1]])]
-  control_pids <- sort(unique(relevant$pid))
-  list(validation = if (length(control_pids) > 0L) "control_match" else "ok", control_count = length(control_pids), control_pids = collapse_ids(control_pids))
-}
-
-
 empty_cohort_summary <- function() {
   data.table(unit = character(), model = character(), candidate_signature = character(), affected_count = integer(), affected_pids = character(), minimum_PSAP = numeric(), validation = character(), control_count = integer(), control_pids = character())
 }
@@ -78,10 +74,47 @@ validate_candidates <- function(candidates, controls) {
     return(list(detail = detail, summary = empty_cohort_summary()))
   }
   groups <- build_candidate_groups(candidates)
-  status <- rbindlist(lapply(seq_len(nrow(groups)), function(i) {
-    result <- validate_one_candidate(groups[i], controls)
-    data.table(candidate_id = groups$candidate_id[[i]], validation = result$validation, control_count = as.integer(result$control_count), control_pids = result$control_pids)
-  }))
+  candidate_keys <- groups[, .(
+    candidate_id,
+    unit,
+    model,
+    variant_key = vapply(variant_keys, function(keys) keys[[1L]], character(1))
+  )]
+  models <- disease_model_names()
+  compatible_models <- rbind(
+    data.table(model = "DOM-het", control_model = models),
+    data.table(
+      model = setdiff(models, "DOM-het"),
+      control_model = setdiff(models, "DOM-het")
+    )
+  )
+  candidate_controls <- compatible_models[candidate_keys, on = "model", allow.cartesian = TRUE]
+  hits <- controls[candidate_controls,
+    on = .(unit, variant_key, model = control_model),
+    nomatch = NULL,
+    allow.cartesian = TRUE,
+    .(candidate_id = i.candidate_id, pid = x.pid)
+  ]
+  hit_summary <- hits[, .(
+    control_count = as.integer(uniqueN(pid)),
+    control_pids = collapse_ids(pid)
+  ), by = candidate_id]
+  status <- data.table(
+    candidate_id = groups$candidate_id,
+    control_count = NA_integer_,
+    control_pids = NA_character_
+  )
+  status[hit_summary, on = "candidate_id", `:=`(
+    control_count = i.control_count,
+    control_pids = i.control_pids
+  )]
+  if (nrow(controls) == 0L) {
+    status[, validation := "no_controls"]
+  } else {
+    status[, validation := fifelse(is.na(control_count), "ok", "control_match")]
+  }
+  status[is.na(control_count), control_count := 0L]
+  setcolorder(status, c("candidate_id", "validation", "control_count", "control_pids"))
   detail <- status[candidates, on = "candidate_id"]
   setcolorder(detail, c("candidate_id", "pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP", "validation", "control_count", "control_pids"))
   candidate_level <- status[groups, on = "candidate_id"]
