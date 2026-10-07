@@ -6,6 +6,7 @@ import csv
 from collections import defaultdict
 from itertools import chain
 import math
+from pathlib import Path
 
 import polars as pl
 

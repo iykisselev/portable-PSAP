@@ -218,7 +218,7 @@ binding, so their YAML order does not change interpretation:
 # config/config.yaml or a scientific configuration layer
 reference:
   exclusions:
-    gnomad-r2-notpass:
+    encode-hg38-blacklist-v2:
       kind: bed
       role: variants_exclude
     par-regions:
@@ -229,7 +229,7 @@ reference:
 bindings:
   reference:
     exclusions:
-      gnomad-r2-notpass: {data: resources/notpass.bed.gz, index: resources/notpass.bed.gz.tbi}
+      encode-hg38-blacklist-v2: {data: resources/notpass.bed.gz, index: resources/notpass.bed.gz.tbi}
       par-regions: {data: resources/par.bed.gz, index: resources/par.bed.gz.tbi}
 ```
 

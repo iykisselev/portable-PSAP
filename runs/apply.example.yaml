@@ -27,7 +27,7 @@ bindings:
     exclusion: {data: null, index: null}
     testing_unit_bed: {data: tests/smoke/data/testing_units.bed, index: null}
     exclusions:
-      gnomad-r2-notpass: {data: tests/smoke/data/exclude_full_span.bed, index: null}
+      encode-hg38-blacklist-v2: {data: tests/smoke/data/exclude_full_span.bed, index: null}
       par-regions: {data: tests/smoke/data/par_regions.bed, index: null}
     lookup_source:
       type: external

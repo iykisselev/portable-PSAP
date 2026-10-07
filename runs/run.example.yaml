@@ -32,7 +32,7 @@ bindings:
       data: resources/testing_units.bed.gz
       index: resources/testing_units.bed.gz.tbi
     exclusions:
-      gnomad-r2-notpass:
+      encode-hg38-blacklist-v2:
         data: resources/variant_exclusions.bed.gz
         index: resources/variant_exclusions.bed.gz.tbi
       par-regions:
