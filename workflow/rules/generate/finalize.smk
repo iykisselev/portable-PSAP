@@ -39,7 +39,10 @@ rule finalize_null_distribution_bundle:
         indel_mask_policy=WORKFLOW_PLAN.generation_settings.indel_mask_policy,
         indel_max_reference_length=WORKFLOW_PLAN.generation_settings.indel_max_reference_length,
         indel_max_alternate_length=WORKFLOW_PLAN.generation_settings.indel_max_alternate_length,
-        resource_identities=dict(GENERATION_CONTEXT.bundle_resource_identities)
+        resource_identities={
+            name: dict(identity)
+            for name, identity in GENERATION_CONTEXT.bundle_resource_identities.items()
+        }
     threads: 1
     resources:
         mem_mb=policy_resources("finalize_null_distribution_bundle").mem_mb,
