@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import gzip
 import shutil
 import subprocess
 import sys
@@ -12,11 +11,7 @@ from pathlib import Path
 
 from bgzf import has_bgzf_eof, is_bgzf
 from genomic_contracts import canonical_chromosome
-
-def is_gzip(path: Path) -> bool:
-    with path.open("rb") as handle:
-        return handle.read(2) == b"\x1f\x8b"
-
+from io_contracts import open_text
 
 def source_has_index(index_path: Path | None) -> bool:
     return index_path is not None and index_path.is_file()
@@ -116,7 +111,6 @@ def copy_as_bgzip(
     chromosome_map: dict[str, str] | None = None,
 ) -> None:
     bgzip = require_tool("bgzip")
-    opener = gzip.open if is_gzip(source) else open
     sort_tool = require_tool("sort")
 
     with tempfile.TemporaryDirectory(prefix="prepare_genomic_resource-") as temp_dir:
@@ -127,7 +121,7 @@ def copy_as_bgzip(
         rewritten = 0
 
         with (
-            opener(source, "rt", encoding="utf-8", errors="replace") as source_handle,
+            open_text(source, errors="replace") as source_handle,
             header_path.open("w", encoding="utf-8") as header_handle,
             rows_path.open("w", encoding="utf-8") as rows_handle,
         ):
@@ -217,11 +211,10 @@ def copy_indexed_as_bgzip(
 ) -> None:
     """Rewrite an already sorted/indexed table without materializing or sorting it."""
     bgzip = require_tool("bgzip")
-    opener = gzip.open if is_gzip(source) else open
     rewritten = 0
 
     with (
-        opener(source, "rt", encoding="utf-8", errors="replace") as source_handle,
+        open_text(source, errors="replace") as source_handle,
         output.open("wb") as output_handle,
     ):
         process = subprocess.Popen(
@@ -250,8 +243,7 @@ def copy_indexed_as_bgzip(
 
 
 def first_data_columns(path: Path) -> list[str]:
-    opener = gzip.open if is_gzip(path) else open
-    with opener(path, "rt", encoding="utf-8", errors="replace") as handle:
+    with open_text(path, errors="replace") as handle:
         for line in handle:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):

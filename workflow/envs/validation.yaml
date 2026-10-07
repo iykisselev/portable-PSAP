@@ -10,5 +10,6 @@ dependencies:
   - bcftools=1.20
   - htslib=1.20
   - polars=1.44.1
+  - numpy
   - pyarrow
   - pysam

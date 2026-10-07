@@ -103,12 +103,21 @@ class GenerationPreparationTests(unittest.TestCase):
                 unit_intervals=directory / "unit_intervals",
                 masked_unit_intervals=directory / "masked_unit_intervals",
                 mask=directory / "mask",
-                resource_identities=directory / "resource_identities",
             )
             params = GenerationScopeParameters(
                 0.5, 10, 250, "zstd", {"overall": "AF_CUSTOM"}
             )
             prepare_generation_scope(inputs, outputs, params)
+            unit_intervals = pl.read_parquet(outputs.unit_intervals)
+            self.assertEqual(
+                unit_intervals.rows(),
+                unit_intervals.sort("CHROM", "START", "END", "testing_unit_id").rows(),
+            )
+            mask = pl.read_parquet(outputs.mask)
+            self.assertEqual(
+                mask.rows(),
+                mask.sort("CHROM", "START", "END").rows(),
+            )
             rows = {row["testing_unit_id"]: row for row in pl.read_parquet(outputs.units).to_dicts()}
             self.assertEqual(rows["UNIT_OVERLAP"]["supported_bases"], 10)
             self.assertEqual(rows["UNIT_OVERLAP"]["retained_bases"], 3)
@@ -134,7 +143,7 @@ class GenerationPreparationTests(unittest.TestCase):
             indels = directory / "indels.tsv"
             par_regions = directory / "par.bed"
             fasta.write_text(">1\n" + "A" * 30 + "\n", encoding="utf-8")
-            fasta_index.write_text("1\t30\t0\t0\t0\n", encoding="utf-8")
+            fasta_index.write_text("1\t30\t3\t30\t31\n", encoding="utf-8")
             units.write_text("1\t10\t12\tUNIT\n", encoding="utf-8")
             population.write_text(
                 "##INFO=<ID=AF,Number=A,Type=Float,Description=\"AF\">\n"
@@ -155,7 +164,6 @@ class GenerationPreparationTests(unittest.TestCase):
                 partitions=directory / "partitions.json", buckets=directory / "buckets.json",
                 units=directory / "units.parquet", unit_intervals=directory / "unit_intervals.parquet",
                 masked_unit_intervals=directory / "masked.parquet", mask=directory / "mask.parquet",
-                resource_identities=directory / "resources.json",
             )
             prepare_generation_scope(
                 inputs, outputs,

@@ -17,6 +17,24 @@ def generation_index(resource_binding):
     return GENERATION_CONTEXT.index_input(resource_binding)
 
 
+def optional_binding(binding, *, enabled=True):
+    """Return optional data/index Snakemake bindings without placeholder paths."""
+    if not enabled or binding is None or not binding.data:
+        return [], []
+    return [binding.data], ([binding.index] if binding.index else [])
+
+
+SCORE_INDEL, SCORE_INDEL_INDEX = optional_binding(
+    GENERATION_CONTEXT.plan.score_indel,
+    enabled=WORKFLOW_PLAN.model.include_indels,
+)
+
+
+def hem_artifact(value):
+    """Retain a named optional hem binding while disabling its file dependency."""
+    return value if GENERATION_CONTEXT.hem_enabled else []
+
+
 def generation_mutation_rate_data():
     return GENERATION_CONTEXT.mutation_rate_data()
 
@@ -56,6 +74,8 @@ def generation_partition_artifacts(wildcards, artifact_name):
 
 def generation_bucket_artifacts(wildcards, artifact_name):
     """Return the requested lookup file for every discovered unit bucket."""
+    if artifact_name == "lookup_hem" and not GENERATION_CONTEXT.hem_enabled:
+        return []
     return [
         GENERATION_CONTEXT.bucket_artifact(bucket_id, artifact_name)
         for bucket_id in generation_bucket_ids(wildcards)
@@ -65,8 +85,6 @@ def generation_bucket_artifacts(wildcards, artifact_name):
 def generation_statistics_shards(wildcards):
     """Return the partition statistics needed to reduce one unit bucket."""
     bucket_id = str(wildcards.bucket)
-    if bucket_id not in generation_bucket_ids(wildcards):
-        raise ValueError(f"Unknown generation bucket {bucket_id!r}")
     bucket = bucket_from_manifest(
         generation_scope_artifact(wildcards, "buckets"), bucket_id
     )
@@ -93,8 +111,6 @@ def generation_outputs(wildcards):
     for artifact_name in ("allele_states", "allele_membership", "allele_scores", "candidate_audit"):
         outputs.extend(generation_partition_artifacts(wildcards, artifact_name))
     outputs.extend(generation_statistics_artifacts(wildcards))
-    for artifact_name in ("lookup_het", "lookup_hom", "diagnostics"):
+    for artifact_name in ("lookup_het", "lookup_hom", "lookup_hem", "diagnostics"):
         outputs.extend(generation_bucket_artifacts(wildcards, artifact_name))
-    if GENERATION_CONTEXT.hem_enabled:
-        outputs.extend(generation_bucket_artifacts(wildcards, "lookup_hem"))
     return outputs

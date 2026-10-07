@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import json
 from pathlib import Path
 
@@ -63,7 +64,7 @@ def _partition_identifier_sort_key(identifier: str) -> tuple[str, int, int]:
     return chromosome, start, end
 
 
-def read_partition_manifest(path: str | Path) -> tuple[PartitionManifestEntry, ...]:
+def _read_partition_manifest_uncached(path: str | Path) -> tuple[PartitionManifestEntry, ...]:
     """Read and validate the compact partition-discovery manifest."""
     manifest = _load_mapping(path, "partition")
     if manifest.get("schema_version") != PARTITION_MANIFEST_SCHEMA_VERSION:
@@ -107,7 +108,7 @@ def read_partition_manifest(path: str | Path) -> tuple[PartitionManifestEntry, .
     return tuple(entries)
 
 
-def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
+def _read_bucket_manifest_uncached(path: str | Path) -> tuple[BucketManifestEntry, ...]:
     """Read and validate the deterministic eligible-unit bucket manifest."""
     manifest = _load_mapping(path, "bucket")
     if manifest.get("schema_version") != BUCKET_MANIFEST_SCHEMA_VERSION:
@@ -155,6 +156,52 @@ def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
     return tuple(entries)
 
 
+def _manifest_cache_key(path: str | Path) -> tuple[str, int | None, int | None]:
+    """Identify a published manifest while invalidating after atomic replacement."""
+    manifest_path = Path(path).resolve()
+    try:
+        status = manifest_path.stat()
+    except OSError:
+        # Preserve the public reader's GenerationManifestError for unreadable
+        # paths by letting the cached parser delegate to ``_load_mapping``.
+        return str(manifest_path), None, None
+    return str(manifest_path), status.st_mtime_ns, status.st_size
+
+
+@lru_cache(maxsize=8)
+def _cached_partition_manifest(
+    path: str, mtime_ns: int | None, size: int | None,
+) -> tuple[PartitionManifestEntry, ...]:
+    return _read_partition_manifest_uncached(path)
+
+
+@lru_cache(maxsize=8)
+def _cached_bucket_manifest(
+    path: str, mtime_ns: int | None, size: int | None,
+) -> tuple[BucketManifestEntry, ...]:
+    return _read_bucket_manifest_uncached(path)
+
+
+@lru_cache(maxsize=8)
+def _cached_bucket_index(
+    path: str, mtime_ns: int | None, size: int | None,
+) -> dict[str, BucketManifestEntry]:
+    return {
+        entry.identifier: entry
+        for entry in _cached_bucket_manifest(path, mtime_ns, size)
+    }
+
+
+def read_partition_manifest(path: str | Path) -> tuple[PartitionManifestEntry, ...]:
+    """Read and validate the compact partition-discovery manifest once per version."""
+    return _cached_partition_manifest(*_manifest_cache_key(path))
+
+
+def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
+    """Read and validate the eligible-unit bucket manifest once per version."""
+    return _cached_bucket_manifest(*_manifest_cache_key(path))
+
+
 def partition_ids(path: str | Path) -> tuple[str, ...]:
     """Return the stable wildcard values from a validated partition manifest."""
     return tuple(entry.identifier for entry in read_partition_manifest(path))
@@ -167,7 +214,7 @@ def bucket_ids(path: str | Path) -> tuple[str, ...]:
 
 def bucket_from_manifest(path: str | Path, identifier: str) -> BucketManifestEntry:
     """Resolve one bucket wildcard only after validating the full manifest."""
-    for entry in read_bucket_manifest(path):
-        if entry.identifier == str(identifier):
-            return entry
-    raise GenerationManifestError(f"Unknown generation bucket {identifier!r}")
+    try:
+        return _cached_bucket_index(*_manifest_cache_key(path))[str(identifier)]
+    except KeyError as exc:
+        raise GenerationManifestError(f"Unknown generation bucket {identifier!r}") from exc

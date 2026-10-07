@@ -15,9 +15,106 @@ import io
 import json
 import os
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Callable, Iterable, Iterator, Mapping, Sequence, TextIO
 
 import polars as pl
+
+
+MISSING_TOKENS = frozenset({"", ".", "-", "na", "nan", "none", "null"})
+"""Case-insensitive tokens denoting missing identifiers or table cells."""
+
+PED_MISSING_SEX_TOKENS = MISSING_TOKENS | frozenset({"-9", "0"})
+"""Additional conventional PED sex sentinels; not generic missing IDs."""
+
+
+def is_missing_token(value: object) -> bool:
+    """Return whether a table-cell or identifier value is contractually absent."""
+    return value is None or str(value).strip().lower() in MISSING_TOKENS
+
+
+@dataclass(frozen=True)
+class BedRow:
+    """One structurally valid zero-based, half-open BED record."""
+
+    line_number: int
+    fields: tuple[str, ...]
+    chromosome: str
+    start: int
+    end: int
+
+
+class BedFormatError(ValueError):
+    """A malformed BED row, retaining its source line for diagnostics."""
+
+
+def open_text(
+    path: str | Path,
+    *,
+    errors: str = "strict",
+    newline: str | None = None,
+    require_gzip: bool = False,
+) -> TextIO:
+    """Open plain or gzip text using content detection rather than a suffix.
+
+    ``require_gzip`` is for public bundle components whose compression is part
+    of their file-format contract, rather than merely a transport detail.
+    """
+    resource = Path(path)
+    with resource.open("rb") as handle:
+        compressed = handle.read(2) == b"\x1f\x8b"
+    if require_gzip and not compressed:
+        raise ValueError(f"Expected a gzip-compressed text file: {resource}")
+    if compressed:
+        return gzip.open(resource, "rt", encoding="utf-8", errors=errors, newline=newline)
+    return resource.open("rt", encoding="utf-8", errors=errors, newline=newline)
+
+
+def iter_bed(
+    path: str | Path,
+    min_columns: int = 3,
+    *,
+    errors: str = "strict",
+    on_error: Callable[[BedFormatError], None] | None = None,
+) -> Iterator[BedRow]:
+    """Yield valid BED rows after standard comment and coordinate checks.
+
+    By default a malformed row stops the caller.  Validators may pass
+    ``on_error`` to collect diagnostics and continue with later records.
+    """
+    if min_columns < 3:
+        raise ValueError("BED parsing requires at least three columns")
+    with open_text(path, errors=errors) as handle:
+        for line_number, raw in enumerate(handle, start=1):
+            stripped = raw.strip()
+            if not stripped or stripped.startswith(("#", "track", "browser")):
+                continue
+            fields = tuple(stripped.split("\t"))
+            try:
+                if len(fields) < min_columns:
+                    raise BedFormatError(
+                        f"BED line {line_number} needs at least {min_columns} columns"
+                    )
+                chromosome = fields[0].strip()
+                if not chromosome:
+                    raise BedFormatError(f"BED line {line_number} has an empty chromosome")
+                try:
+                    start, end = int(fields[1]), int(fields[2])
+                except ValueError as exc:
+                    raise BedFormatError(
+                        f"BED line {line_number} has non-integer start or end coordinates"
+                    ) from exc
+                if start < 0 or end <= start:
+                    raise BedFormatError(
+                        f"BED line {line_number} must satisfy 0 <= start < end; "
+                        f"received {start}, {end}"
+                    )
+            except BedFormatError as exc:
+                if on_error is None:
+                    raise
+                on_error(exc)
+                continue
+            yield BedRow(line_number, fields, chromosome, start, end)
 
 
 def sha256_file(path: str | Path) -> str:
@@ -58,11 +155,19 @@ def write_text_atomic(
     return destination
 
 
-def write_parquet_atomic(frame: pl.DataFrame, path: str | Path, compression: str) -> None:
+def write_parquet_atomic(
+    frame: pl.DataFrame,
+    path: str | Path,
+    compression: str,
+    *,
+    row_group_size: int | None = None,
+) -> None:
     """Write one Parquet artifact atomically with a declared compression codec."""
     destination = Path(path)
     temporary = _temporary_path(destination)
-    frame.write_parquet(temporary, compression=compression)
+    frame.write_parquet(
+        temporary, compression=compression, row_group_size=row_group_size
+    )
     os.replace(temporary, destination)
 
 

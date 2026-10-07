@@ -8,16 +8,8 @@ checkpoint prepare_generation_scope:
         population_vcf_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.population_vcf),
         score_snv=GENERATION_CONTEXT.plan.score_snv.data,
         score_snv_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.score_snv),
-        score_indel=(
-            [GENERATION_CONTEXT.plan.score_indel.data]
-            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
-            else []
-        ),
-        score_indel_index=(
-            generation_index(GENERATION_CONTEXT.plan.score_indel)
-            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
-            else []
-        ),
+        score_indel=SCORE_INDEL,
+        score_indel_index=SCORE_INDEL_INDEX,
         exclusion=(
             [GENERATION_CONTEXT.plan.exclusion.data]
             if GENERATION_CONTEXT.plan.exclusion.data
@@ -38,8 +30,7 @@ checkpoint prepare_generation_scope:
         units=GENERATION_CONTEXT.scope_paths["units"],
         unit_intervals=GENERATION_CONTEXT.scope_paths["unit_intervals"],
         masked_unit_intervals=GENERATION_CONTEXT.scope_paths["masked_unit_intervals"],
-        mask=GENERATION_CONTEXT.scope_paths["effective_mask"],
-        resource_identities=GENERATION_CONTEXT.scope_paths["resource_identities"]
+        mask=GENERATION_CONTEXT.scope_paths["effective_mask"]
     params:
         minimum_retained_fraction=WORKFLOW_PLAN.generation_settings.minimum_retained_fraction,
         partition_size=GENERATION_CONTEXT.plan.partition_size_bp,
@@ -63,6 +54,41 @@ checkpoint prepare_generation_scope:
         str(GENERATION_SCRIPT_DIR / "prepare_generation_scope.py")
 
 
+rule hash_generation_resources:
+    """Hash raw generation resources without delaying checkpoint expansion."""
+    input:
+        population_vcf=GENERATION_CONTEXT.plan.population_vcf.data,
+        score_snv=GENERATION_CONTEXT.plan.score_snv.data,
+        score_indel=SCORE_INDEL,
+        exclusion=(
+            [GENERATION_CONTEXT.plan.exclusion.data]
+            if GENERATION_CONTEXT.plan.exclusion.data
+            else []
+        ),
+        testing_units=GENERATION_CONTEXT.plan.testing_unit_bed.data,
+        par_regions=GENERATION_CONTEXT.plan.par_regions.data,
+        exclusions=lambda wc: generation_exclusion_data(),
+        fasta=GENERATION_CONTEXT.plan.fasta.data,
+        mutation_rate=lambda wc: generation_mutation_rate_data(),
+        mutation_rate_indel=lambda wc: GENERATION_CONTEXT.indel_mutation_rate_data()
+    output:
+        resource_identities=GENERATION_CONTEXT.scope_paths["resource_identities"]
+    params:
+        exclusions=GENERATION_CONTEXT.exclusion_paths_by_id()
+    threads: 1
+    resources:
+        mem_mb=policy_resources("hash_generation_resources").mem_mb,
+        runtime=policy_resources("hash_generation_resources").runtime
+    conda:
+        env("validation")
+    envmodules: *mod("validation")
+    container: sif("validation")
+    log:
+        str(GENERATION_CONTEXT.log_dir / "hash_generation_resources.log")
+    script:
+        str(GENERATION_SCRIPT_DIR / "hash_generation_resources.py")
+
+
 rule prepare_generation_partition:
     """Create allele states, unit memberships, and scores for one genomic window."""
     input:
@@ -74,16 +100,8 @@ rule prepare_generation_partition:
         population_vcf_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.population_vcf),
         score_snv=GENERATION_CONTEXT.plan.score_snv.data,
         score_snv_index=lambda wc: generation_index(GENERATION_CONTEXT.plan.score_snv),
-        score_indel=(
-            [GENERATION_CONTEXT.plan.score_indel.data]
-            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
-            else []
-        ),
-        score_indel_index=(
-            generation_index(GENERATION_CONTEXT.plan.score_indel)
-            if WORKFLOW_PLAN.model.include_indels and GENERATION_CONTEXT.plan.score_indel
-            else []
-        ),
+        score_indel=SCORE_INDEL,
+        score_indel_index=SCORE_INDEL_INDEX,
         fasta=GENERATION_CONTEXT.plan.fasta.data,
         fasta_fai=GENERATION_CONTEXT.plan.fasta.fai
     output:

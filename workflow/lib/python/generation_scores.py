@@ -8,9 +8,8 @@ from pathlib import Path
 
 import polars as pl
 
-from generation_population import indexed_lines
+from generation_population import window_records
 from generation_prep import intersect_intervals
-from genomic_contracts import allele_key
 
 
 ALLELE_COLUMNS = ["CHROM", "POS", "REF", "ALT"]
@@ -37,14 +36,16 @@ def score_rows(
         return pl.DataFrame(schema=SCORE_SCHEMA)
     region_starts = [region_start for region_start, _ in regions]
     records: list[dict[str, object]] = []
-    for raw in indexed_lines(path, index, chromosome, start, end, intervals=regions):
-        if not raw.strip() or raw.startswith("#"):
-            continue
-        fields = raw.rstrip("\n").split("\t")
-        if len(fields) < 6:
-            raise ValueError("Score resource needs at least six CADD columns")
-        key = allele_key(fields[0], int(fields[1]), fields[2], fields[3])
-        if key[0] != chromosome or not start < key[1] <= end or len(key[2]) != 1 or len(key[3]) != 1:
+    for _, fields, key in window_records(
+        path,
+        index,
+        chromosome,
+        start,
+        end,
+        min_columns=6,
+        intervals=regions,
+    ):
+        if len(key[2]) != 1 or len(key[3]) != 1:
             continue
         # Tabix queries are zero-based, half-open; CADD positions are one-based.
         region_index = bisect_right(region_starts, key[1] - 1) - 1
@@ -77,15 +78,15 @@ def mutation_rate_rows(
         return pl.DataFrame(schema=schema)
     region_starts = [region_start for region_start, _ in regions]
     records: list[dict[str, object]] = []
-    for raw in indexed_lines(path, index, chromosome, start, end, intervals=regions):
-        if not raw.strip() or raw.startswith("#"):
-            continue
-        fields = raw.rstrip("\n").split("\t")
-        if len(fields) < 5:
-            raise ValueError("Mutation-rate resource needs CHROM, POS, REF, ALT, and mu")
-        key = allele_key(fields[0], int(fields[1]), fields[2], fields[3])
-        if key[0] != chromosome or not start < key[1] <= end:
-            continue
+    for _, fields, key in window_records(
+        path,
+        index,
+        chromosome,
+        start,
+        end,
+        min_columns=5,
+        intervals=regions,
+    ):
         region_index = bisect_right(region_starts, key[1] - 1) - 1
         if region_index < 0 or key[1] > regions[region_index][1]:
             continue

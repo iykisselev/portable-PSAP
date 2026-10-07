@@ -10,51 +10,30 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections import defaultdict
 from pathlib import Path
-import gzip
 
 from genomic_contracts import canonical_chromosome
-
-
-def _open(path: str | Path):
-    file_path = Path(path)
-    return gzip.open(file_path, "rt", encoding="utf-8") if file_path.suffix == ".gz" else file_path.open(encoding="utf-8")
+from io_contracts import iter_bed
 
 
 def read_bed_units(path: str | Path):
     units: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
     unit_chromosomes: dict[str, str] = {}
-    with _open(path) as handle:
-        for number, raw in enumerate(handle, start=1):
-            if not raw.strip() or raw.startswith(("#", "track", "browser")):
-                continue
-            fields = raw.rstrip().split("\t")
-            if len(fields) < 4:
-                raise ValueError(f"Testing-unit BED line {number} needs four columns")
-            chrom, start_text, end_text, unit = fields[:4]
-            start, end = int(start_text), int(end_text)
-            if start < 0 or end <= start or not unit:
-                raise ValueError(f"Invalid testing-unit BED line {number}")
-            canonical = canonical_chromosome(chrom)
-            previous = unit_chromosomes.setdefault(unit, canonical)
-            if previous != canonical:
-                raise ValueError(f"Testing unit {unit!r} spans chromosomes")
-            units[unit].append((canonical, start, end))
+    for row in iter_bed(path, 4):
+        unit = row.fields[3].strip()
+        if not unit:
+            raise ValueError(f"Invalid testing-unit BED line {row.line_number}")
+        canonical = canonical_chromosome(row.chromosome)
+        previous = unit_chromosomes.setdefault(unit, canonical)
+        if previous != canonical:
+            raise ValueError(f"Testing unit {unit!r} spans chromosomes")
+        units[unit].append((canonical, row.start, row.end))
     return units
 
 
 def read_intervals(path: str | Path):
     intervals: dict[str, list[tuple[int, int]]] = defaultdict(list)
-    with _open(path) as handle:
-        for number, raw in enumerate(handle, start=1):
-            if not raw.strip() or raw.startswith(("#", "track", "browser")):
-                continue
-            fields = raw.rstrip().split("\t")
-            if len(fields) < 3:
-                raise ValueError(f"Interval BED line {number} needs three columns")
-            start, end = int(fields[1]), int(fields[2])
-            if start < 0 or end <= start:
-                raise ValueError(f"Invalid interval BED line {number}")
-            intervals[canonical_chromosome(fields[0])].append((start, end))
+    for row in iter_bed(path, 3):
+        intervals[canonical_chromosome(row.chromosome)].append((row.start, row.end))
     return intervals
 
 

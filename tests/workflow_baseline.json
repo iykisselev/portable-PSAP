@@ -24,9 +24,9 @@
   },
   "generate": {
     "manifest": "tests/null_distribution/generate.run.yaml",
-    "initial_dry_run_jobs": 4,
+    "initial_dry_run_jobs": 5,
     "checkpoint_target": "prepare_generation_scope",
-    "resolved_dry_run_jobs": 8,
+    "resolved_dry_run_jobs": 9,
     "terminal_outputs": [
       "generate/fixture/bundle/validation.ok"
     ],
@@ -38,6 +38,7 @@
     ],
     "required_rules": [
       "prepare_generation_scope",
+      "hash_generation_resources",
       "calculate_partition_null_distribution",
       "reduce_null_distribution_bucket",
       "finalize_null_distribution_bundle",
@@ -47,10 +48,10 @@
   },
   "full": {
     "manifest": "tests/null_distribution/full.run.yaml",
-    "initial_dry_run_jobs": 31,
+    "initial_dry_run_jobs": 32,
     "checkpoint_target": "prepare_generation_scope",
-    "resolved_dry_run_jobs": 35,
-    "fresh_execution_steps": 36,
+    "resolved_dry_run_jobs": 36,
+    "fresh_execution_steps": 37,
     "resume_dry_run_jobs": 0,
     "terminal_outputs": [
       "generate/fixture/bundle/validation.ok",
@@ -66,6 +67,7 @@
     ],
     "required_rules": [
       "prepare_generation_scope",
+      "hash_generation_resources",
       "reduce_null_distribution_bucket",
       "validate_null_distribution_bundle",
       "validate_model",

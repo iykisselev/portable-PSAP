@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import polars as pl
 
@@ -13,7 +14,12 @@ import polars as pl
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
-from bundle_finalization import classify_units, variant_class_counts  # noqa: E402
+import bundle_finalization  # noqa: E402
+from bundle_finalization import (  # noqa: E402
+    classify_units,
+    collect_finalization_allele_rows,
+    variant_class_counts,
+)
 
 class BundleFinalizationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -114,6 +120,54 @@ class BundleFinalizationTests(unittest.TestCase):
                 },
                 variant_class_counts([states], [audit]),
             )
+
+    def test_finalization_collects_public_allele_rows_and_v3_counts_in_one_pass(self) -> None:
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            states = directory / "states.parquet"
+            audit = directory / "audit.parquet"
+            pl.DataFrame(
+                {
+                    "CHROM": ["1", "1", "X"], "POS": [1, 2, 3],
+                    "REF": ["A", "C", "G"], "ALT": ["T", "G", "GA"],
+                    "allele_state": ["observed", "rejected", "absent"],
+                    "state_reason": ["present", "filtered", "not_present"],
+                    "af_zero_imputed_tags": [[], ["AF"], ["AF_FEMALE"]],
+                    "variant_class": ["snv", "snv", "indel"],
+                }
+            ).write_parquet(states)
+            pl.DataFrame(
+                {
+                    "CHROM": ["X"], "POS": [4], "REF": ["AA"], "ALT": ["A"],
+                    "rejection_reason": ["crosses_mask_boundary"],
+                }
+            ).write_parquet(audit)
+
+            with patch.object(
+                bundle_finalization,
+                "parquet_rows",
+                wraps=bundle_finalization.parquet_rows,
+            ) as reader:
+                rejected, zero_imputed, audit_rows, counts = collect_finalization_allele_rows(
+                    [states], [audit], include_variant_class_counts=True
+                )
+
+            self.assertEqual([("1", 2, "C", "G", "filtered")], rejected)
+            self.assertEqual(
+                [("1", 2, "C", "G", ["AF"]), ("X", 3, "G", "GA", ["AF_FEMALE"])],
+                zero_imputed,
+            )
+            self.assertEqual(
+                [("X", 4, "AA", "A", "crosses_mask_boundary")], audit_rows,
+            )
+            self.assertEqual(
+                {
+                    "snv": {"retained": 1, "rejected": 1, "observed": 1, "absent": 0},
+                    "indel": {"retained": 1, "rejected": 1, "observed": 0, "absent": 1},
+                },
+                counts,
+            )
+            self.assertEqual(2, reader.call_count)
 
 
 if __name__ == "__main__":

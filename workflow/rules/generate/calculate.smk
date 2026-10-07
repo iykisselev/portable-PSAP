@@ -47,10 +47,8 @@ rule reduce_null_distribution_bucket:
     output:
         lookup_het=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.het.tsv"),
         lookup_hom=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.hom.tsv"),
-        lookup_hem=(
+        lookup_hem=hem_artifact(
             str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.hem_chrX.tsv")
-            if GENERATION_CONTEXT.hem_enabled
-            else []
         ),
         diagnostics=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.diagnostics.tsv")
     params:

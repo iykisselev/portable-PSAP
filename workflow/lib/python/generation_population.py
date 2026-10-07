@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gzip
 import math
 from pathlib import Path
 from typing import Iterator
@@ -12,6 +11,7 @@ import polars as pl
 
 from genomic_contracts import allele_key, canonical_chromosome
 from generation_resource_policy import check_unindexed_fixture
+from io_contracts import open_text
 
 try:
     import pysam
@@ -25,14 +25,6 @@ POPULATION_SCHEMA = {
     "af_female": pl.Float64, "af_male": pl.Float64, "state_reason": pl.String,
     "af_zero_imputed_tags": pl.String,
 }
-
-
-def open_text(path: str | Path):
-    """Open plain or gzip-compressed text resources with the same iterator API."""
-    resource = Path(path)
-    if resource.suffix == ".gz":
-        return gzip.open(resource, "rt", encoding="utf-8")
-    return resource.open(encoding="utf-8")
 
 
 def indexed_lines(
@@ -66,6 +58,37 @@ def indexed_lines(
     check_unindexed_fixture(path)
     with open_text(path) as handle:
         yield from handle
+
+
+def window_records(
+    path: str | Path,
+    index: str | Path | None,
+    chromosome: str,
+    start: int,
+    end: int,
+    *,
+    min_columns: int,
+    intervals: list[tuple[int, int]] | None = None,
+) -> Iterator[tuple[int, list[str], tuple[str, int, str, str]]]:
+    """Yield parsed allele rows owned by the one-based window ``(start, end]``.
+
+    The indexed query remains zero-based and half-open, while resource alleles
+    are VCF-style one-based positions.  ``intervals`` narrows indexed fetches;
+    callers that need exact disjoint-interval membership retain that policy.
+    """
+    chromosome = canonical_chromosome(chromosome)
+    for line_number, raw in enumerate(
+        indexed_lines(path, index, chromosome, start, end, intervals=intervals),
+        start=1,
+    ):
+        if not raw.strip() or raw.startswith("#"):
+            continue
+        fields = raw.rstrip("\n").split("\t")
+        if len(fields) < min_columns:
+            raise ValueError(f"{path}: line {line_number} needs {min_columns} columns")
+        key = allele_key(fields[0], int(fields[1]), fields[2], fields[3])
+        if key[0] == chromosome and start < key[1] <= end:
+            yield line_number, fields, key
 
 
 def population_info_definition(path: str | Path, info_tag: str) -> tuple[str, str]:

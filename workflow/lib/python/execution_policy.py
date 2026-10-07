@@ -36,6 +36,7 @@ class RuleResourceCallbacks:
 RULE_POLICY_NAMES = frozenset(
     {
         "prepare_generation_scope",
+        "hash_generation_resources",
         "prepare_generation_partition",
         "calculate_partition_null_distribution",
         "reduce_null_distribution_bucket",
@@ -80,8 +81,9 @@ TABLE_RESOURCE_POLICY_NAMES: Mapping[str, str] = MappingProxyType(
 EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
     {
         "prepare_generation_scope": ExecutionPolicy(4096, 120),
+        "hash_generation_resources": ExecutionPolicy(1024, 720),
         "prepare_generation_partition": ExecutionPolicy(16384, 360),
-        "calculate_partition_null_distribution": ExecutionPolicy(8192, 240),
+        "calculate_partition_null_distribution": ExecutionPolicy(16384, 240),
         "reduce_null_distribution_bucket": ExecutionPolicy(4096, 120),
         "finalize_null_distribution_bundle": ExecutionPolicy(2048, 120),
         "validate_null_distribution_bundle": ExecutionPolicy(1024, 120),

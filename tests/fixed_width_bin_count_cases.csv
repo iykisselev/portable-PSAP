@@ -1,0 +1,8 @@
+case,score_max,bin_width,expected_bin_count
+exact_decimal_boundary,0.3,0.1,3
+within_float_tolerance,0.30000000000000004,0.1,3
+outside_float_tolerance,0.30000000000001,0.1,4
+below_integer_boundary,0.9999999999999999,0.1,10
+above_integer_boundary,1.0000000000001,0.1,11
+production_default_grid,70,0.05,1400
+non_integral_ratio,10,3,4

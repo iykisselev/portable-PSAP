@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from generation_manifests import read_partition_manifest
-from genomic_contracts import canonical_chromosome
+from genomic_contracts import read_fai
 
 
 @dataclass(frozen=True)
@@ -21,21 +21,8 @@ class GenomePartition:
 
 
 def read_fasta_index(path: str | Path) -> dict[str, tuple[str, int]]:
-    """Return canonical contigs, source FASTA names, and lengths from a FAI."""
-    contigs: dict[str, tuple[str, int]] = {}
-    with Path(path).open(encoding="utf-8") as handle:
-        for line_number, raw in enumerate(handle, start=1):
-            fields = raw.rstrip("\n").split("\t")
-            if len(fields) < 2:
-                raise ValueError(f"FAI line {line_number} needs a name and length")
-            chromosome = canonical_chromosome(fields[0])
-            if chromosome in contigs:
-                raise ValueError(f"FAI has duplicate canonical contig {chromosome!r}")
-            length = int(fields[1])
-            if length <= 0:
-                raise ValueError(f"FAI contig {fields[0]!r} has a non-positive length")
-            contigs[chromosome] = (fields[0], length)
-    return contigs
+    """Compatibility view of the shared FAI records for partitioning."""
+    return {chromosome: (record.name, record.length) for chromosome, record in read_fai(path).items()}
 
 
 def build_partitions(

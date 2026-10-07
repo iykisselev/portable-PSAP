@@ -8,6 +8,8 @@ than silently reinterpret an existing certificate.
 
 from __future__ import annotations
 
+import math
+import sys
 from types import MappingProxyType
 from typing import Mapping
 
@@ -56,6 +58,32 @@ GENERATED_ROLES = ("het", "hom", "hem_chrX")
 
 class BundleContractError(ValueError):
     """Raised when a bundle cannot be read or upgraded under this release."""
+
+
+def fixed_width_bin_count(score_max: float, bin_width: float) -> int:
+    """Return the bin count for the ``fixed_width_decimal_v1`` grid.
+
+    The contract accepts ordinary floating-point metadata, but treats a ratio
+    within 64 ulps of an integer boundary as that integer.  This prevents
+    binary representations such as ``0.3 / 0.1`` from spuriously allocating
+    an extra bin, and is deliberately identical to R's
+    ``fixed_width_bin_count`` implementation.
+    """
+    try:
+        maximum = float(score_max)
+        width = float(bin_width)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("score_max and bin_width must be positive finite numbers") from exc
+    if not math.isfinite(maximum) or maximum <= 0 or not math.isfinite(width) or width <= 0:
+        raise ValueError("score_max and bin_width must be positive finite numbers")
+    scaled = maximum / width
+    if not math.isfinite(scaled):
+        raise ValueError("score_max / bin_width must be finite")
+    nearest = round(scaled)
+    tolerance = 64 * sys.float_info.epsilon * max(1.0, abs(scaled))
+    if abs(scaled - nearest) <= tolerance:
+        scaled = float(nearest)
+    return math.ceil(scaled)
 
 
 def is_supported_contract(contract: str) -> bool:

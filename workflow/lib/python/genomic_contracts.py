@@ -8,6 +8,9 @@ readers do not develop subtly different keys.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
+
 
 DNA_ALLELES = frozenset({"A", "C", "G", "T"})
 VARIANT_CLASSES = frozenset({"snv", "indel", "unsupported"})
@@ -15,6 +18,46 @@ VARIANT_CLASSES = frozenset({"snv", "indel", "unsupported"})
 
 class AlleleContractError(ValueError):
     """Raised when an allele cannot satisfy the shared VCF identity contract."""
+
+
+@dataclass(frozen=True)
+class FaiRecord:
+    """One canonicalized FASTA-index record with byte-addressing layout."""
+
+    name: str
+    length: int
+    offset: int
+    line_bases: int
+    line_bytes: int
+
+
+def read_fai(path: str | Path) -> dict[str, FaiRecord]:
+    """Read a strict FAI into canonical contig keys.
+
+    A five-column FAI is required even when a caller needs only contig lengths:
+    accepting an incomplete index in one stage and rejecting it in another
+    produces failures much later than the resource boundary.
+    """
+    records: dict[str, FaiRecord] = {}
+    with Path(path).open(encoding="utf-8") as handle:
+        for line_number, raw in enumerate(handle, start=1):
+            fields = raw.rstrip("\n").split("\t")
+            if len(fields) < 5:
+                raise ValueError(f"FAI line {line_number} needs five columns")
+            name = fields[0].strip()
+            if not name:
+                raise ValueError(f"FAI line {line_number} has an empty contig name")
+            try:
+                length, offset, line_bases, line_bytes = map(int, fields[1:5])
+            except ValueError as exc:
+                raise ValueError(f"FAI line {line_number} has non-integer layout values") from exc
+            if length <= 0 or offset < 0 or line_bases <= 0 or line_bytes < line_bases:
+                raise ValueError(f"FAI line {line_number} has an invalid contig layout")
+            chromosome = canonical_chromosome(name)
+            if chromosome in records:
+                raise ValueError(f"FAI has duplicate canonical contig {chromosome!r}")
+            records[chromosome] = FaiRecord(name, length, offset, line_bases, line_bytes)
+    return records
 
 
 def canonical_chromosome(chromosome: str) -> str:

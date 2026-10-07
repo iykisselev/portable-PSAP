@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
+import generation_manifests  # noqa: E402
 from generation_manifests import (  # noqa: E402
     BUCKET_MANIFEST_SCHEMA_VERSION,
     PARTITION_MANIFEST_SCHEMA_VERSION,
@@ -124,6 +127,70 @@ class GenerationManifestTests(unittest.TestCase):
             )
             self.assertEqual(("00000",), bucket_ids(path))
 
+    def test_bucket_manifest_is_validated_once_per_published_version(self) -> None:
+        with TemporaryDirectory() as temporary:
+            path = self.write(
+                Path(temporary) / "buckets.json",
+                {
+                    "schema_version": BUCKET_MANIFEST_SCHEMA_VERSION,
+                    "buckets": [{
+                        "bucket_id": "00000", "ordinal": 0,
+                        "unit_ids": ["UNIT_A"],
+                        "partition_ids": ["1_000000000000_000000000010"],
+                    }],
+                },
+            )
+            with patch.object(
+                generation_manifests,
+                "_read_bucket_manifest_uncached",
+                wraps=generation_manifests._read_bucket_manifest_uncached,
+            ) as reader:
+                self.assertEqual(("00000",), bucket_ids(path))
+                self.assertEqual("00000", bucket_from_manifest(path, "00000").identifier)
+                self.assertEqual(("00000",), bucket_ids(path))
+                reader.assert_called_once()
+
+                previous = path.stat()
+                self.write(
+                    path,
+                    {
+                        "schema_version": BUCKET_MANIFEST_SCHEMA_VERSION,
+                        "buckets": [{
+                            "bucket_id": "00000", "ordinal": 0,
+                            "unit_ids": ["UNIT_B"],
+                            "partition_ids": ["1_000000000000_000000000010"],
+                        }],
+                    },
+                )
+                os.utime(
+                    path,
+                    ns=(previous.st_atime_ns, previous.st_mtime_ns + 1_000_000_000),
+                )
+                self.assertEqual(("UNIT_B",), bucket_from_manifest(path, "00000").unit_ids)
+                self.assertEqual(2, reader.call_count)
+
+    def test_partition_manifest_is_validated_once_per_published_version(self) -> None:
+        with TemporaryDirectory() as temporary:
+            path = self.write(
+                Path(temporary) / "partitions.json",
+                {
+                    "schema_version": PARTITION_MANIFEST_SCHEMA_VERSION,
+                    "partitions": [{
+                        "partition_id": "1_000000000000_000000000010",
+                        "chromosome": "1", "start": 0, "end": 10, "ordinal": 0,
+                    }],
+                },
+            )
+            with patch.object(
+                generation_manifests,
+                "_read_partition_manifest_uncached",
+                wraps=generation_manifests._read_partition_manifest_uncached,
+            ) as reader:
+                first = read_partition_manifest(path)
+                second = read_partition_manifest(str(path))
+                self.assertIs(first, second)
+                reader.assert_called_once()
+
     def test_sparse_bucket_map_omits_nonoverlapping_partition_pairs(self) -> None:
         partitions = [
             GenomePartition("1_000000000000_000000000010", "1", 0, 10, 0),
@@ -149,7 +216,9 @@ class GenerationManifestTests(unittest.TestCase):
     def test_partitions_cover_only_windows_with_eligible_testing_units(self) -> None:
         with TemporaryDirectory() as temporary:
             fasta_index = Path(temporary) / "reference.fa.fai"
-            fasta_index.write_text("1\t30\t0\t0\t0\nX\t30\t0\t0\t0\n", encoding="utf-8")
+            fasta_index.write_text(
+                "1\t30\t3\t30\t31\nX\t30\t37\t30\t31\n", encoding="utf-8"
+            )
 
             partitions = build_partitions(
                 fasta_index,
@@ -202,7 +271,7 @@ class GenerationManifestTests(unittest.TestCase):
     def test_partition_builder_includes_indel_owner_halo(self) -> None:
         with TemporaryDirectory() as temporary:
             fasta_index = Path(temporary) / "reference.fa.fai"
-            fasta_index.write_text("1\t30\t0\t0\t0\n", encoding="utf-8")
+            fasta_index.write_text("1\t30\t3\t30\t31\n", encoding="utf-8")
             partitions = build_partitions(
                 fasta_index,
                 [("1", 10, 12)],

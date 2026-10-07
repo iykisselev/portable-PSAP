@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from decimal import Decimal, ROUND_CEILING
 import math
 import sys
 from pathlib import Path
 
+import numpy as np
 import polars as pl
+
+from bundle_contract import fixed_width_bin_count
 
 
 def fixed_width_bin_expression(score_max: float, bin_width: float) -> pl.Expr:
     """Return the producer-side form of the canonical decimal boundary rule."""
     if score_max <= 0 or bin_width <= 0:
         raise ValueError("score_max and bin_width must be positive")
-    bin_count = int((Decimal(str(score_max)) / Decimal(str(bin_width))).to_integral_value(rounding=ROUND_CEILING))
+    bin_count = fixed_width_bin_count(score_max, bin_width)
     score = pl.col("score").clip(0, score_max)
     scaled = score / bin_width
     nearest = scaled.round(0)
@@ -84,7 +86,7 @@ def statistics_for_role(events: pl.DataFrame, role: str, score_max: float, bin_w
 
 
 def distribution(statistics: dict[int, tuple[int, float, int]], bin_count: int) -> tuple[str, float, int, list[float] | None]:
-    """Calculate a conditional survival row from additive per-bin statistics."""
+    """Reference scalar implementation of conditional survival calculation."""
     certain = [0] * bin_count
     log_none = [0.0] * bin_count
     event_count = 0
@@ -112,7 +114,7 @@ def distribution(statistics: dict[int, tuple[int, float, int]], bin_count: int) 
 def merge_statistics(
     files: list[Path],
 ) -> dict[tuple[str, str], dict[int, tuple[int, float, int, int, int]]]:
-    """Reduce partition files in manifest order with compensated log summation."""
+    """Reference scalar reduction using manifest-ordered Kahan summation."""
     accumulated: dict[tuple[str, str, int], list[float | int]] = {}
     for path in files:
         for (
@@ -149,3 +151,133 @@ def merge_statistics(
             int(snv_event_count), int(indel_event_count),
         )
     return grouped
+
+
+AGGREGATED_STATISTICS_SCHEMA = {
+    "testing_unit_id": pl.String,
+    "role": pl.String,
+    "bin": pl.Int64,
+    "certain_count": pl.Int64,
+    "log_none_sum": pl.Float64,
+    "event_count": pl.Int64,
+    "snv_event_count": pl.Int64,
+    "indel_event_count": pl.Int64,
+}
+
+
+def _fsum_group(series: list[pl.Series]) -> float:
+    """Accurately reduce one Polars group without iterating raw Parquet rows."""
+    return math.fsum(float(value) for value in series[0])
+
+
+def aggregate_statistics_vectorized(files: list[Path]) -> pl.DataFrame:
+    """Aggregate all partition shards with Polars and accurate group log sums."""
+    if not files:
+        return pl.DataFrame(schema=AGGREGATED_STATISTICS_SCHEMA)
+    return (
+        pl.concat([pl.scan_parquet(path) for path in files], how="vertical")
+        .group_by("testing_unit_id", "role", "bin")
+        .agg(
+            pl.col("certain_count").sum().alias("certain_count"),
+            pl.map_groups(
+                ["log_none_sum"],
+                _fsum_group,
+                return_dtype=pl.Float64,
+                returns_scalar=True,
+            ).alias("log_none_sum"),
+            pl.col("event_count").sum().alias("event_count"),
+            pl.col("snv_event_count").sum().alias("snv_event_count"),
+            pl.col("indel_event_count").sum().alias("indel_event_count"),
+        )
+        .collect(engine="streaming")
+        .select(*AGGREGATED_STATISTICS_SCHEMA)
+    )
+
+
+def vectorized_lookup_rows(
+    statistics: pl.DataFrame,
+    units: list[str],
+    roles: tuple[str, ...],
+    bin_count: int,
+) -> tuple[dict[str, list[tuple[object, ...]]], list[tuple[object, ...]]]:
+    """Calculate every bounded unit/role survival row with dense NumPy arrays."""
+    if bin_count <= 0:
+        raise ValueError("bin_count must be positive")
+    unit_index = {unit: index for index, unit in enumerate(units)}
+    if len(unit_index) != len(units):
+        raise ValueError("Lookup bucket contains duplicate testing-unit identifiers")
+    lookup_rows: dict[str, list[tuple[object, ...]]] = {role: [] for role in roles}
+    diagnostics: list[tuple[object, ...]] = []
+    unit_count = len(units)
+    role_results: dict[
+        str,
+        tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    ] = {}
+    for role in roles:
+        role_statistics = statistics.filter(pl.col("role") == role)
+        log_none = np.zeros((unit_count, bin_count), dtype=np.float64)
+        certain = np.zeros((unit_count, bin_count), dtype=np.bool_)
+        event_count = np.zeros(unit_count, dtype=np.int64)
+        snv_event_count = np.zeros(unit_count, dtype=np.int64)
+        indel_event_count = np.zeros(unit_count, dtype=np.int64)
+        if not role_statistics.is_empty():
+            try:
+                row_indices = np.fromiter(
+                    (unit_index[str(unit)] for unit in role_statistics["testing_unit_id"]),
+                    dtype=np.intp,
+                    count=role_statistics.height,
+                )
+            except KeyError as exc:
+                raise ValueError(
+                    "Partition statistics contain a testing unit outside the requested bucket"
+                ) from exc
+            column_indices = role_statistics["bin"].to_numpy().astype(np.intp) - 1
+            if np.any(column_indices < 0) or np.any(column_indices >= bin_count):
+                raise ValueError("Partition statistics contain a bin outside the configured range")
+            log_none[row_indices, column_indices] = role_statistics["log_none_sum"].to_numpy()
+            certain[row_indices, column_indices] = role_statistics["certain_count"].to_numpy() > 0
+            np.add.at(event_count, row_indices, role_statistics["event_count"].to_numpy())
+            np.add.at(snv_event_count, row_indices, role_statistics["snv_event_count"].to_numpy())
+            np.add.at(indel_event_count, row_indices, role_statistics["indel_event_count"].to_numpy())
+        has_event = event_count > 0
+        has_certain = certain.any(axis=1)
+        total_log_none = np.fromiter(
+            (math.fsum(row) for row in log_none), dtype=np.float64, count=unit_count
+        )
+        event_mass = -np.expm1(total_log_none)
+        event_mass[has_certain] = 1.0
+        valid = (
+            has_event
+            & np.isfinite(event_mass)
+            & (event_mass > 0.0)
+            & (event_mass <= 1.0)
+        )
+        status = np.full(unit_count, "numerical_failure", dtype=object)
+        status[~has_event] = "zero_event_mass"
+        status[valid] = "ok"
+        tail_log_none = np.cumsum(log_none[:, ::-1], axis=1)[:, ::-1]
+        tail_mass = -np.expm1(tail_log_none)
+        tail_mass[np.cumsum(certain[:, ::-1], axis=1)[:, ::-1] > 0] = 1.0
+        survival = np.zeros((unit_count, bin_count), dtype=np.float64)
+        np.divide(
+            tail_mass,
+            event_mass[:, np.newaxis],
+            out=survival,
+            where=valid[:, np.newaxis],
+        )
+        np.clip(survival, 0.0, 1.0, out=survival)
+        role_results[role] = (
+            status, event_mass, event_count, snv_event_count, indel_event_count, survival,
+        )
+    for index, unit in enumerate(units):
+        for role in roles:
+            status, event_mass, event_count, snv_event_count, indel_event_count, survival = role_results[role]
+            diagnostics.append(
+                (
+                    unit, role, float(event_mass[index]), str(status[index]),
+                    int(event_count[index]), int(snv_event_count[index]), int(indel_event_count[index]),
+                )
+            )
+            if status[index] == "ok":
+                lookup_rows[role].append((unit, *survival[index].tolist()))
+    return lookup_rows, diagnostics

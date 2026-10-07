@@ -9,6 +9,7 @@ from generation_bindings import (
     PartitionStatisticsOutputs,
     PartitionStatisticsParameters,
 )
+from generation_event_assembly import assign_effective_frequencies, role_event_frames
 from generation_manifests import bucket_from_manifest
 from generation_partitions import partition_from_manifest
 from generation_probability import statistics_for_role
@@ -83,29 +84,13 @@ def calculate_partition_statistics(
             f"in {partition.identifier}"
         )
     events = events.drop("variant_class_score", "variant_class_state")
-    if params.x_af_policy not in {"sex_specific", "overall_proxy"}:
-        raise ValueError(f"Unsupported X chromosome AF policy {params.x_af_policy!r}")
-    female_af = pl.when(pl.col("CHROM") == "X").then(
-        pl.col("af_female") if params.x_af_policy == "sex_specific" else pl.col("af_overall")
-    ).otherwise(pl.col("af_overall"))
-    male_af = pl.col("af_male") if params.x_af_policy == "sex_specific" else pl.col("af_overall")
-    if params.unobserved_policy == "zero":
-        events = events.with_columns(
-            pl.when(pl.col("allele_state") == "absent").then(pl.lit(0.0)).otherwise(female_af).alias("effective_af_standard"),
-            pl.when(pl.col("allele_state") == "absent").then(pl.lit(0.0)).otherwise(male_af).alias("effective_af_hem"),
-        )
-    else:
+    if params.unobserved_policy == "mutation_rate":
         snv_intervals = candidate_intervals(events, "snv")
         rates = mutation_rate_rows(
             inputs.mutation_rate, inputs.mutation_rate_index,
             partition.chromosome, partition.start, partition.end,
             intervals=snv_intervals,
         )
-        needs_snv_rate = (pl.col("allele_state") == "absent") & (pl.col("variant_class") != "indel")
-        if params.x_mutation_rate_policy == "reject" and events.filter((pl.col("CHROM") == "X") & needs_snv_rate).height:
-            raise ValueError(
-                "mutation_rate fallback encountered absent chrX alleles, but generation_settings.x_chromosome.mutation_rate_policy is reject"
-            )
         events = events.join(rates, on=ALLELE_COLUMNS, how="left")
         if inputs.mutation_rate_indel is not None:
             indel_intervals = candidate_intervals(events, "indel")
@@ -120,20 +105,13 @@ def calculate_partition_statistics(
             events = events.join(indel_rates, on=ALLELE_COLUMNS, how="left")
         else:
             events = events.with_columns(pl.lit(None, dtype=pl.Float64).alias("mu_indel"))
-        missing_rates = events.filter(needs_snv_rate & pl.col("mu").is_null())
-        if missing_rates.height:
-            raise ValueError(f"Mutation-rate resource is missing {missing_rates.height} absent alleles in {partition.identifier}")
-        events = events.with_columns(
-            pl.when((pl.col("allele_state") == "absent") & (pl.col("variant_class") == "indel")).then(pl.col("mu_indel").fill_null(0.0))
-            .when(pl.col("allele_state") == "absent").then(pl.col("mu")).otherwise(female_af).alias("effective_af_standard"),
-            pl.when((pl.col("allele_state") == "absent") & (pl.col("variant_class") == "indel")).then(pl.col("mu_indel").fill_null(0.0))
-            .when(pl.col("allele_state") == "absent").then(pl.col("mu")).otherwise(male_af).alias("effective_af_hem"),
-        )
-    role_events = {
-        "het": events.with_columns(pl.col("effective_af_standard").alias("effective_af")),
-        "hom": events.with_columns(pl.col("effective_af_standard").alias("effective_af")),
-        "hem_chrX": events.filter(pl.col("CHROM") == "X").with_columns(pl.col("effective_af_hem").alias("effective_af")),
-    }
+    events = assign_effective_frequencies(
+        events,
+        unobserved_policy=params.unobserved_policy,
+        x_af_policy=params.x_af_policy,
+        x_mutation_rate_policy=params.x_mutation_rate_policy,
+    )
+    role_events = role_event_frames(events, params.roles)
     statistics = pl.concat(
         [statistics_for_role(role_events[role], role, params.score_max, params.bin_width) for role in params.roles],
         how="vertical",

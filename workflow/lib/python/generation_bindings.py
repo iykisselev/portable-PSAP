@@ -44,6 +44,12 @@ class GenerationScopeOutputs:
     unit_intervals: PathLike
     masked_unit_intervals: PathLike
     mask: PathLike
+
+
+@dataclass(frozen=True)
+class GenerationResourceIdentityOutputs:
+    """Output binding for provenance hashing outside scope discovery."""
+
     resource_identities: PathLike
 
 

@@ -1,4 +1,7 @@
-# Pure event adapters and stable conditional maximum-score distributions.
+# Test-only independent oracle for null-distribution event assembly and binning.
+#
+# Production generation uses the Python implementation; this file is sourced
+# only by the R regression suite to provide an independent implementation.
 
 generated_bin_index <- function(score, score_max, bin_width) {
   fixed_width_bin_index(score, score_max, bin_width)

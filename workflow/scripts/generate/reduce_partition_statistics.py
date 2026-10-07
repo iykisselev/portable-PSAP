@@ -1,17 +1,13 @@
 """Snakemake adapter for lookup-bucket rendering."""
 
-import os
-from pathlib import Path
 import sys
 
-if "snakemake" in globals():
-    os.environ.setdefault("POLARS_MAX_THREADS", str(snakemake.threads))
+sys.path.insert(0, snakemake.scriptdir)
+from _bootstrap import bootstrap
 
-SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
-sys.path.insert(0, str(SHARED_SCRIPT_DIR))
-from _library import add_library_path
+bootstrap(snakemake, configure_polars=True)
 
-add_library_path(snakemake.scriptdir)
+from _library import bind
 
 from generation_lookup import reduce_partition_statistics
 from generation_bindings import (
@@ -23,24 +19,10 @@ from generation_bindings import (
 
 def main() -> None:
     """Decode Snakemake bindings and delegate lookup rendering."""
-    hem_output = getattr(snakemake.output, "lookup_hem", [])
     reduce_partition_statistics(
-        LookupReductionInputs(
-            buckets=str(snakemake.input.buckets),
-            partition_statistics=tuple(
-                str(path) for path in snakemake.input.partition_statistics
-            ),
-        ),
-        LookupReductionOutputs(
-            lookup_het=str(snakemake.output.lookup_het),
-            lookup_hom=str(snakemake.output.lookup_hom),
-            lookup_hem=(str(hem_output) if isinstance(hem_output, (str, Path)) else str(hem_output[0])) if hem_output else None,
-            diagnostics=str(snakemake.output.diagnostics),
-        ),
-        LookupReductionParameters(
-            bin_count=int(snakemake.params.bin_count),
-            roles=tuple(snakemake.params.roles),
-        ),
+        bind(LookupReductionInputs, snakemake.input),
+        bind(LookupReductionOutputs, snakemake.output),
+        bind(LookupReductionParameters, snakemake.params),
         str(snakemake.wildcards.bucket),
     )
 

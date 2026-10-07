@@ -28,19 +28,45 @@ def prepare_generation_partition(
     state_schema = {**POPULATION_SCHEMA, "variant_class": pl.String}
     output_score_schema = {**SCORE_SCHEMA, "variant_class": pl.String}
     partition = partition_from_manifest(inputs.partitions, partition_id)
-    units = pl.read_parquet(inputs.units)
-    eligible_units = units.filter(pl.col("status") == "eligible").select("testing_unit_id").sort("testing_unit_id")
-    intervals = (
-        pl.read_parquet(inputs.unit_intervals)
-        .filter((pl.col("CHROM") == partition.chromosome) & (pl.col("START") < partition.end) & (pl.col("END") > partition.start))
-        .join(eligible_units, on="testing_unit_id", how="inner")
-        .select("testing_unit_id", "START", "END")
-        .rows()
+    halo_end = (
+        partition.end + params.indel_max_reference_length - 1
+        if params.include_indels
+        else partition.end
     )
+    eligible_units = (
+        pl.scan_parquet(inputs.units)
+        .filter(pl.col("status") == "eligible")
+        .select("testing_unit_id")
+        .collect(engine="streaming")
+    )
+    interval_frame = (
+        pl.scan_parquet(inputs.unit_intervals)
+        .filter(
+            (pl.col("CHROM") == partition.chromosome)
+            & (pl.col("START") < halo_end)
+            & (pl.col("END") > partition.start)
+        )
+        .join(eligible_units.lazy(), on="testing_unit_id", how="inner")
+        .select("testing_unit_id", "START", "END")
+        .collect(engine="streaming")
+    )
+    mask_frame = (
+        pl.scan_parquet(inputs.mask)
+        .filter(
+            (pl.col("CHROM") == partition.chromosome)
+            & (pl.col("START") < halo_end)
+            & (pl.col("END") > partition.start)
+        )
+        .select("START", "END")
+        .collect(engine="streaming")
+    )
+    intervals = interval_frame.filter(pl.col("START") < partition.end).rows()
     mask = (
-        pl.read_parquet(inputs.mask)
-        .filter((pl.col("CHROM") == partition.chromosome) & (pl.col("START") < partition.end) & (pl.col("END") > partition.start))
-        .select(pl.max_horizontal("START", pl.lit(partition.start)).alias("START"), pl.min_horizontal("END", pl.lit(partition.end)).alias("END"))
+        mask_frame.filter(pl.col("START") < partition.end)
+        .select(
+            pl.max_horizontal("START", pl.lit(partition.start)).alias("START"),
+            pl.min_horizontal("END", pl.lit(partition.end)).alias("END"),
+        )
         .rows()
     )
     reference = ReferenceReader(inputs.fasta, inputs.fasta_fai)
@@ -54,28 +80,8 @@ def prepare_generation_partition(
         if params.include_indels:
             if inputs.score_indel is None:
                 raise ValueError("Indel generation requires an indel score resource")
-            halo_end = partition.end + params.indel_max_reference_length - 1
-            all_intervals = (
-                pl.read_parquet(inputs.unit_intervals)
-                .filter(
-                    (pl.col("CHROM") == partition.chromosome)
-                    & (pl.col("START") < halo_end)
-                    & (pl.col("END") > partition.start)
-                )
-                .join(eligible_units, on="testing_unit_id", how="inner")
-                .select("testing_unit_id", "START", "END")
-                .rows()
-            )
-            indel_mask = (
-                pl.read_parquet(inputs.mask)
-                .filter(
-                    (pl.col("CHROM") == partition.chromosome)
-                    & (pl.col("START") < halo_end)
-                    & (pl.col("END") > partition.start)
-                )
-                .select("START", "END")
-                .rows()
-            )
+            all_intervals = interval_frame.rows()
+            indel_mask = mask_frame.rows()
             catalog = indel_score_rows(
                 inputs.score_indel, inputs.score_indel_index, partition.chromosome,
                 partition.start, partition.end, reference,

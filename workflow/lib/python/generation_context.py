@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Mapping
 
 from generation_topology import (
@@ -17,6 +18,7 @@ from workflow_plan import (
     GenerationPlan,
     GenerationSettings,
     ModelPlan,
+    ReferenceMetadata,
     WorkflowPlan,
 )
 
@@ -28,6 +30,7 @@ class GenerationRuleContext:
     plan: GenerationPlan
     model: ModelPlan
     settings: GenerationSettings
+    reference: ReferenceMetadata
     scope_layout: GenerationScopeArtifacts
     execution_layout: GenerationExecutionLayout
 
@@ -41,6 +44,7 @@ class GenerationRuleContext:
             plan=generation_plan,
             model=workflow_plan.model,
             settings=workflow_plan.generation_settings,
+            reference=workflow_plan.reference,
             scope_layout=build_generation_scope_artifacts(generation_plan),
             execution_layout=build_generation_execution_layout(
                 generation_plan,
@@ -84,6 +88,35 @@ class GenerationRuleContext:
     @property
     def bundle_paths(self) -> Mapping[str, str]:
         return self.execution_layout.bundle_paths
+
+    def bundle_outputs(self) -> Mapping[str, str | list[str]]:
+        """Return finalization outputs, retaining an empty optional hem binding."""
+        outputs = {
+            name: path
+            for name, path in self.bundle_paths.items()
+            if name not in {"validation", "marker", "lookup_hem"}
+        }
+        outputs["lookup_hem"] = (
+            self.bundle_paths["lookup_hem"] if self.hem_enabled else []
+        )
+        return MappingProxyType(outputs)
+
+    @property
+    def bundle_resource_ids(self) -> Mapping[str, str]:
+        """Return stable scientific identities for generated-bundle provenance."""
+        return MappingProxyType(
+            {
+                "fasta": self.reference.fasta_id,
+                "exclusion": self.reference.exclusion_id,
+                "testing_units": self.reference.testing_unit_id,
+                "score_snv": self.reference.cadd_snv_id,
+                "score_indel": self.reference.cadd_indel_id or "score_indel",
+                "population_vcf": f"population_vcf:{self.plan.af_source['overall']}",
+                "par_regions": "par_regions",
+                "mutation_rate": "mutation_rate",
+                "mutation_rate_indel": "mutation_rate_indel",
+            }
+        )
 
     def index_input(self, binding: FileBinding) -> list[str]:
         """Return a declared index as an optional Snakemake input list."""

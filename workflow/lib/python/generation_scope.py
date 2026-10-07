@@ -30,7 +30,7 @@ from generation_prep import (
 )
 from generation_probability import unit_bucket_frame
 from generation_resource_policy import check_unindexed_fixture
-from io_contracts import resource_inventory, write_json_atomic, write_parquet_atomic
+from io_contracts import write_json_atomic, write_parquet_atomic
 
 
 def sparse_bucket_partitions(
@@ -206,16 +206,20 @@ def prepare_generation_scope(
         unit_intervals,
         schema=["testing_unit_id", "CHROM", "START", "END"],
         orient="row",
+    ).sort("CHROM", "START", "END", "testing_unit_id")
+    write_parquet_atomic(
+        unit_intervals_frame, outputs.unit_intervals, params.compression,
+        row_group_size=16_384,
     )
-    write_parquet_atomic(unit_intervals_frame, outputs.unit_intervals, params.compression)
     write_parquet_atomic(
         pl.DataFrame(
             callable_unit_intervals,
             schema=["testing_unit_id", "CHROM", "START", "END"],
             orient="row",
-        ),
+        ).sort("CHROM", "START", "END", "testing_unit_id"),
         outputs.masked_unit_intervals,
         params.compression,
+        row_group_size=16_384,
     )
     write_parquet_atomic(
         pl.DataFrame(
@@ -226,9 +230,10 @@ def prepare_generation_scope(
             ],
             schema=["CHROM", "START", "END", "mask_state"],
             orient="row",
-        ),
+        ).sort("CHROM", "START", "END"),
         outputs.mask,
         params.compression,
+        row_group_size=16_384,
     )
     write_json_atomic(
         outputs.partitions,
@@ -281,28 +286,5 @@ def prepare_generation_scope(
                 }
                 for ordinal, unit_ids in sorted(unit_ids_by_bucket.items())
             ],
-        },
-    )
-    input_resource_paths = {
-        "population_vcf": inputs.population_vcf,
-        "score_snv": inputs.score_snv,
-        "testing_units": inputs.testing_units,
-        "par_regions": inputs.par_regions,
-        "fasta": inputs.fasta,
-    }
-    if inputs.exclusion:
-        input_resource_paths["exclusion"] = inputs.exclusion
-    input_resource_paths.update(inputs.exclusions)
-    if inputs.mutation_rate:
-        input_resource_paths["mutation_rate"] = inputs.mutation_rate
-    if inputs.mutation_rate_indel:
-        input_resource_paths["mutation_rate_indel"] = inputs.mutation_rate_indel
-    if params.include_indels and inputs.score_indel:
-        input_resource_paths["score_indel"] = inputs.score_indel
-    write_json_atomic(
-        outputs.resource_identities,
-        {
-            "schema_version": PARTITION_MANIFEST_SCHEMA_VERSION,
-            "resources": resource_inventory(input_resource_paths),
         },
     )

@@ -5,15 +5,35 @@ from __future__ import annotations
 from bisect import bisect_right
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
-from generation_partitions import GenomePartition, read_fasta_index
-from genomic_contracts import canonical_chromosome
+from generation_partitions import GenomePartition
+from genomic_contracts import read_fai
 
 try:
     import pysam
 except ImportError:
     pysam = None
+
+
+MEMBERSHIP_SCHEMA = {
+    "testing_unit_id": pl.String,
+    "CHROM": pl.String,
+    "POS": pl.Int64,
+    "REF": pl.String,
+    "ALT": pl.String,
+}
+_BASE_CODES = np.full(256, -1, dtype=np.int8)
+_BASE_CODES[[ord("A"), ord("C"), ord("G"), ord("T")]] = np.arange(4, dtype=np.int8)
+_BASES = np.array(["A", "C", "G", "T"])
+# Rows are ordered exactly as ``for alternate in 'ACGT'`` after excluding REF.
+_ALTERNATES = np.array([
+    ["C", "G", "T"],
+    ["A", "G", "T"],
+    ["A", "C", "T"],
+    ["A", "C", "G"],
+])
 
 
 class ReferenceReader:
@@ -22,33 +42,24 @@ class ReferenceReader:
     def __init__(self, fasta: str | Path, fai: str | Path) -> None:
         self.fasta = Path(fasta)
         self.fai = Path(fai)
-        self.contigs = read_fasta_index(self.fai)
+        self.contigs = read_fai(self.fai)
         self.reader = pysam.FastaFile(str(self.fasta)) if pysam is not None else None
-        self.layout: dict[str, tuple[int, int, int]] = {}
-        if self.reader is None:
-            with self.fai.open(encoding="utf-8") as handle:
-                for raw in handle:
-                    fields = raw.rstrip("\n").split("\t")
-                    if len(fields) < 5:
-                        raise ValueError("Plain FASTA fallback needs five-column FAI records")
-                    self.layout[canonical_chromosome(fields[0])] = (int(fields[2]), int(fields[3]), int(fields[4]))
 
     def fetch(self, chromosome: str, start: int, end: int) -> str:
         """Fetch one bounded half-open interval with canonical chromosome names."""
-        source_name, length = self.contigs[chromosome]
-        if start < 0 or end > length or start > end:
+        record = self.contigs[chromosome]
+        if start < 0 or end > record.length or start > end:
             raise ValueError(f"Reference request is outside {chromosome!r}: {start}-{end}")
         if self.reader is not None:
-            return self.reader.fetch(source_name, start, end).upper()
+            return self.reader.fetch(record.name, start, end).upper()
 
-        offset, bases_per_line, bytes_per_line = self.layout[chromosome]
         sequence: list[bytes] = []
         position = start
         with self.fasta.open("rb") as handle:
             while position < end:
-                within_line = position % bases_per_line
-                take = min(end - position, bases_per_line - within_line)
-                handle.seek(offset + (position // bases_per_line) * bytes_per_line + within_line)
+                within_line = position % record.line_bases
+                take = min(end - position, record.line_bases - within_line)
+                handle.seek(record.offset + (position // record.line_bases) * record.line_bytes + within_line)
                 sequence.append(handle.read(take))
                 position += take
         return b"".join(sequence).decode("ascii").upper()
@@ -66,8 +77,26 @@ def membership_rows(
     reference: ReferenceReader,
 ) -> pl.DataFrame:
     """Generate bounded candidate SNVs and distinct allele-to-unit memberships."""
-    records: list[dict[str, object]] = []
+    frames: list[pl.DataFrame] = []
     mask_starts = [start for start, _ in mask]
+    # Canonical scope artifacts have disjoint masks and merged intervals for
+    # each unit, so no two chunks can emit the same membership.  Retaining a
+    # full-frame unique operation in that normal case would create an avoidable
+    # hash table at the largest point in a partition job.  Keep the public
+    # distinct-row behavior for direct callers with overlapping inputs.
+    greatest_end_by_unit: dict[str, int] = {}
+    needs_deduplication = False
+    for unit, start, end in intervals:
+        if start < greatest_end_by_unit.get(unit, start):
+            needs_deduplication = True
+            break
+        greatest_end_by_unit[unit] = max(end, greatest_end_by_unit.get(unit, end))
+    greatest_mask_end = -1
+    for start, end in mask:
+        if start < greatest_mask_end:
+            needs_deduplication = True
+            break
+        greatest_mask_end = max(greatest_mask_end, end)
     for unit, start, end in intervals:
         mask_index = max(0, bisect_right(mask_starts, start) - 1)
         while mask_index < len(mask) and mask[mask_index][0] < end:
@@ -77,22 +106,28 @@ def membership_rows(
             if overlap_start >= overlap_end:
                 continue
             sequence = reference.fetch(partition.chromosome, overlap_start, overlap_end)
-            for offset, base in enumerate(sequence, start=overlap_start):
-                if base not in "ACGT":
-                    continue
-                for alternate in "ACGT":
-                    if alternate != base:
-                        records.append(
-                            {
-                                "testing_unit_id": unit,
-                                "CHROM": partition.chromosome,
-                                "POS": offset + 1,
-                                "REF": base,
-                                "ALT": alternate,
-                            }
-                        )
-    return pl.DataFrame(
-        records,
-        schema={"testing_unit_id": pl.String, "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String},
-        strict=False,
-    ).unique(maintain_order=True)
+            encoded = np.frombuffer(sequence.encode("ascii"), dtype=np.uint8)
+            base_codes = _BASE_CODES[encoded]
+            valid = base_codes >= 0
+            if not valid.any():
+                continue
+            valid_codes = base_codes[valid]
+            positions = np.arange(overlap_start, overlap_end, dtype=np.int64)[valid]
+            frames.append(
+                pl.DataFrame(
+                    {
+                        "POS": np.repeat(positions + 1, 3),
+                        "REF": np.repeat(_BASES[valid_codes], 3),
+                        "ALT": _ALTERNATES[valid_codes].reshape(-1),
+                    },
+                    schema={"POS": pl.Int64, "REF": pl.String, "ALT": pl.String},
+                    strict=False,
+                ).with_columns(
+                    pl.lit(unit).alias("testing_unit_id"),
+                    pl.lit(partition.chromosome).alias("CHROM"),
+                ).select(*MEMBERSHIP_SCHEMA)
+            )
+    if not frames:
+        return pl.DataFrame(schema=MEMBERSHIP_SCHEMA)
+    memberships = pl.concat(frames, how="vertical")
+    return memberships.unique(maintain_order=True) if needs_deduplication else memberships

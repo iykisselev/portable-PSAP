@@ -48,7 +48,7 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             with self.subTest(suffix=suffix), self.assertRaisesRegex(ValueError, "requires an explicit"):
                 check_unindexed_fixture(self.path.with_suffix(suffix))
 
-    def test_scope_rejects_oversized_fixture_before_reading_units_or_hashing(self):
+    def test_scope_rejects_oversized_fixture_before_reading_units(self):
         with self.path.open("wb") as handle:
             handle.truncate(MAX_UNINDEXED_FIXTURE_BYTES + 1)
         inputs = GenerationScopeInputs(
@@ -72,14 +72,12 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             unit_intervals=self.path,
             masked_unit_intervals=self.path,
             mask=self.path,
-            resource_identities=self.path,
         )
         params = GenerationScopeParameters(0.5, 10, 10, "zstd")
-        with patch("generation_scope.read_bed_units") as read_units, patch("generation_scope.resource_inventory") as inventory:
+        with patch("generation_scope.read_bed_units") as read_units:
             with self.assertRaisesRegex(ValueError, "up to 1 MiB"):
                 prepare_generation_scope(inputs, outputs, params)
             read_units.assert_not_called()
-            inventory.assert_not_called()
 
 
 if __name__ == "__main__":

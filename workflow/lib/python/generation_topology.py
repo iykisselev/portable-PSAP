@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
 
+from bundle_contract import fixed_width_bin_count
 from workflow_plan import (
     GenerationPlan,
     GenerationSettings,
@@ -18,7 +18,7 @@ from workflow_plan import (
 
 @dataclass(frozen=True)
 class GenerationScopeArtifacts:
-    """Files produced by the scope-discovery checkpoint."""
+    """Prepared-artifact paths, including deferred resource provenance."""
 
     artifacts: Mapping[str, str]
 
@@ -67,11 +67,7 @@ def build_generation_execution_layout(
     calculated_dir = plan.scalable_dir / "calculated"
     statistics_dir = calculated_dir / "partition_statistics"
     lookup_bucket_dir = calculated_dir / "lookup_buckets"
-    bin_count = int(
-        (
-            Decimal(str(model.score_max)) / Decimal(str(settings.score_bin_width))
-        ).to_integral_value(rounding=ROUND_CEILING)
-    )
+    bin_count = fixed_width_bin_count(model.score_max, settings.score_bin_width)
     return GenerationExecutionLayout(
         calculated_dir=calculated_dir,
         statistics_dir=statistics_dir,

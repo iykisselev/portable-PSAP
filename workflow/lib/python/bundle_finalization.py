@@ -134,22 +134,33 @@ def candidate_audit_rows(paths):
         yield chromosome, position, reference, alternate, reason
 
 
-def variant_class_counts(state_paths, audit_paths) -> dict[str, dict[str, int]]:
-    """Count retained, population-rejected, and structural candidates by class."""
-    counts = {
+def _empty_variant_class_counts() -> dict[str, dict[str, int]]:
+    return {
         variant_class: {name: 0 for name in ("retained", "rejected", "observed", "absent")}
         for variant_class in ("snv", "indel")
     }
+
+
+def _update_variant_class_counts(
+    counts: dict[str, dict[str, int]], variant_class: str, state: str,
+) -> None:
+    """Add one population-state row to the v3 variant-class metadata counts."""
+    if variant_class not in counts:
+        raise ValueError(f"Unsupported variant class in allele states: {variant_class!r}")
+    if state in {"observed", "absent"}:
+        counts[variant_class]["retained"] += 1
+        counts[variant_class][state] += 1
+    elif state == "rejected":
+        counts[variant_class]["rejected"] += 1
+    else:
+        raise ValueError(f"Unsupported allele state in bundle finalization: {state!r}")
+
+
+def variant_class_counts(state_paths, audit_paths) -> dict[str, dict[str, int]]:
+    """Count retained, population-rejected, and structural candidates by class."""
+    counts = _empty_variant_class_counts()
     for variant_class, state in parquet_rows(state_paths, ["variant_class", "allele_state"]):
-        if variant_class not in counts:
-            raise ValueError(f"Unsupported variant class in allele states: {variant_class!r}")
-        if state in {"observed", "absent"}:
-            counts[variant_class]["retained"] += 1
-            counts[variant_class][state] += 1
-        elif state == "rejected":
-            counts[variant_class]["rejected"] += 1
-        else:
-            raise ValueError(f"Unsupported allele state in bundle finalization: {state!r}")
+        _update_variant_class_counts(counts, variant_class, state)
     for _ in candidate_audit_rows(audit_paths):
         counts["indel"]["rejected"] += 1
     return counts
@@ -162,6 +173,46 @@ def zero_imputed_af_rows(paths):
     ):
         if tags:
             yield chromosome, position, reference, alternate, tags
+
+
+def collect_finalization_allele_rows(
+    state_paths,
+    audit_paths,
+    *,
+    include_variant_class_counts: bool,
+) -> tuple[
+    list[tuple[object, ...]],
+    list[tuple[object, ...]],
+    list[tuple[object, ...]],
+    dict[str, dict[str, int]] | None,
+]:
+    """Read each state/audit shard once for every final public allele artifact.
+
+    The collected rows are exceptional outputs (rejections or imputed AF tags),
+    not the full candidate universe.  State and audit lists remain separate so
+    the existing state-first excluded-allele component ordering is unchanged.
+    """
+    state_columns = [
+        "CHROM", "POS", "REF", "ALT", "allele_state", "state_reason",
+        "af_zero_imputed_tags",
+    ]
+    counts = _empty_variant_class_counts() if include_variant_class_counts else None
+    if counts is not None:
+        state_columns.append("variant_class")
+    rejected, zero_imputed, audit = [], [], []
+    for row in parquet_rows(state_paths, state_columns):
+        chromosome, position, reference, alternate, state, reason, tags, *variant_class = row
+        if state == "rejected":
+            rejected.append((chromosome, position, reference, alternate, reason))
+        if tags:
+            zero_imputed.append((chromosome, position, reference, alternate, tags))
+        if counts is not None:
+            _update_variant_class_counts(counts, variant_class[0], state)
+    for row in candidate_audit_rows(audit_paths):
+        audit.append(row)
+    if counts is not None:
+        counts["indel"]["rejected"] += len(audit)
+    return rejected, zero_imputed, audit, counts
 
 
 def finalize_generated_bundle(
@@ -192,18 +243,23 @@ def finalize_generated_bundle(
     calibration_count, calibration_regions = write_gzip_tsv_atomic(
         outputs.calibration_regions, ["#CHROM", "START", "END", "source"], parquet_rows([inputs.effective_mask], ["CHROM", "START", "END", "mask_state"])
     )
+    rejected_state_rows, zero_imputed_rows, audit_rows, class_counts = collect_finalization_allele_rows(
+        inputs.allele_states,
+        inputs.candidate_audit,
+        include_variant_class_counts=combined_indel_bundle,
+    )
     rejected_count, excluded_alleles = write_gzip_tsv_atomic(
         outputs.excluded_alleles, ["#CHROM", "POS", "REF", "ALT", "exclusion_reason"],
-        chain(rejected_rows(inputs.allele_states), candidate_audit_rows(inputs.candidate_audit))
+        chain(rejected_state_rows, audit_rows)
     )
     _, candidate_audit = write_gzip_tsv_atomic(
         outputs.candidate_audit, ["#CHROM", "POS", "REF", "ALT", "rejection_reason"],
-        candidate_audit_rows(inputs.candidate_audit),
+        audit_rows,
     )
     zero_imputation_count, population_af_zero_imputations = write_gzip_tsv_atomic(
         outputs.population_af_zero_imputations,
         ["#CHROM", "POS", "REF", "ALT", "imputed_info_tags"],
-        zero_imputed_af_rows(inputs.allele_states),
+        zero_imputed_rows,
     )
     resource_record = json.loads(Path(inputs.resource_identities).read_text(encoding="utf-8"))
     resources = {
@@ -265,9 +321,8 @@ def finalize_generated_bundle(
             "max_reference_length": params.indel_max_reference_length,
             "max_alternate_length": params.indel_max_alternate_length,
         }
-        metadata["variant_class_counts"] = variant_class_counts(
-            inputs.allele_states, inputs.candidate_audit
-        )
+        assert class_counts is not None
+        metadata["variant_class_counts"] = class_counts
     write_json_atomic(
         outputs.metadata,
         metadata,
