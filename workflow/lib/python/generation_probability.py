@@ -57,9 +57,14 @@ def statistics_for_role(events: pl.DataFrame, role: str, score_max: float, bin_w
             (pl.col("q") == 1).cast(pl.Int64).sum().alias("certain_count"),
             pl.when(pl.col("q") < 1).then((-pl.col("q")).log1p()).otherwise(pl.lit(0.0)).sum().alias("log_none_sum"),
             pl.len().alias("event_count"),
+            (pl.col("variant_class") == "snv").cast(pl.Int64).sum().alias("snv_event_count"),
+            (pl.col("variant_class") == "indel").cast(pl.Int64).sum().alias("indel_event_count"),
         )
         .with_columns(pl.lit(role).alias("role"))
-        .select("testing_unit_id", "unit_bucket", "role", "bin", "certain_count", "log_none_sum", "event_count")
+        .select(
+            "testing_unit_id", "unit_bucket", "role", "bin", "certain_count",
+            "log_none_sum", "event_count", "snv_event_count", "indel_event_count",
+        )
     )
 
 
@@ -89,14 +94,22 @@ def distribution(statistics: dict[int, tuple[int, float, int]], bin_count: int) 
     return "ok", event_mass, event_count, survival
 
 
-def merge_statistics(files: list[Path]) -> dict[tuple[str, str], dict[int, tuple[int, float, int]]]:
+def merge_statistics(
+    files: list[Path],
+) -> dict[tuple[str, str], dict[int, tuple[int, float, int, int, int]]]:
     """Reduce partition files in manifest order with compensated log summation."""
     accumulated: dict[tuple[str, str, int], list[float | int]] = {}
     for path in files:
-        for unit, role, bin_number, certain_count, log_none_sum, event_count in pl.read_parquet(path).iter_rows():
+        for (
+            unit, role, bin_number, certain_count, log_none_sum, event_count,
+            snv_event_count, indel_event_count,
+        ) in pl.read_parquet(path).iter_rows():
             key = (unit, role, bin_number)
             if key not in accumulated:
-                accumulated[key] = [certain_count, log_none_sum, 0.0, event_count]
+                accumulated[key] = [
+                    certain_count, log_none_sum, 0.0, event_count,
+                    snv_event_count, indel_event_count,
+                ]
                 continue
             current = accumulated[key]
             adjusted = log_none_sum - current[2]
@@ -105,7 +118,19 @@ def merge_statistics(files: list[Path]) -> dict[tuple[str, str], dict[int, tuple
             current[1] = total
             current[0] += certain_count
             current[3] += event_count
-    grouped: dict[tuple[str, str], dict[int, tuple[int, float, int]]] = defaultdict(dict)
-    for (unit, role, bin_number), (certain_count, log_none_sum, _, event_count) in accumulated.items():
-        grouped[(unit, role)][bin_number] = (int(certain_count), float(log_none_sum), int(event_count))
+            current[4] += snv_event_count
+            current[5] += indel_event_count
+    grouped: dict[
+        tuple[str, str], dict[int, tuple[int, float, int, int, int]]
+    ] = defaultdict(dict)
+    for (
+        unit, role, bin_number,
+    ), (
+        certain_count, log_none_sum, _, event_count, snv_event_count,
+        indel_event_count,
+    ) in accumulated.items():
+        grouped[(unit, role)][bin_number] = (
+            int(certain_count), float(log_none_sum), int(event_count),
+            int(snv_event_count), int(indel_event_count),
+        )
     return grouped

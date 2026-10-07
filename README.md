@@ -24,6 +24,30 @@ package. Workflow scripts add that directory through `workflow/shared/_library.p
 and import modules such as `generation_scope`; package-qualified imports are
 unsupported.
 
+## Combined SNV/indel null generation
+
+Generated null distributions can include SNVs alone or the combined SNV/indel
+candidate universe. A combined run sets `model.include_indels: true`, declares
+`generation_settings.variant_classes: [snv, indel]`, and supplies an indexed
+indel CADD resource (`generation.score_indel` in standalone `generate` mode,
+or `bindings.reference.cadd.indel` in `full` mode). Candidate indels are
+normalized, left-aligned, reference-validated alleles from that score resource;
+their complete REF spans must remain inside the calibration mask.
+
+Combined runs write `generated_bundle_v3`. Its certificate records the SNV and
+indel score identities, the candidate-universe and span conventions,
+class-specific retained/rejected/observed/absent counts, and a certified indel
+candidate audit. SNV-only runs continue to write `generated_bundle_v2`.
+Consumers can read v1–v3, but bundles are never silently upgraded: regenerate
+the lookup when moving to combined indel semantics.
+
+For `unobserved_policy: mutation_rate`, `generation.mutation_rate_indel` is an
+optional indexed allele-specific indel rate source. If it is not supplied,
+unobserved indels contribute AF 0; SNV mutation-rate requirements are
+unchanged. Per-bucket generation diagnostics report `snv_event_count` and
+`indel_event_count` for each unit/role, making the two contributions auditable
+without changing lookup semantics.
+
 Use the executable small demonstrations in
 [`runs/apply.example.yaml`](runs/apply.example.yaml),
 [`runs/generate.example.yaml`](runs/generate.example.yaml), and
@@ -416,6 +440,11 @@ The marker is written only after component size/checksum and semantic
 validation succeeds. `full` is the only mode that automatically binds this
 bundle to application; an `apply` manifest may also name a previously certified
 bundle explicitly.
+
+For a combined v3 bundle, retain `candidate_audit.tsv.gz` with the certificate
+when copying or archiving the bundle. It records structural indel rejections
+(for example, a candidate whose REF span crosses a calibration-mask boundary)
+that are intentionally distinct from population FILTER exclusions.
 
 See [docs/null_distribution_contract.md](docs/null_distribution_contract.md)
 for the generated-bundle interface and

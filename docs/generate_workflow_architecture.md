@@ -32,27 +32,32 @@ In standalone `generate` mode, the following bindings live under `generation`:
 | --- | --- | --- |
 | `population_vcf` and optional index | Yes | Population allele states and configured AF INFO tags. |
 | `score_snv` and optional index | Yes | Allele-level CADD score for each calibrated SNV. |
+| `score_indel` and optional index | When `model.include_indels: true` | Normalized, finite indel candidate universe and CADD score. |
 | `exclusion` | Binding required; data may be null | Intervals to subtract, independent of source. Combined with other interval exclusions. |
 | `testing_unit_bed` | Yes | Unit intervals and stable unit IDs. |
 | `fasta` and `.fai` | Yes | Contig lengths, partitioning, and reference allele enumeration. |
 | `par_regions` | Yes | Pseudoautosomal intervals excluded before X-role assignment. |
 | `exclusions` | Optional | Additional intervals excluded from calibration. |
 | `mutation_rate` and optional index | Conditional | Required for an unobserved `mutation_rate` policy. |
+| `mutation_rate_indel` and optional index | Optional | Allele-specific indel mutation rate; absent indels use AF 0 if it is omitted. |
 | `af_source` | Yes | Names the overall, and when configured female/male, AF INFO tags. |
 
-The current scope supports SNVs on contigs `1`–`22` and `X`. Every calibration
-allele must have exactly one score row. Invalid selected AF values, duplicate
-population states, duplicate scores, and missing mutation rates when they are
-needed are all hard failures.
+The current scope supports SNVs and, when enabled, normalized indels on contigs
+`1`–`22` and `X`. Every calibration allele must have exactly one score row.
+Indel candidates are owned by their anchor-position partition, while a bounded
+right halo ensures a REF span crossing that partition boundary is evaluated
+once against the complete mask and testing-unit span. Invalid selected AF
+values, duplicate population states, duplicate scores, and missing SNV mutation
+rates when they are needed are all hard failures.
 
 ### Full-mode binding behavior
 
 Full mode deliberately does not define a second reference scope under
-`generation`. It reuses FASTA, exclusion, testing units, CADD SNVs, and ordinary
-variant exclusions from `bindings.reference`. Exactly one configured exclusion
-must have the `par_regions` role; every `variants_exclude` binding becomes a
-generation exclusion. `WorkflowPlan` enforces this while the DAG is being
-built.
+`generation`. It reuses FASTA, exclusion, testing units, CADD SNVs (and CADD
+indels when enabled), and ordinary variant exclusions from
+`bindings.reference`. Exactly one configured exclusion must have the
+`par_regions` role; every `variants_exclude` binding becomes a generation
+exclusion. `WorkflowPlan` enforces this while the DAG is being built.
 
 ## DAG and transformations
 
@@ -63,9 +68,9 @@ filesystem.
 | Rule | Inputs | Transformation | Outputs |
 | --- | --- | --- | --- |
 | `prepare_generation_scope` (checkpoint) | FASTA index, units, exclusion/PAR/other exclusions, population/score bindings | Build supported non-PAR scope; subtract all other interval exclusions; measure retained fractions; partition the genome; assign eligible-unit buckets; capture input checksums. | Partition and bucket manifests; provisional unit/interval/mask Parquet files; resource-identity JSON. |
-| `prepare_generation_partition` | One partition plus scope artifacts, FASTA, population VCF, and scores | Enumerate calibrated SNV alleles in the masked unit intervals; join unit membership, CADD score, and population allele state. | One each of `allele_states`, `allele_membership`, and `allele_scores` Parquet shards. |
-| `calculate_partition_null_distribution` | One partition shard set and one unit bucket | Assign the absent-allele policy and role-specific effective AF; bin scores; aggregate additive no-event statistics. | One partition-by-bucket statistics Parquet shard. |
-| `reduce_null_distribution_bucket` | All statistics shards for one bucket | Compensated reduction across partitions; calculate conditional score-bin survival rows and diagnostics. | HET/HOM and optional HEM lookup rows plus diagnostics TSV for that bucket. |
+| `prepare_generation_partition` | One partition plus scope artifacts, FASTA, population VCF, and scores | Enumerate calibrated SNV alleles and, when enabled, anchor-owned indel catalog entries; validate spans, join unit membership, score, and population state. | One each of `allele_states`, `allele_membership`, `allele_scores`, and indel candidate-audit Parquet shards. |
+| `calculate_partition_null_distribution` | One partition shard set and one unit bucket | Assign the absent-allele policy and role-specific effective AF; bin scores; aggregate additive no-event statistics and class-specific event counts. | One partition-by-bucket statistics Parquet shard. |
+| `reduce_null_distribution_bucket` | All statistics shards for one bucket | Compensated reduction across partitions; calculate conditional score-bin survival rows and diagnostics. | HET/HOM and optional HEM lookup rows plus diagnostics TSV with total, SNV, and indel event counts. |
 | `finalize_null_distribution_bundle` | All bucket rows/diagnostics plus scope and state artifacts | Retain only units with positive mass for every applicable role; stream public bundle components and metadata. | Gzipped lookup, scope, exclusion, and metadata files. |
 | `validate_null_distribution_bundle` | Finalized bundle and schema | Validate component checksums, row coverage, contracts, and semantics. | `validation.json` and `validation.ok`. |
 
@@ -91,8 +96,10 @@ These checkpoint artifacts are part of the internal DAG contract:
   population state information. `allele_membership` maps alleles to units, and
   `allele_scores` supplies the matching score.
 - Statistics shards are additive per `testing_unit_id`, role, and score bin.
-  They store `certain_count`, `log_none_sum`, and event count so global event
-  tables never need to be materialized.
+  They store `certain_count`, `log_none_sum`, total event count, and SNV/indel
+  event counts so global event tables never need to be materialized. Bucket
+  diagnostics expose those class counts as `snv_event_count` and
+  `indel_event_count` for every unit/role.
 
 Downstream rules should not glob these files or infer wildcard names from
 directory contents. Use the callbacks in `rules/generate/context.smk`; they
@@ -114,13 +121,16 @@ one place, `bundle_contract.py`. The public components are:
 
 - HET and HOM lookup tables; HEM chromosome-X lookup table when enabled;
 - eligible testing-unit BED and calibration-region BED;
-- excluded alleles and excluded units;
+- excluded alleles, excluded units, and (for v3) the indel candidate audit;
 - `metadata.json`, `validation.json`, and `validation.ok`.
 
 `metadata.json` records contract and schema versions, assembly, score-grid
 parameters, roles, absent-allele and X policies, source and component
-checksums, and counts. Downstream apply rules should use `validation.ok` as the
-completion boundary.
+checksums, and counts. A combined SNV/indel run writes `generated_bundle_v3`
+with both score identities, class-specific candidate counts, and the indel
+candidate-universe conventions; SNV-only runs write v2. Readers support v1–v3
+but do not reinterpret an older bundle as v3. Downstream apply rules should use
+`validation.ok` as the completion boundary.
 
 ## Rules worth protecting when changing generation
 

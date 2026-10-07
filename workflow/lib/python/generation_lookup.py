@@ -28,8 +28,26 @@ def reduce_partition_statistics(
     diagnostics = []
     for unit in units:
         for role in params.roles:
-            status, event_mass, event_count, survival = distribution(grouped[(unit, role)], params.bin_count)
-            diagnostics.append((unit, role, event_mass, status, event_count))
+            statistics = grouped[(unit, role)]
+            aggregate_statistics = {
+                bin_number: values[:3] for bin_number, values in statistics.items()
+            }
+            status, event_mass, event_count, survival = distribution(
+                aggregate_statistics, params.bin_count
+            )
+            snv_event_count = sum(values[3] for values in statistics.values())
+            indel_event_count = sum(values[4] for values in statistics.values())
+            diagnostics.append(
+                (
+                    unit,
+                    role,
+                    event_mass,
+                    status,
+                    event_count,
+                    snv_event_count,
+                    indel_event_count,
+                )
+            )
             if survival is not None:
                 lookup_rows[role].append((unit, *survival))
     header = ["testing_unit_id", *[str(value) for value in range(1, params.bin_count + 1)]]
@@ -39,6 +57,14 @@ def reduce_partition_statistics(
         write_tsv_atomic(outputs.lookup_hem, header, lookup_rows.get("hem_chrX", []))
     write_tsv_atomic(
         outputs.diagnostics,
-        ["testing_unit_id", "role", "event_mass", "status", "event_count"],
+        [
+            "testing_unit_id",
+            "role",
+            "event_mass",
+            "status",
+            "event_count",
+            "snv_event_count",
+            "indel_event_count",
+        ],
         diagnostics,
     )
