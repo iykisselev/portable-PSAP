@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import polars as pl
 
 from generation_bindings import (
@@ -85,7 +87,7 @@ def prepare_generation_scope(
     params: GenerationScopeParameters,
 ) -> None:
     """Prepare the shared scope once so partition jobs only read their slice."""
-    # Check the fixture exception before hashing resources or scheduling partitions.
+    # Check the fixture exception before reading resources or scheduling partitions.
     for path, index in (
         (inputs.population_vcf, inputs.population_vcf_index),
         (inputs.score_snv, inputs.score_snv_index),
@@ -108,10 +110,18 @@ def prepare_generation_scope(
     unit_chromosomes = {intervals[0][0] for intervals in units_by_id.values()}
     unsupported_unit_chromosomes = unit_chromosomes - supported_chromosomes
     if unsupported_unit_chromosomes:
-        raise ValueError(
-            "Testing-unit contigs outside the generated null-distribution scope: "
-            + ", ".join(sorted(unsupported_unit_chromosomes))
+        ignored = ", ".join(sorted(unsupported_unit_chromosomes))
+        warnings.warn(
+            "Ignoring testing-unit contigs outside the generated null-distribution "
+            f"scope: {ignored}",
+            RuntimeWarning,
+            stacklevel=2,
         )
+        units_by_id = {
+            unit_id: intervals
+            for unit_id, intervals in units_by_id.items()
+            if intervals[0][0] in supported_chromosomes
+        }
     supported_scope = supported_scope_mask(
         {
             chromosome: length

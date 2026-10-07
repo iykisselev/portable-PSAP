@@ -14,10 +14,10 @@ reference:
     id: excluded-regions  # source-neutral identity for intervals to remove
     kind: bed  # file layout; BED intervals
   testing_unit_bed:
-    id: biomart-grch38-107-gene  # testing-unit annotation release identifier
+    id: gencode-grch38-v50-cds  # testing-unit annotation release identifier
   # Each key is a stable scientific identity; bindings use the same key.
   exclusions:
-    gnomad-r2-notpass:
+    encode-hg38-blacklist-v2:
       kind: bed  # file layout; BED intervals
       role: variants_exclude  # scientific role; variant exclusion set
     par-regions:
@@ -26,9 +26,9 @@ reference:
   cadd:
     # Explicit CADD resources replace the implicit cadd_dir filename convention.
     snv:
-      id: CADD-v1.6-SNV  # single-nucleotide CADD resource release identifier
+      id: CADD-v1.7-SNV  # single-nucleotide CADD resource release identifier
     indel:
-      id: CADD-v1.6-InDels  # indel CADD resource release identifier
+      id: CADD-v1.7-InDels  # indel CADD resource release identifier
 
 report:
   deduplicate_controls: true  # boolean; remove only exact duplicate control-evidence rows
@@ -40,7 +40,7 @@ report:
 # remain in the null-distribution contract and are not selected here.
 generation_settings:
   minimum_retained_fraction: 0.5  # retained fraction of supported, non-PAR unit bases after all interval exclusions
-  variant_classes: [snv]  # generated universe; use [snv, indel] with an indel score binding for combined null generation
+  variant_classes: [snv, indel]  # generated universe; use [snv, indel] with an indel score binding for combined null generation
   indels:
     candidate_universe: score_resource  # configured CADD indel resource will define the finite candidate catalog
     membership: reference_span_overlap  # test-unit assignment will use the complete REF span

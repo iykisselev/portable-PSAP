@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 import warnings
 
 import polars as pl
@@ -91,16 +92,23 @@ def window_records(
             yield line_number, fields, key
 
 
-def population_info_definition(path: str | Path, info_tag: str) -> tuple[str, str]:
-    """Return the declared cardinality and numeric type for a selected INFO tag."""
+def population_info_definitions(
+    path: str | Path, info_tags: Iterable[str]
+) -> dict[str, tuple[str, str]]:
+    """Return validated INFO definitions for the requested tags in one header pass."""
+    remaining = set(info_tags)
+    definitions: dict[str, tuple[str, str]] = {}
     with open_text(path) as handle:
         for raw in handle:
-            if raw.startswith(f"##INFO=<ID={info_tag},"):
+            if raw.startswith("##INFO=<ID="):
                 fields = dict(
                     field.split("=", 1)
                     for field in raw.rstrip("\n").removeprefix("##INFO=<").removesuffix(">").split(",")
                     if "=" in field
                 )
+                info_tag = fields.get("ID")
+                if info_tag not in remaining:
+                    continue
                 number, value_type = fields.get("Number"), fields.get("Type")
                 if number not in {"A", "R", "1"}:
                     raise ValueError(
@@ -110,10 +118,19 @@ def population_info_definition(path: str | Path, info_tag: str) -> tuple[str, st
                     raise ValueError(
                         f"Population VCF INFO {info_tag!r} must have numeric Type=Float or Integer; got {value_type!r}"
                     )
-                return number, value_type
+                definitions[info_tag] = (number, value_type)
+                remaining.remove(info_tag)
+                if not remaining:
+                    return definitions
             if raw.startswith("#CHROM"):
                 break
-    raise ValueError(f"Population VCF has no INFO header for configured tag {info_tag!r}")
+    missing = sorted(remaining)[0]
+    raise ValueError(f"Population VCF has no INFO header for configured tag {missing!r}")
+
+
+def population_info_definition(path: str | Path, info_tag: str) -> tuple[str, str]:
+    """Return the declared cardinality and numeric type for a selected INFO tag."""
+    return population_info_definitions(path, [info_tag])[info_tag]
 
 
 def population_info_number(path: str | Path, info_tag: str) -> str:
@@ -123,8 +140,22 @@ def population_info_number(path: str | Path, info_tag: str) -> str:
 
 def validate_population_af_headers(path: str | Path, af_tags: dict[str, str]) -> None:
     """Confirm every configured population AF tag is declared before partition work."""
-    for info_tag in sorted(set(af_tags.values())):
-        population_info_definition(path, info_tag)
+    population_info_definitions(path, set(af_tags.values()))
+
+
+def selected_info_values(info: str, tags: Iterable[str]) -> dict[str, str]:
+    """Extract just the configured INFO fields without materializing every tag."""
+    padded = ";" + info
+    values: dict[str, str] = {}
+    for tag in tags:
+        marker = ";" + tag + "="
+        hit = padded.find(marker)
+        if hit < 0:
+            continue
+        value_start = hit + len(marker)
+        value_end = padded.find(";", value_start)
+        values[tag] = padded[value_start:value_end if value_end >= 0 else None]
+    return values
 
 
 def selected_af_values(
@@ -192,6 +223,8 @@ def population_rows(
     af_tags: dict[str, str],
     x_af_policy: str = "overall_proxy",
     hemizygote: bool = False,
+    *,
+    intervals: list[tuple[int, int]] | None = None,
 ) -> pl.DataFrame:
     """Extract observed/rejected population states for one genomic window."""
     if x_af_policy not in {"sex_specific", "overall_proxy"}:
@@ -207,10 +240,46 @@ def population_rows(
             if not af_tags.get("male"):
                 raise ValueError("HEM generation with sex_specific X policy requires generation.af_source.male")
             configured_tags["male"] = af_tags["male"]
-    definitions = {role: population_info_definition(path, tag) for role, tag in configured_tags.items()}
-    records: list[dict[str, object]] = []
+    tag_definitions = population_info_definitions(path, set(configured_tags.values()))
+    definitions = {role: tag_definitions[tag] for role, tag in configured_tags.items()}
+    columns: dict[str, list[object]] = {name: [] for name in POPULATION_SCHEMA}
     imputed_records: list[tuple[str, int, tuple[str, ...]]] = []
-    for raw in indexed_lines(path, index, chromosome, start, end):
+    interval_starts = [region_start for region_start, _ in intervals] if intervals is not None else []
+
+    def in_requested_intervals(position: int) -> bool:
+        if intervals is None:
+            return True
+        interval_index = bisect_right(interval_starts, position - 1) - 1
+        return interval_index >= 0 and position <= intervals[interval_index][1]
+
+    def append_rows(
+        keys: list[tuple[str, int, str, str]],
+        allele_state: str,
+        state_reason: str,
+        af_values: dict[str, list[float]] | None = None,
+        imputed_tags: tuple[str, ...] = (),
+    ) -> None:
+        for alternate_index, key in enumerate(keys):
+            columns["CHROM"].append(key[0])
+            columns["POS"].append(key[1])
+            columns["REF"].append(key[2])
+            columns["ALT"].append(key[3])
+            columns["allele_state"].append(allele_state)
+            if af_values is None:
+                columns["af"].append(None)
+                columns["af_overall"].append(None)
+                columns["af_female"].append(None)
+                columns["af_male"].append(None)
+                columns["af_zero_imputed_tags"].append(None)
+            else:
+                columns["af"].append(af_values["overall"][alternate_index])
+                columns["af_overall"].append(af_values["overall"][alternate_index])
+                columns["af_female"].append(af_values.get("female", [None] * len(keys))[alternate_index])
+                columns["af_male"].append(af_values.get("male", [None] * len(keys))[alternate_index])
+                columns["af_zero_imputed_tags"].append(",".join(imputed_tags) if imputed_tags else None)
+            columns["state_reason"].append(state_reason)
+
+    for raw in indexed_lines(path, index, chromosome, start, end, intervals=intervals):
         if raw.startswith("#"):
             continue
         fields = raw.rstrip("\n").split("\t")
@@ -218,30 +287,25 @@ def population_rows(
             raise ValueError("Population VCF record has fewer than eight columns")
         record_chromosome = canonical_chromosome(fields[0])
         position = int(fields[1])
-        if record_chromosome != chromosome or not start < position <= end:
+        if (
+            record_chromosome != chromosome
+            or not start < position <= end
+            or not in_requested_intervals(position)
+        ):
             continue
         reference, alternates, filter_value, info = fields[3], fields[4].split(","), fields[6], fields[7]
         keys = [allele_key(record_chromosome, position, reference, alternate) for alternate in alternates]
         if filter_value != "PASS":
-            records.extend(
-                {
-                    "CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3],
-                    "allele_state": "rejected", "af": None, "af_overall": None,
-                    "af_female": None, "af_male": None, "state_reason": "non_pass_filter",
-                    "af_zero_imputed_tags": None,
-                }
-                for key in keys
-            )
+            append_rows(keys, "rejected", "non_pass_filter")
             continue
-        values_by_tag = {
-            item.split("=", 1)[0]: item.split("=", 1)[1]
-            for item in info.split(";") if "=" in item
-        }
         required_roles = ["overall"]
         if record_chromosome == "X" and x_af_policy == "sex_specific":
             required_roles.append("female")
             if hemizygote:
                 required_roles.append("male")
+        values_by_tag = selected_info_values(
+            info, (configured_tags[role] for role in required_roles)
+        )
         try:
             selected_with_provenance = {
                 role: selected_af_values_or_zero(
@@ -251,15 +315,7 @@ def population_rows(
                 for role in required_roles
             }
         except ValueError as exc:
-            records.extend(
-                {
-                    "CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3],
-                    "allele_state": "invalid", "af": None, "af_overall": None,
-                    "af_female": None, "af_male": None, "state_reason": str(exc),
-                    "af_zero_imputed_tags": None,
-                }
-                for key in keys
-            )
+            append_rows(keys, "invalid", str(exc))
             continue
         selected = {role: values for role, (values, _) in selected_with_provenance.items()}
         invalid_sum_roles = [
@@ -271,15 +327,7 @@ def population_rows(
                 + ", ".join(sorted(invalid_sum_roles))
                 + f" at {record_chromosome}:{position}"
             )
-            records.extend(
-                {
-                    "CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3],
-                    "allele_state": "invalid", "af": None, "af_overall": None,
-                    "af_female": None, "af_male": None, "state_reason": reason,
-                    "af_zero_imputed_tags": None,
-                }
-                for key in keys
-            )
+            append_rows(keys, "invalid", reason)
             continue
         imputed_tags = tuple(
             configured_tags[role]
@@ -288,18 +336,13 @@ def population_rows(
         )
         if imputed_tags:
             imputed_records.append((record_chromosome, position, imputed_tags))
-        for alternate_index, key in enumerate(keys):
-            records.append(
-                {
-                    "CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3],
-                    "allele_state": "observed", "af": selected["overall"][alternate_index],
-                    "af_overall": selected["overall"][alternate_index],
-                    "af_female": selected.get("female", [None] * len(keys))[alternate_index],
-                    "af_male": selected.get("male", [None] * len(keys))[alternate_index],
-                    "state_reason": "selected_af_zero_imputed" if imputed_tags else "valid_selected_af",
-                    "af_zero_imputed_tags": ",".join(imputed_tags) if imputed_tags else None,
-                }
-            )
+        append_rows(
+            keys,
+            "observed",
+            "selected_af_zero_imputed" if imputed_tags else "valid_selected_af",
+            selected,
+            imputed_tags,
+        )
     if imputed_records:
         examples = ", ".join(
             f"{chromosome}:{position} INFO/{','.join(tags)}"
@@ -312,4 +355,4 @@ def population_rows(
             RuntimeWarning,
             stacklevel=2,
         )
-    return pl.DataFrame(records, schema=POPULATION_SCHEMA, strict=False)
+    return pl.DataFrame(columns, schema=POPULATION_SCHEMA, strict=False)

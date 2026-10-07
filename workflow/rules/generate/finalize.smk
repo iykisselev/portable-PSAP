@@ -14,8 +14,7 @@ rule finalize_null_distribution_bundle:
         masked_unit_intervals=lambda wc: generation_scope_artifact(wc, "masked_unit_intervals"),
         allele_states=lambda wc: generation_partition_artifacts(wc, "allele_states"),
         candidate_audit=lambda wc: generation_partition_artifacts(wc, "candidate_audit"),
-        effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
-        resource_identities=GENERATION_CONTEXT.scope_paths["resource_identities"]
+        effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask")
     output:
         **{
             name: ensure(path, non_empty=True) if path else []
@@ -40,7 +39,7 @@ rule finalize_null_distribution_bundle:
         indel_mask_policy=WORKFLOW_PLAN.generation_settings.indel_mask_policy,
         indel_max_reference_length=WORKFLOW_PLAN.generation_settings.indel_max_reference_length,
         indel_max_alternate_length=WORKFLOW_PLAN.generation_settings.indel_max_alternate_length,
-        resource_ids=dict(GENERATION_CONTEXT.bundle_resource_ids)
+        resource_identities=dict(GENERATION_CONTEXT.bundle_resource_identities)
     threads: 1
     resources:
         mem_mb=policy_resources("finalize_null_distribution_bundle").mem_mb,

@@ -16,7 +16,7 @@ import json
 import os
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Callable, Iterable, Iterator, Mapping, Sequence, TextIO
+from typing import Callable, Iterable, Iterator, Sequence, TextIO
 
 import polars as pl
 
@@ -238,12 +238,4 @@ def component_inventory(path: str | Path, sha256: str | None = None) -> dict[str
         "path": component.name,
         "sha256": sha256 or sha256_file(component),
         "bytes": component.stat().st_size,
-    }
-
-
-def resource_inventory(paths: Mapping[str, str | Path]) -> dict[str, dict[str, str]]:
-    """Build a provenance record for raw resources used by a generation run."""
-    return {
-        name: {"path": str(path), "sha256": sha256_file(path)}
-        for name, path in paths.items()
     }

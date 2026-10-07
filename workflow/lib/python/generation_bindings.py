@@ -47,13 +47,6 @@ class GenerationScopeOutputs:
 
 
 @dataclass(frozen=True)
-class GenerationResourceIdentityOutputs:
-    """Output binding for provenance hashing outside scope discovery."""
-
-    resource_identities: PathLike
-
-
-@dataclass(frozen=True)
 class GenerationScopeParameters:
     minimum_retained_fraction: float
     partition_size: int
@@ -159,7 +152,6 @@ class BundleFinalizationInputs:
     allele_states: tuple[PathLike, ...]
     candidate_audit: tuple[PathLike, ...]
     effective_mask: PathLike
-    resource_identities: PathLike
 
 
 @dataclass(frozen=True)
@@ -191,7 +183,7 @@ class BundleFinalizationParameters:
     x_mutation_rate_policy: str
     hemizygote: bool
     variant_classes: tuple[str, ...]
-    resource_ids: Mapping[str, str]
+    resource_identities: Mapping[str, Mapping[str, str]]
     indel_candidate_universe: str = "score_resource"
     indel_membership: str = "reference_span_overlap"
     indel_mask_policy: str = "reference_span_contained"

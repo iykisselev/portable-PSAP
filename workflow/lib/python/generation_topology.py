@@ -52,7 +52,6 @@ def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArt
                 "effective_mask": str(
                     prepared_dir / "effective_calibration_mask.parquet"
                 ),
-                "resource_identities": str(prepared_dir / "resource_identities.json"),
             }
         ),
     )

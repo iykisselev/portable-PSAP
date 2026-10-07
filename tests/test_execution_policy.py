@@ -28,7 +28,6 @@ class ExecutionPolicyTests(unittest.TestCase):
     def test_declared_policies_cover_every_fixed_rule_and_staging_role(self) -> None:
         expected_rule_names = {
             "prepare_generation_scope",
-            "hash_generation_resources",
             "prepare_generation_partition",
             "calculate_partition_null_distribution",
             "reduce_null_distribution_bucket",

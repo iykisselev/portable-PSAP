@@ -24,7 +24,7 @@ def component(name: str) -> dict[str, object]:
 
 def metadata() -> dict[str, object]:
     resources = {
-        name: {"identity": name, "path": f"/{name}", "sha256": "1" * 64}
+        name: {"identity": name, "path": f"/{name}"}
         for name in ("fasta", "exclusion", "testing_units", "population_vcf", "score_snv", "score_indel")
     }
     return {

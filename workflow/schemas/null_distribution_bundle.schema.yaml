@@ -141,10 +141,12 @@ $defs:
   resource:
     type: object
     additionalProperties: false
-    required: [identity, path, sha256]
+    required: [identity, path]
     properties:
       identity: {type: string, minLength: 1}
       path: {type: string, minLength: 1}
+      # Older bundles may carry this optional source digest; new bundles do not
+      # hash large raw inputs before publication.
       sha256: {$ref: "#/$defs/sha256"}
   component:
     type: object

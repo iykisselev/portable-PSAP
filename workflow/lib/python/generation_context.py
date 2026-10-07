@@ -102,21 +102,37 @@ class GenerationRuleContext:
         return MappingProxyType(outputs)
 
     @property
-    def bundle_resource_ids(self) -> Mapping[str, str]:
-        """Return stable scientific identities for generated-bundle provenance."""
-        return MappingProxyType(
-            {
-                "fasta": self.reference.fasta_id,
-                "exclusion": self.reference.exclusion_id,
-                "testing_units": self.reference.testing_unit_id,
-                "score_snv": self.reference.cadd_snv_id,
-                "score_indel": self.reference.cadd_indel_id or "score_indel",
-                "population_vcf": f"population_vcf:{self.plan.af_source['overall']}",
-                "par_regions": "par_regions",
-                "mutation_rate": "mutation_rate",
-                "mutation_rate_indel": "mutation_rate_indel",
-            }
-        )
+    def bundle_resource_identities(self) -> Mapping[str, Mapping[str, str]]:
+        """Return declared scientific identities and source paths without hashing inputs."""
+        identities = {
+            "fasta": self.reference.fasta_id,
+            "exclusion": self.reference.exclusion_id,
+            "testing_units": self.reference.testing_unit_id,
+            "score_snv": self.reference.cadd_snv_id,
+            "score_indel": self.reference.cadd_indel_id or "score_indel",
+            "population_vcf": f"population_vcf:{self.plan.af_source['overall']}",
+            "par_regions": "par_regions",
+            "mutation_rate": "mutation_rate",
+            "mutation_rate_indel": "mutation_rate_indel",
+        }
+        paths = {
+            "fasta": self.plan.fasta.data,
+            "testing_units": self.plan.testing_unit_bed.data,
+            "score_snv": self.plan.score_snv.data,
+            "population_vcf": self.plan.population_vcf.data,
+            "par_regions": self.plan.par_regions.data,
+            "exclusion": self.plan.exclusion.data if self.plan.exclusion else None,
+            "score_indel": self.plan.score_indel.data if self.plan.score_indel else None,
+            "mutation_rate": self.plan.mutation_rate.data if self.plan.mutation_rate else None,
+            "mutation_rate_indel": (
+                self.plan.mutation_rate_indel.data if self.plan.mutation_rate_indel else None
+            ),
+        }
+        paths.update(self.exclusion_paths_by_id())
+        return MappingProxyType({
+            name: MappingProxyType({"identity": identities.get(name, name), "path": str(path)})
+            for name, path in paths.items() if path
+        })
 
     def index_input(self, binding: FileBinding) -> list[str]:
         """Return a declared index as an optional Snakemake input list."""

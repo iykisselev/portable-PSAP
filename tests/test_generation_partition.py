@@ -140,9 +140,13 @@ class GenerationPartitionTests(unittest.TestCase):
         self.assertEqual(rates["POS"].to_list(), [1, 2, 5, 6])
 
     def test_partition_limits_scores_to_eligible_masked_units(self):
-        with patch("generation_partition.score_rows", wraps=score_rows) as read_scores:
+        with (
+            patch("generation_partition.score_rows", wraps=score_rows) as read_scores,
+            patch("generation_partition.population_rows", wraps=generation_population.population_rows) as read_population,
+        ):
             self.prepare()
         self.assertEqual(read_scores.call_args.kwargs["intervals"], [(0, 2), (4, 6)])
+        self.assertEqual(read_population.call_args.kwargs["intervals"], [(0, 2), (4, 6)])
         scores = pl.read_parquet(self.outputs.allele_scores)
         expected = score_rows(self.inputs.score_snv, None, "1", 0, 10).filter(pl.col("POS").is_in([1, 2, 5, 6])).with_columns(pl.lit("snv").alias("variant_class"))
         assert_frame_equal(scores.sort(ALLELE_COLUMNS), expected.sort(ALLELE_COLUMNS))
@@ -173,6 +177,21 @@ class GenerationPartitionTests(unittest.TestCase):
             with self.subTest(artifact=name):
                 original = pl.read_parquet(path)
                 assert_frame_equal(optimized[name].sort(original.columns), original.sort(original.columns))
+
+    def test_partition_outputs_match_full_window_population_read(self):
+        self.prepare()
+        optimized = {name: pl.read_parquet(path) for name, path in vars(self.outputs).items()}
+
+        def read_full_window(*args, **kwargs):
+            kwargs.pop("intervals")
+            return generation_population.population_rows(*args, **kwargs)
+
+        with patch("generation_partition.population_rows", side_effect=read_full_window):
+            self.prepare()
+        for name, path in vars(self.outputs).items():
+            with self.subTest(artifact=name):
+                full_window = pl.read_parquet(path)
+                assert_frame_equal(optimized[name].sort(full_window.columns), full_window.sort(full_window.columns))
 
     def test_nonfinite_candidate_score_still_fails(self):
         content = self.inputs.score_snv.read_text()
@@ -212,6 +231,38 @@ class GenerationPartitionTests(unittest.TestCase):
         self.assertEqual(indel_score["variant_class"].to_list(), ["indel"])
         states = pl.read_parquet(self.outputs.allele_states)
         self.assertEqual(states.filter((pl.col("POS") == 1) & (pl.col("ALT") == "AT"))["variant_class"].to_list(), ["indel"])
+
+    def test_population_query_keeps_indel_anchor_outside_unit(self):
+        pl.DataFrame({"testing_unit_id": ["b"], "status": ["eligible"]}).write_parquet(self.inputs.units)
+        pl.DataFrame({
+            "testing_unit_id": ["b"], "CHROM": ["1"], "START": [1], "END": [2],
+        }).write_parquet(self.inputs.unit_intervals)
+        self.write_mask([(0, 3)])
+        self.inputs.fasta.write_text(">1\nACAAAAAAAA\n", encoding="utf-8")
+        self.inputs.fasta_fai.write_text("1\t10\t3\t10\t11\n", encoding="utf-8")
+        self.inputs.score_snv.write_text(
+            "".join(f"1\t2\tC\t{alt}\t0\t2.0\n" for alt in "AGT"), encoding="utf-8"
+        )
+        self.inputs.population_vcf.write_text(
+            '##fileformat=VCFv4.2\n##INFO=<ID=AF,Number=A,Type=Float,Description="AF">\n'
+            '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n'
+            '1\t1\t.\tACA\tA\t.\tPASS\tAF=0.1\n', encoding="utf-8",
+        )
+        indels = self.directory / "score_indel"
+        indels.write_text("1\t1\tACA\tA\t0\t21\n", encoding="utf-8")
+        self.inputs = GenerationPartitionInputs(**{
+            **vars(self.inputs), "score_indel": indels, "score_indel_index": None,
+        })
+        self.params = GenerationPartitionParameters(**{
+            **vars(self.params), "include_indels": True,
+            "indel_max_reference_length": 3, "indel_max_alternate_length": 3,
+        })
+        with patch("generation_partition.population_rows", wraps=generation_population.population_rows) as read_population:
+            self.prepare()
+        self.assertEqual(read_population.call_args.kwargs["intervals"], [(0, 2)])
+        states = pl.read_parquet(self.outputs.allele_states)
+        indel = states.filter((pl.col("POS") == 1) & (pl.col("REF") == "ACA") & (pl.col("ALT") == "A"))
+        self.assertEqual(indel.select("allele_state", "af").rows(), [("observed", 0.1)])
 
     def test_indel_span_rejection_is_retained_in_candidate_audit(self):
         indels = self.directory / "score_indel"

@@ -11,7 +11,7 @@ from generation_bindings import (
 )
 from generation_partitions import partition_from_manifest
 from generation_population import POPULATION_SCHEMA, population_rows
-from generation_prep import intersect_intervals
+from generation_prep import intersect_intervals, merge_intervals
 from generation_reference import ReferenceReader, membership_rows
 from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
 from generation_indels import INDEL_REJECTION_SCHEMA, indel_candidate_memberships, indel_score_rows
@@ -108,6 +108,14 @@ def prepare_generation_partition(
         write_parquet_atomic(indel_rejections, outputs.candidate_audit, params.compression)
         return
     candidate_intervals = intersect_intervals([(start, end) for _, start, end in intervals], mask)
+    # Indel membership can be earned by a span that overlaps a unit even when
+    # its VCF anchor is just outside that unit's callable bases.  Retain each
+    # anchor as a one-base query region so the population join sees it too.
+    indel_anchors = [
+        (position - 1, position)
+        for position in candidate_classes.filter(pl.col("variant_class") == "indel")["POS"].unique().to_list()
+    ]
+    candidate_intervals = merge_intervals(candidate_intervals + indel_anchors)
     scores = score_rows(
         inputs.score_snv, inputs.score_snv_index, partition.chromosome, partition.start, partition.end,
         intervals=candidate_intervals,
@@ -126,6 +134,7 @@ def prepare_generation_partition(
     panel = population_rows(
         inputs.population_vcf, inputs.population_vcf_index, partition.chromosome, partition.start,
         partition.end, dict(params.af_tags), params.x_af_policy, params.hemizygote,
+        intervals=candidate_intervals,
     )
     if panel.select(ALLELE_COLUMNS).is_duplicated().any():
         raise ValueError(f"Population VCF has duplicate allele states in {partition.identifier}")

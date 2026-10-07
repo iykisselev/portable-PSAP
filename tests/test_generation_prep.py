@@ -25,7 +25,12 @@ from generation_prep import (  # noqa: E402
     supported_scope_mask,
     subtract_intervals,
 )
-from generation_population import population_rows, validate_population_af_headers  # noqa: E402
+from generation_population import (  # noqa: E402
+    population_info_definitions,
+    population_rows,
+    selected_info_values,
+    validate_population_af_headers,
+)
 from generation_probability import role_probability_expression, unit_bucket_frame  # noqa: E402
 from generation_bindings import (  # noqa: E402
     GenerationScopeInputs,
@@ -36,6 +41,53 @@ from generation_scope import prepare_generation_scope
 
 
 class GenerationPreparationTests(unittest.TestCase):
+    def test_scope_warns_and_omits_unsupported_testing_unit_contigs(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            fasta = directory / "reference.fa"
+            fasta_index = directory / "reference.fa.fai"
+            units = directory / "units.bed"
+            population = directory / "population.vcf"
+            scores = directory / "scores.tsv"
+            par_regions = directory / "par.bed"
+            fasta.write_text(">1\n" + "A" * 30 + "\n", encoding="utf-8")
+            fasta_index.write_text("1\t30\t3\t30\t31\n", encoding="utf-8")
+            units.write_text(
+                "1\t0\t2\tAUTOSOMAL\nY\t0\t2\tY_UNIT\nMT\t0\t2\tMT_UNIT\n",
+                encoding="utf-8",
+            )
+            population.write_text(
+                "##INFO=<ID=AF,Number=A,Type=Float,Description=\"AF\">\n"
+                "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n",
+                encoding="utf-8",
+            )
+            scores.write_text("1\t1\tA\tC\t0\t20\n", encoding="utf-8")
+            par_regions.write_text("", encoding="utf-8")
+            inputs = GenerationScopeInputs(
+                population_vcf=population, population_vcf_index=None,
+                score_snv=scores, score_snv_index=None,
+                mutation_rate=None, mutation_rate_index=None,
+                exclusion=None, exclusions={}, testing_units=units, par_regions=par_regions,
+                fasta=fasta, fasta_fai=fasta_index,
+            )
+            outputs = GenerationScopeOutputs(
+                partitions=directory / "partitions.json", buckets=directory / "buckets.json",
+                units=directory / "units.parquet", unit_intervals=directory / "unit_intervals.parquet",
+                masked_unit_intervals=directory / "masked.parquet", mask=directory / "mask.parquet",
+            )
+            with self.assertWarnsRegex(
+                RuntimeWarning, "Ignoring testing-unit contigs.*MT, Y"
+            ):
+                prepare_generation_scope(
+                    inputs, outputs,
+                    GenerationScopeParameters(0.5, 10, 10, "zstd", {"overall": "AF"}),
+                )
+
+            self.assertEqual(["AUTOSOMAL"], pl.read_parquet(outputs.units)["testing_unit_id"].to_list())
+            self.assertEqual(
+                ["1"], pl.read_parquet(outputs.unit_intervals)["CHROM"].unique().to_list()
+            )
+
     def test_unit_buckets_follow_genomic_order_not_unit_id(self):
         units = pl.DataFrame({
             "testing_unit_id": ["ZETA", "ALPHA", "MID", "excluded"],
@@ -212,6 +264,30 @@ class GenerationPreparationTests(unittest.TestCase):
                 ROOT / "tests/null_distribution/population_af.vcf",
                 {"overall": "AF_CUSTOM", "female": "AF_MISSING"},
             )
+
+    def test_population_rows_are_restricted_to_candidate_intervals(self) -> None:
+        source = ROOT / "tests/null_distribution/population_af.vcf"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            full = population_rows(source, None, "1", 0, 60, {"overall": "AF_CUSTOM"})
+            restricted = population_rows(
+                source, None, "1", 0, 60, {"overall": "AF_CUSTOM"},
+                intervals=[(9, 10), (49, 50)],
+            )
+        expected = full.filter(pl.col("POS").is_in([10, 50]))
+        self.assertEqual(restricted.to_dicts(), expected.to_dicts())
+
+    def test_selected_info_values_only_reads_requested_tags(self) -> None:
+        values = selected_info_values(
+            "CSQ=very;long;AF=0.125;AC=8;AN=64", ["AF", "AN", "MISSING"]
+        )
+        self.assertEqual(values, {"AF": "0.125", "AN": "64"})
+
+    def test_population_info_definitions_reads_requested_headers_together(self) -> None:
+        definitions = population_info_definitions(
+            ROOT / "tests/null_distribution/population_af.vcf", {"AF_CUSTOM", "AF_R"}
+        )
+        self.assertEqual(definitions, {"AF_CUSTOM": ("A", "Float"), "AF_R": ("R", "Float")})
 
     def test_union_retention_does_not_double_count_overlapping_unit_intervals(self) -> None:
         units = read_bed_units(ROOT / "tests/null_distribution/testing_units.bed")

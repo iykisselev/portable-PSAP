@@ -5,9 +5,7 @@ from __future__ import annotations
 import csv
 from collections import defaultdict
 from itertools import chain
-import json
 import math
-from pathlib import Path
 
 import polars as pl
 
@@ -142,25 +140,37 @@ def _empty_variant_class_counts() -> dict[str, dict[str, int]]:
 
 
 def _update_variant_class_counts(
-    counts: dict[str, dict[str, int]], variant_class: str, state: str,
+    counts: dict[str, dict[str, int]], variant_class: str, state: str, amount: int = 1,
 ) -> None:
-    """Add one population-state row to the v3 variant-class metadata counts."""
+    """Add one grouped population-state count to the v3 metadata counts."""
     if variant_class not in counts:
         raise ValueError(f"Unsupported variant class in allele states: {variant_class!r}")
     if state in {"observed", "absent"}:
-        counts[variant_class]["retained"] += 1
-        counts[variant_class][state] += 1
+        counts[variant_class]["retained"] += amount
+        counts[variant_class][state] += amount
     elif state == "rejected":
-        counts[variant_class]["rejected"] += 1
+        counts[variant_class]["rejected"] += amount
     else:
         raise ValueError(f"Unsupported allele state in bundle finalization: {state!r}")
 
 
+def _variant_class_counts_from_frame(count_frame: pl.DataFrame) -> dict[str, dict[str, int]]:
+    """Build public v3 counts from a compact grouped state-count frame."""
+    counts = _empty_variant_class_counts()
+    for variant_class, state, amount in count_frame.iter_rows():
+        _update_variant_class_counts(counts, variant_class, state, amount)
+    return counts
+
+
 def variant_class_counts(state_paths, audit_paths) -> dict[str, dict[str, int]]:
     """Count retained, population-rejected, and structural candidates by class."""
-    counts = _empty_variant_class_counts()
-    for variant_class, state in parquet_rows(state_paths, ["variant_class", "allele_state"]):
-        _update_variant_class_counts(counts, variant_class, state)
+    count_frame = (
+        pl.scan_parquet(state_paths)
+        .group_by("variant_class", "allele_state")
+        .len()
+        .collect(engine="streaming")
+    )
+    counts = _variant_class_counts_from_frame(count_frame)
     for _ in candidate_audit_rows(audit_paths):
         counts["indel"]["rejected"] += 1
     return counts
@@ -186,30 +196,35 @@ def collect_finalization_allele_rows(
     list[tuple[object, ...]],
     dict[str, dict[str, int]] | None,
 ]:
-    """Read each state/audit shard once for every final public allele artifact.
+    """Collect sparse public rows and grouped counts with native Parquet scans.
 
-    The collected rows are exceptional outputs (rejections or imputed AF tags),
-    not the full candidate universe.  State and audit lists remain separate so
-    the existing state-first excluded-allele component ordering is unchanged.
+    Candidate-state shards can contain hundreds of millions of rows, while
+    public rejection and zero-imputation artifacts are normally tiny. Keep the
+    candidate scan in Polars and materialize only those exceptional rows.
+    State and audit lists remain separate so excluded-allele ordering stays
+    state-first followed by structural indel rejections.
     """
-    state_columns = [
-        "CHROM", "POS", "REF", "ALT", "allele_state", "state_reason",
-        "af_zero_imputed_tags",
+    states = pl.scan_parquet(state_paths)
+    scans = [
+        states.filter(pl.col("allele_state") == "rejected").select(
+            "CHROM", "POS", "REF", "ALT", "state_reason"
+        ),
+        states.filter(
+            pl.col("af_zero_imputed_tags").is_not_null()
+            & (pl.col("af_zero_imputed_tags") != "")
+        ).select("CHROM", "POS", "REF", "ALT", "af_zero_imputed_tags"),
     ]
-    counts = _empty_variant_class_counts() if include_variant_class_counts else None
-    if counts is not None:
-        state_columns.append("variant_class")
-    rejected, zero_imputed, audit = [], [], []
-    for row in parquet_rows(state_paths, state_columns):
-        chromosome, position, reference, alternate, state, reason, tags, *variant_class = row
-        if state == "rejected":
-            rejected.append((chromosome, position, reference, alternate, reason))
-        if tags:
-            zero_imputed.append((chromosome, position, reference, alternate, tags))
-        if counts is not None:
-            _update_variant_class_counts(counts, variant_class[0], state)
-    for row in candidate_audit_rows(audit_paths):
-        audit.append(row)
+    if include_variant_class_counts:
+        scans.append(states.group_by("variant_class", "allele_state").len())
+    collected = pl.collect_all(scans, engine="streaming")
+    rejected = list(collected[0].iter_rows())
+    zero_imputed = list(collected[1].iter_rows())
+    audit = list(candidate_audit_rows(audit_paths))
+    counts = (
+        _variant_class_counts_from_frame(collected[2])
+        if include_variant_class_counts
+        else None
+    )
     if counts is not None:
         counts["indel"]["rejected"] += len(audit)
     return rejected, zero_imputed, audit, counts
@@ -261,11 +276,6 @@ def finalize_generated_bundle(
         ["#CHROM", "POS", "REF", "ALT", "imputed_info_tags"],
         zero_imputed_rows,
     )
-    resource_record = json.loads(Path(inputs.resource_identities).read_text(encoding="utf-8"))
-    resources = {
-        name: {"identity": params.resource_ids.get(name, name), "path": row["path"], "sha256": row["sha256"]}
-        for name, row in resource_record["resources"].items()
-    }
     components = {
         "lookup_het": lookup_het, "lookup_hom": lookup_hom,
         "eligible_testing_units": eligible_bed, "calibration_regions": calibration_regions,
@@ -308,7 +318,7 @@ def finalize_generated_bundle(
             "excluded_alleles": rejected_count, "calibration_intervals": calibration_count,
             "population_af_zero_imputations": zero_imputation_count,
         },
-        "resource_identities": resources, "components": components,
+        "resource_identities": dict(params.resource_identities), "components": components,
         "validation_artifacts": dict(VALIDATION_ARTIFACT_FILENAMES),
     }
     if combined_indel_bundle:

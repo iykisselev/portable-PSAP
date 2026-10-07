@@ -81,7 +81,7 @@ class GenerationTopologyTests(unittest.TestCase):
         self.assertNotIn("validation", context.bundle_outputs())
         self.assertEqual(
             f"population_vcf:{plan.generation.af_source['overall']}",
-            context.bundle_resource_ids["population_vcf"],
+            context.bundle_resource_identities["population_vcf"]["identity"],
         )
         self.assertEqual(
             str(

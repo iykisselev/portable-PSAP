@@ -102,13 +102,16 @@ class GenerationAdapterBindingTests(unittest.TestCase):
                 x_mutation_rate_policy="mean",
                 hemizygote="true",
                 variant_classes=[Path("snv"), "indel"],
-                resource_ids={"fasta": Path("sha256")},
+                resource_identities={"fasta": {"identity": Path("GRCh38"), "path": Path("reference.fa")}},
             ),
         )
 
         self.assertEqual(("snv", "indel"), parameters.variant_classes)
         self.assertEqual({"AC": "AC"}, parameters.af_tags)
-        self.assertEqual({"fasta": "sha256"}, parameters.resource_ids)
+        self.assertEqual(
+            {"fasta": {"identity": "GRCh38", "path": "reference.fa"}},
+            parameters.resource_identities,
+        )
         self.assertTrue(parameters.hemizygote)
         self.assertEqual(1, parameters.indel_max_reference_length)
 

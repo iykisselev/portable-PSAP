@@ -121,7 +121,25 @@ class BundleFinalizationTests(unittest.TestCase):
                 variant_class_counts([states], [audit]),
             )
 
-    def test_finalization_collects_public_allele_rows_and_v3_counts_in_one_pass(self) -> None:
+    def test_finalization_rejects_unsupported_population_state(self) -> None:
+        with TemporaryDirectory() as temporary:
+            states = Path(temporary) / "states.parquet"
+            audit = Path(temporary) / "audit.parquet"
+            pl.DataFrame({
+                "CHROM": ["1"], "POS": [1], "REF": ["A"], "ALT": ["C"],
+                "allele_state": ["invalid"], "state_reason": ["bad_af"],
+                "af_zero_imputed_tags": [None], "variant_class": ["snv"],
+            }).write_parquet(states)
+            pl.DataFrame(schema={
+                "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String,
+                "ALT": pl.String, "rejection_reason": pl.String,
+            }).write_parquet(audit)
+            with self.assertRaisesRegex(ValueError, "Unsupported allele state"):
+                collect_finalization_allele_rows(
+                    [states], [audit], include_variant_class_counts=True
+                )
+
+    def test_finalization_collects_public_allele_rows_and_v3_counts_with_native_state_scans(self) -> None:
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             states = directory / "states.parquet"
@@ -132,7 +150,7 @@ class BundleFinalizationTests(unittest.TestCase):
                     "REF": ["A", "C", "G"], "ALT": ["T", "G", "GA"],
                     "allele_state": ["observed", "rejected", "absent"],
                     "state_reason": ["present", "filtered", "not_present"],
-                    "af_zero_imputed_tags": [[], ["AF"], ["AF_FEMALE"]],
+                    "af_zero_imputed_tags": [None, "AF", "AF_FEMALE"],
                     "variant_class": ["snv", "snv", "indel"],
                 }
             ).write_parquet(states)
@@ -154,7 +172,7 @@ class BundleFinalizationTests(unittest.TestCase):
 
             self.assertEqual([("1", 2, "C", "G", "filtered")], rejected)
             self.assertEqual(
-                [("1", 2, "C", "G", ["AF"]), ("X", 3, "G", "GA", ["AF_FEMALE"])],
+                [("1", 2, "C", "G", "AF"), ("X", 3, "G", "GA", "AF_FEMALE")],
                 zero_imputed,
             )
             self.assertEqual(
@@ -167,7 +185,7 @@ class BundleFinalizationTests(unittest.TestCase):
                 },
                 counts,
             )
-            self.assertEqual(2, reader.call_count)
+            self.assertEqual(1, reader.call_count)
 
 
 if __name__ == "__main__":
