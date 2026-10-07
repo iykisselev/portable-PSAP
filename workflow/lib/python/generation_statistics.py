@@ -16,6 +16,22 @@ from generation_scores import ALLELE_COLUMNS, mutation_rate_rows
 from io_contracts import write_parquet_atomic
 
 
+def selected_partition_rows(path: str, candidate_keys: pl.DataFrame) -> pl.DataFrame:
+    """Stream only rows whose alleles are present in a bucket's memberships.
+
+    State and score files describe every candidate allele in a genomic
+    partition, whereas a calculation job handles only one unit bucket.  A
+    semi join keeps the partition files out of the job's resident working set
+    and, unlike filtering after an eager read, bounds it by the selected
+    bucket's candidate alleles.
+    """
+    return (
+        pl.scan_parquet(path)
+        .join(candidate_keys.lazy(), on=ALLELE_COLUMNS, how="semi")
+        .collect(engine="streaming")
+    )
+
+
 def candidate_intervals(events: pl.DataFrame, variant_class: str) -> list[tuple[int, int]]:
     """Return merged-source-compatible one-base intervals for candidate alleles."""
     return [
@@ -39,14 +55,20 @@ def calculate_partition_statistics(
 ) -> None:
     """Assign absence-policy frequencies and aggregate one partition/bucket."""
     partition = partition_from_manifest(inputs.partitions, partition_id)
-    states = pl.read_parquet(inputs.allele_states)
-    memberships = pl.read_parquet(inputs.allele_membership)
-    scores = pl.read_parquet(inputs.allele_scores)
     bucket = bucket_from_manifest(inputs.buckets, bucket_id)
-    selected_units = pl.DataFrame({"testing_unit_id": list(bucket.unit_ids)})
+    # Filter the high-cardinality membership table before materializing it.
+    # A partition may cover many more units than the one bounded bucket being
+    # reduced by this job.
+    memberships = (
+        pl.scan_parquet(inputs.allele_membership)
+        .filter(pl.col("testing_unit_id").is_in(bucket.unit_ids))
+        .collect(engine="streaming")
+    )
+    candidate_keys = memberships.select(ALLELE_COLUMNS).unique()
+    scores = selected_partition_rows(inputs.allele_scores, candidate_keys)
+    states = selected_partition_rows(inputs.allele_states, candidate_keys)
     events = (
-        memberships.join(selected_units, on="testing_unit_id", how="inner")
-        .with_columns(pl.lit(bucket.ordinal).alias("unit_bucket"))
+        memberships.with_columns(pl.lit(bucket.ordinal).alias("unit_bucket"))
         .join(scores, on=ALLELE_COLUMNS, how="inner", suffix="_score")
         .join(states, on=ALLELE_COLUMNS, how="inner", suffix="_state")
         .filter(pl.col("allele_state") != "rejected")
