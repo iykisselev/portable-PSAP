@@ -7,7 +7,7 @@ from typing import Sequence
 
 from validation import (
     IndexedResource,
-    read_vcf,
+    read_vcf_header_facts,
     validate_annotation_chromosome_names,
     validate_cadd_chromosome_names,
     validate_cadd_resources,
@@ -41,9 +41,8 @@ def validate_resource_inputs(
         errors=errors,
         warnings=warnings,
     )
-    vcf_errors: list[str] = []
-    _, vcf_chromosomes = read_vcf(vcf, vcf_errors)
-    errors.extend(vcf_errors)
+    vcf_facts = read_vcf_header_facts(vcf, errors)
+    vcf_chromosomes = vcf_facts.canonical_map
     validate_region_chromosomes(
         reference_chromosomes["exclusions"],
         vcf_chromosomes,

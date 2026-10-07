@@ -13,6 +13,8 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from validation import (  # noqa: E402
     IndexedResource,
+    VcfHeaderFacts,
+    read_vcf_header_facts,
     read_ped,
     read_samples_tsv,
     validate_cadd_chromosome_names,
@@ -31,6 +33,35 @@ from validation_resources import validate_resource_inputs  # noqa: E402
 
 
 class ValidationTests(unittest.TestCase):
+    def test_vcf_facts_use_index_statistics_when_contig_headers_are_absent(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            vcf = Path(temp_dir) / "cohort.vcf.gz"
+            vcf.write_bytes(b"placeholder")
+            header = SimpleNamespace(
+                returncode=0,
+                stdout="#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tsample\n",
+                stderr="",
+            )
+            statistics = SimpleNamespace(
+                returncode=0,
+                stdout="1\t100\nX\t50\n",
+                stderr="",
+            )
+            errors: list[str] = []
+            with (
+                patch("validation.shutil.which", return_value="bcftools"),
+                patch("validation.subprocess.run", side_effect=(header, statistics)) as run,
+                patch("validation.read_vcf_record_contigs") as record_contigs,
+            ):
+                facts = read_vcf_header_facts(vcf, errors)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(facts.samples, ("sample",))
+        self.assertEqual(facts.contigs, frozenset({"1", "X"}))
+        self.assertEqual(facts.canonical_map, {"1": "1", "X": "X"})
+        self.assertEqual(run.call_args_list[1].args[0], ["bcftools", "index", "--stats", str(vcf)])
+        record_contigs.assert_not_called()
+
     def test_all_unknown_sample_sheet_phenotypes_fail_validation(self) -> None:
         with TemporaryDirectory() as temp_dir:
             samples = Path(temp_dir) / "samples.tsv"
@@ -270,7 +301,10 @@ class ValidationTests(unittest.TestCase):
                 "validation_resources.validate_reference_tables",
                 return_value={"testing_unit": {"1"}, "exclusions": {"1"}},
             ) as validate_tables,
-            patch("validation_resources.read_vcf", return_value=([], {"1": "1"})),
+            patch(
+                "validation_resources.read_vcf_header_facts",
+                return_value=VcfHeaderFacts((), frozenset({"1"}), {"1": "1"}),
+            ),
             patch(
                 "validation_resources.validate_cadd_resources", return_value={}
             ) as validate_cadd,
@@ -299,6 +333,7 @@ class ValidationTests(unittest.TestCase):
             "sex_counts": {},
             "phenotype_counts": {},
         }
+        facts = VcfHeaderFacts((), frozenset({"1"}), {"1": "1"})
         with (
             patch("validation_cohort.read_samples_tsv", return_value=metadata),
             patch("validation_cohort.write_sample_manifest"),
@@ -306,14 +341,17 @@ class ValidationTests(unittest.TestCase):
                 "validation_cohort.read_sample_manifest_index",
                 return_value=SimpleNamespace(records=[]),
             ),
-            patch("validation_cohort.read_vcf", return_value=([], {"1": "1"})),
+            patch(
+                "validation_cohort.read_vcf_header_facts",
+                return_value=facts,
+            ),
             patch(
                 "validation_cohort.validate_hemizygote_chromosomes"
             ) as validate_hemizygote,
             patch("validation_cohort.validate_vcf_samples"),
             patch("validation_cohort.validate_vcf_resource"),
             patch("validation_cohort.validate_fasta"),
-            patch("validation_cohort.validate_normalized_split_vcf"),
+            patch("validation_cohort.validate_normalized_split_vcf") as validate_normalized,
         ):
             validate_cohort_inputs(
                 metadata_path="samples.tsv",
@@ -328,6 +366,7 @@ class ValidationTests(unittest.TestCase):
             )
 
         self.assertIs(validate_hemizygote.call_args.args[0], True)
+        self.assertIs(validate_normalized.call_args.args[-1], facts)
 
     def test_model_validation_passes_native_model_booleans(self) -> None:
         with (

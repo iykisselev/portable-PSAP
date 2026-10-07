@@ -36,6 +36,15 @@ class IndexedResource:
     index: str | Path | None = None
 
 
+@dataclass(frozen=True)
+class VcfHeaderFacts:
+    """VCF header and contig facts shared by input validation checks."""
+
+    samples: tuple[str, ...]
+    contigs: frozenset[str]
+    canonical_map: dict[str, str]
+
+
 def genomic_resource_kind(path: str | Path) -> str | None:
     name = str(path).lower()
     for suffix in (".gz", ".bgz", ".bgzf"):
@@ -707,12 +716,11 @@ def parse_contig_id(header_line: str) -> str | None:
     return contig_id.strip() or None
 
 
-def read_vcf_record_chromosomes(
+def read_vcf_record_contigs(
     path: str | Path,
     errors: list[str],
-) -> dict[str, str]:
-    chromosomes: dict[str, str] = {}
-    seen_names: set[str] = set()
+) -> set[str]:
+    contigs: set[str] = set()
 
     try:
         with open_text_maybe_gzip(path) as handle:
@@ -721,26 +729,44 @@ def read_vcf_record_chromosomes(
                     continue
 
                 name = line.split("\t", 1)[0].strip()
-                if name and name not in seen_names:
-                    seen_names.add(name)
-                    add_chromosome_name(chromosomes, name, "Input VCF", errors)
+                if name:
+                    contigs.add(name)
     except OSError as exc:
         errors.append(f"Could not read chromosome names in VCF {path}: {exc}")
 
-    return chromosomes
+    return contigs
 
 
-def read_vcf(
-    path: str | Path,
-    errors: list[str],
-) -> tuple[list[str], dict[str, str]]:
+def read_indexed_vcf_contigs(path: str | Path, bcftools: str) -> set[str]:
+    """Read indexed VCF contigs without decompressing records, when possible."""
+    try:
+        result = subprocess.run(
+            [bcftools, "index", "--stats", str(path)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError:
+        return set()
+    if result.returncode != 0:
+        return set()
+    return {
+        line.split("\t", 1)[0].strip()
+        for line in result.stdout.splitlines()
+        if line.strip()
+    }
+
+
+def read_vcf_header_facts(path: str | Path, errors: list[str]) -> VcfHeaderFacts:
+    """Read VCF samples and contigs, using an index before a record scan."""
     if not require_file(path, "Input VCF", errors):
-        return [], {}
+        return VcfHeaderFacts((), frozenset(), {})
 
     bcftools = shutil.which("bcftools")
     if bcftools is None:
         errors.append("bcftools is not available")
-        return [], {}
+        return VcfHeaderFacts((), frozenset(), {})
 
     try:
         result = subprocess.run(
@@ -752,31 +778,55 @@ def read_vcf(
         )
     except OSError as exc:
         errors.append(f"Could not run bcftools to read VCF {path}: {exc}")
-        return [], {}
+        return VcfHeaderFacts((), frozenset(), {})
 
     if result.returncode != 0:
         errors.append(
             f"bcftools could not read the VCF header: {path}\n"
             f"bcftools stderr: {result.stderr.strip()}"
         )
-        return [], {}
+        return VcfHeaderFacts((), frozenset(), {})
 
-    samples: list[str] = []
-    chromosomes: dict[str, str] = {}
+    samples: tuple[str, ...] = ()
+    contigs: set[str] = set()
     for line in result.stdout.splitlines():
         contig_id = parse_contig_id(line)
         if contig_id is not None:
-            add_chromosome_name(chromosomes, contig_id, "Input VCF", errors)
+            contigs.add(contig_id)
         elif line.startswith("#CHROM"):
-            samples = [sample.strip() for sample in line.split("\t")[9:]]
+            samples = tuple(sample.strip() for sample in line.split("\t")[9:])
 
-    if not chromosomes:
-        chromosomes = read_vcf_record_chromosomes(path, errors)
+    if not contigs:
+        contigs = read_indexed_vcf_contigs(path, bcftools)
+    if not contigs:
+        contigs = read_vcf_record_contigs(path, errors)
 
+    chromosomes: dict[str, str] = {}
+    for contig in sorted(contigs):
+        add_chromosome_name(chromosomes, contig, "Input VCF", errors)
     if not chromosomes:
         errors.append("No canonical chromosomes (1-22, X, Y) were found in the VCF")
 
-    return samples, chromosomes
+    return VcfHeaderFacts(samples, frozenset(contigs), chromosomes)
+
+
+def read_vcf_record_chromosomes(
+    path: str | Path,
+    errors: list[str],
+) -> dict[str, str]:
+    """Compatibility wrapper for callers that need only canonical contigs."""
+    chromosomes: dict[str, str] = {}
+    for contig in sorted(read_vcf_record_contigs(path, errors)):
+        add_chromosome_name(chromosomes, contig, "Input VCF", errors)
+    return chromosomes
+
+
+def read_vcf(
+    path: str | Path,
+    errors: list[str],
+) -> tuple[list[str], dict[str, str]]:
+    facts = read_vcf_header_facts(path, errors)
+    return list(facts.samples), facts.canonical_map
 
 
 def read_all_vcf_contigs(path: str | Path, bcftools: str) -> set[str]:
@@ -823,6 +873,7 @@ def validate_normalized_split_vcf(
     fasta_index_path: str | Path,
     errors: list[str],
     warnings: list[str],
+    vcf_facts: VcfHeaderFacts | None = None,
 ) -> None:
     if not Path(vcf_path).is_file() or not Path(fasta_path).is_file():
         return
@@ -831,7 +882,11 @@ def validate_normalized_split_vcf(
     if bcftools is None:
         return
 
-    vcf_contigs = read_all_vcf_contigs(vcf_path, bcftools)
+    vcf_contigs = (
+        set(vcf_facts.contigs)
+        if vcf_facts is not None
+        else read_all_vcf_contigs(vcf_path, bcftools)
+    )
     fasta_contigs = read_fasta_contigs(fasta_index_path)
     shared_contigs = sorted(vcf_contigs & fasta_contigs)
     unsupported_contigs = sorted(vcf_contigs - fasta_contigs)

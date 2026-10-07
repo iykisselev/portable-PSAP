@@ -8,7 +8,7 @@ from sample_manifest import read_sample_manifest_index, write_sample_manifest
 from validation import (
     read_ped,
     read_samples_tsv,
-    read_vcf,
+    read_vcf_header_facts,
     validate_fasta,
     validate_hemizygote_chromosomes,
     validate_normalized_split_vcf,
@@ -46,17 +46,21 @@ def validate_cohort_inputs(
     # once so VCF validation and all later workflow rules agree on its content.
     write_sample_manifest(metadata["manifest"], manifest_path, create_parents=False)
     manifest = read_sample_manifest_index(manifest_path)
-    vcf_samples, vcf_chromosomes = read_vcf(vcf, errors)
-    validate_hemizygote_chromosomes(hemizygote_model, vcf_chromosomes, errors)
+    vcf_facts = read_vcf_header_facts(vcf, errors)
+    validate_hemizygote_chromosomes(
+        hemizygote_model, vcf_facts.canonical_map, errors
+    )
     validate_vcf_samples(
-        vcf_samples,
+        list(vcf_facts.samples),
         [record.pid for record in manifest.records],
         errors,
         metadata_label=metadata_label,
     )
     validate_vcf_resource(vcf, "Input VCF", errors, warnings, vcf_index)
     validate_fasta(fasta, fasta_index, fasta_gzi, errors)
-    validate_normalized_split_vcf(vcf, fasta, fasta_index, errors, warnings)
+    validate_normalized_split_vcf(
+        vcf, fasta, fasta_index, errors, warnings, vcf_facts
+    )
     return build_validation_report(
         errors=errors,
         warnings=warnings,
@@ -66,14 +70,14 @@ def validate_cohort_inputs(
             "n_excluded_phenotype_samples": len(
                 metadata["excluded_phenotype_sample_ids"]
             ),
-            "n_vcf_samples": len(vcf_samples),
+            "n_vcf_samples": len(vcf_facts.samples),
             "n_affected_samples": sum(
                 record.phenotype == "affected" for record in manifest.records
             ),
             "n_male_samples": sum(record.sex == "1" for record in manifest.records),
             "sex_counts": metadata["sex_counts"],
             "phenotype_counts": metadata["phenotype_counts"],
-            "vcf_chromosomes": vcf_chromosomes,
+            "vcf_chromosomes": vcf_facts.canonical_map,
         },
         sections=("cohort",),
     )
