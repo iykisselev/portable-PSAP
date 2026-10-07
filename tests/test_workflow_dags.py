@@ -7,6 +7,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
+import yaml
+
 from workflow_test_utils import (
     ROOT,
     SNAKEMAKE,
@@ -90,6 +92,22 @@ class WorkflowDagBaselineTests(unittest.TestCase):
                 output = command_output(result)
                 self.assertNotEqual(0, result.returncode, output[-6000:])
                 self.assertIn(f"No rule to produce {target}", output)
+
+    def test_missing_enabled_indel_resource_reaches_validation_instead_of_dag_failure(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="portable-psap-missing-indel-") as temporary_dir:
+            root = Path(temporary_dir)
+            manifest = yaml.safe_load((ROOT / "tests" / "smoke" / "run.yaml").read_text())
+            manifest["bindings"]["reference"]["cadd"]["indel"] = {
+                "data": None,
+                "index": None,
+            }
+            manifest_path = root / "missing-indel.yaml"
+            manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+            result = run_workflow(manifest_path, root / "output", dry_run=True)
+            output = command_output(result)
+            self.assertEqual(0, result.returncode, output[-6000:])
+            self.assertNotIn("missing input files: ''", output.lower())
+            self.assertIn("rule validate_resources:", output)
 
 
 if __name__ == "__main__":

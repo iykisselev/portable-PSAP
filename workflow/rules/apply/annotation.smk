@@ -15,16 +15,16 @@ rule annotate_variants:
         cadd_snv=apply_resource("cadd_snv").staged_data,
         cadd_snv_index=apply_resource("cadd_snv").staged_index,
         cadd_indel=(
-            [
+            optional_input(
                 optional_resource_field("cadd_indel", "staged_data")
-            ]
+            )
             if WORKFLOW_PLAN.model.include_indels
             else []
         ),
         cadd_indel_index=(
-            [
+            optional_input(
                 optional_resource_field("cadd_indel", "staged_index")
-            ]
+            )
             if WORKFLOW_PLAN.model.include_indels
             else []
         ),

@@ -26,6 +26,7 @@ from validation import (  # noqa: E402
 import resources  # noqa: E402
 from validation_cohort import validate_cohort_inputs  # noqa: E402
 from validation_model import validate_model_inputs  # noqa: E402
+from validation_model import certificate_components_with_exclusions  # noqa: E402
 from validation_resources import validate_resource_inputs  # noqa: E402
 
 
@@ -382,6 +383,57 @@ class ValidationTests(unittest.TestCase):
         self.assertIn(
             "Generated lookup variant classes do not match model.include_indels",
             report["errors"],
+        )
+
+    def test_generated_bundle_without_resolved_bin_width_reports_a_clear_error(self) -> None:
+        metadata = {
+            "model_assumptions": {"roles": ["het", "hom"], "variant_classes": ["snv"]},
+            "assembly": "GRCh38",
+            "testing_unit_type": "gene",
+            "binning": {"score_max": 20.0, "bin_width": 0.1},
+        }
+        with (
+            patch("validation_model.validate_lookup_files", return_value=[]),
+            patch("validation_model.validate_lookup_unit_overlap", return_value={}),
+            patch("validation_model.verify_bundle_certificate", return_value=metadata),
+        ):
+            report = validate_model_inputs(
+                score_max=20.0,
+                assembly="GRCh38",
+                unit="gene",
+                hemizygote_model=False,
+                include_indels=False,
+                testing_unit_bed="units.bed",
+                lookup_tables={"het": "het.tsv", "hom": "hom.tsv", "hem_chrX": ""},
+                lookup_contract="generated_bundle_v2",
+                lookup_bin_width=None,
+                bundle_certificate={
+                    "metadata": "metadata.json",
+                    "validation": "validation.json",
+                    "marker": "validation.ok",
+                },
+                bundle_components={},
+            )
+        self.assertIn(
+            "Generated lookup bundle has no resolved lookup bin_width",
+            report["errors"],
+        )
+        self.assertFalse(
+            any("Could not validate generated lookup bundle contract" in error for error in report["errors"])
+        )
+
+    def test_all_declared_exclusion_components_are_passed_to_certificate_verification(self) -> None:
+        components = certificate_components_with_exclusions(
+            {"lookup_het": "het.tsv.gz"},
+            ("excluded_alleles.tsv.gz", "additional_exclusions.tsv.gz"),
+        )
+        self.assertEqual(
+            {
+                "lookup_het": "het.tsv.gz",
+                "excluded_alleles": "excluded_alleles.tsv.gz",
+                "excluded_alleles_001": "additional_exclusions.tsv.gz",
+            },
+            components,
         )
 
     def test_staging_accepts_a_declared_nonconventional_index(self) -> None:

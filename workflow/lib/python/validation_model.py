@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from bundle_contract import is_supported_contract
 from bundle_certificate import BundleCertificateError, verify_bundle_certificate
@@ -16,6 +16,23 @@ from validation_reporting import build_validation_report
 
 
 VALID_UNITS = frozenset({"gene", "cadd_region", "coding_cadd_region"})
+
+
+def certificate_components_with_exclusions(
+    components: Mapping[str, str | Path], excluded_alleles: Iterable[str | Path]
+) -> dict[str, str]:
+    """Name every declared exclusion input so certificate verification sees it.
+
+    Bundle metadata currently certifies one ``excluded_alleles`` component.
+    Additional paths are deliberately given unique component names: the
+    certificate verifier will then reject them unless a future contract
+    explicitly certifies each one, rather than silently trusting them.
+    """
+    resolved = {name: str(path) for name, path in components.items()}
+    for index, path in enumerate(excluded_alleles):
+        name = "excluded_alleles" if index == 0 else f"excluded_alleles_{index:03d}"
+        resolved[name] = str(path)
+    return resolved
 
 
 def validate_model_inputs(
@@ -92,7 +109,11 @@ def validate_model_inputs(
                 abs_tol=1e-12,
             ):
                 errors.append("Generated lookup score_max differs from model.score_max")
-            if not math.isclose(
+            if lookup_bin_width is None:
+                errors.append(
+                    "Generated lookup bundle has no resolved lookup bin_width"
+                )
+            elif not math.isclose(
                 float(binning["bin_width"]),
                 float(lookup_bin_width),
                 rel_tol=0,

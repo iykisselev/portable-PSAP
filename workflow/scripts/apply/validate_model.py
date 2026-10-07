@@ -10,7 +10,7 @@ from _library import add_library_path
 add_library_path(snakemake.scriptdir)
 
 from bundle_contract import is_supported_contract
-from validation_model import validate_model_inputs
+from validation_model import certificate_components_with_exclusions, validate_model_inputs
 from validation_reporting import write_validation_report
 
 
@@ -35,14 +35,16 @@ def main() -> None:
             "validation": str(snakemake.input.lookup_validation[0]),
             "marker": str(snakemake.input.lookup_marker[0]),
         }
-        components = {
-            "lookup_het": configured["het"],
-            "lookup_hom": configured["hom"],
-            "eligible_testing_units": str(snakemake.input.lookup_eligible_units[0]),
-            "calibration_regions": str(snakemake.input.lookup_calibration_mask[0]),
-            "excluded_alleles": str(snakemake.input.lookup_excluded_alleles[0]),
-            "excluded_units": str(snakemake.input.lookup_excluded_units[0]),
-        }
+        components = certificate_components_with_exclusions(
+            {
+                "lookup_het": configured["het"],
+                "lookup_hom": configured["hom"],
+                "eligible_testing_units": str(snakemake.input.lookup_eligible_units[0]),
+                "calibration_regions": str(snakemake.input.lookup_calibration_mask[0]),
+                "excluded_units": str(snakemake.input.lookup_excluded_units[0]),
+            },
+            snakemake.input.lookup_excluded_alleles,
+        )
         if snakemake.params.hemizygote_model:
             components["lookup_hem_chrX"] = configured["hem_chrX"]
     report = validate_model_inputs(

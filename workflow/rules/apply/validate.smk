@@ -66,9 +66,9 @@ rule validate_resources:
         cadd_snv=apply_resource("cadd_snv").source,
         cadd_snv_index=optional_input(apply_resource("cadd_snv").source_index),
         cadd_indel=(
-            [
+            optional_input(
                 optional_resource_field("cadd_indel", "source")
-            ]
+            )
             if WORKFLOW_PLAN.model.include_indels
             else []
         ),
