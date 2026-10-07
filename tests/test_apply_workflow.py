@@ -46,7 +46,7 @@ class ApplyWorkflowFixtureTests(unittest.TestCase):
             # Repeated exclusions must be subtracted once, never treated as an
             # inclusion mask by the renamed primary input.
             manifest["bindings"]["reference"]["exclusion"] = dict(
-                manifest["bindings"]["reference"]["exclusions"]["gnomad-r2-notpass"]
+                manifest["bindings"]["reference"]["exclusions"]["encode-hg38-blacklist-v2"]
             )
             manifest_path = Path(temporary_dir) / "run.yaml"
             manifest_path.write_text(yaml.safe_dump(manifest))

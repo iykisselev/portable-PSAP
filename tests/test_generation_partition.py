@@ -112,6 +112,21 @@ class GenerationPartitionTests(unittest.TestCase):
         # Do not conceal real duplicate source records while avoiding repeat queries.
         self.assertEqual(scores.height, 3)
 
+    def test_indexed_disjoint_fetches_keep_each_record_at_its_pos_anchor_once(self):
+        reader = Mock()
+        reader.contigs = ["chr1"]
+        repeated = "chr1\t2\tA\tC\t0\t2\n"
+        reader.fetch.side_effect = [
+            [repeated],
+            [repeated, "chr1\t6\tA\tC\t0\t6\n"],
+        ]
+        fake_pysam = Mock()
+        fake_pysam.TabixFile.return_value.__enter__ = Mock(return_value=reader)
+        fake_pysam.TabixFile.return_value.__exit__ = Mock(return_value=False)
+        with patch.object(generation_population, "pysam", fake_pysam):
+            scores = score_rows("scores.gz", "custom.tbi", "1", 1, 6, intervals=[(1, 2), (4, 6)])
+        self.assertEqual(scores.select("POS").to_series().to_list(), [2, 6])
+
     @unittest.skipUnless(generation_population.pysam, "pysam is required for real Tabix coverage")
     def test_real_tabix_and_plain_reads_agree_at_boundaries(self):
         pysam = generation_population.pysam

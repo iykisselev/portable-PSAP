@@ -41,6 +41,9 @@ def indexed_lines(
 
     Callers supplying intervals must merge overlaps first. Unindexed fixtures
     are scanned once; callers remain responsible for filtering their rows.
+    Tabix can return one long record for every interval its reference span
+    overlaps; retain it only for the interval containing its one-based POS
+    anchor so disjoint fetches cannot duplicate an allele state.
     """
     regions = [(start, end)] if intervals is None else intervals
     if not regions:
@@ -53,7 +56,16 @@ def indexed_lines(
             source_chromosome = names.get(chromosome)
             if source_chromosome is not None:
                 for region_start, region_end in regions:
-                    yield from reader.fetch(source_chromosome, region_start, region_end)
+                    for raw in reader.fetch(source_chromosome, region_start, region_end):
+                        fields = raw.split("\t", 2)
+                        try:
+                            position = int(fields[1])
+                        except (IndexError, ValueError):
+                            # Preserve the caller's existing malformed-row diagnostic.
+                            yield raw
+                            continue
+                        if region_start < position <= region_end:
+                            yield raw
         return
 
     check_unindexed_fixture(path)

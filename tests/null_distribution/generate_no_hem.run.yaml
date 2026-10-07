@@ -10,6 +10,9 @@ model:
   hemizygote: false
   include_indels: false
 
+generation_settings:
+  variant_classes: [snv]
+
 generation:
   execution:
     allow_unindexed_fixture_inputs: true  # Small, uncompressed test resources only.

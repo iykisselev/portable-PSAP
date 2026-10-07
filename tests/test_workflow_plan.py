@@ -260,7 +260,7 @@ class WorkflowPlanTests(unittest.TestCase):
         bindings = manifest["bindings"]["reference"]["exclusions"]
         manifest["bindings"]["reference"]["exclusions"] = {
             "par-regions": bindings["par-regions"],
-            "gnomad-r2-notpass": bindings["gnomad-r2-notpass"],
+            "encode-hg38-blacklist-v2": bindings["encode-hg38-blacklist-v2"],
         }
 
         plan = build_workflow_plan(manifest)
@@ -269,7 +269,7 @@ class WorkflowPlanTests(unittest.TestCase):
         resolved = {item.identifier: item.binding.data for item in plan.apply.effective_exclusions}
         self.assertEqual(
             {
-                "gnomad-r2-notpass": "tests/smoke/data/exclude_full_span.bed",
+                "encode-hg38-blacklist-v2": "tests/smoke/data/exclude_full_span.bed",
                 "par-regions": "tests/smoke/data/par_regions.bed",
             },
             resolved,
@@ -277,8 +277,8 @@ class WorkflowPlanTests(unittest.TestCase):
 
     def test_exclusion_identifier_mismatches_fail_before_resource_registry(self) -> None:
         missing = self.manifest("tests/smoke/run.yaml")
-        del missing["bindings"]["reference"]["exclusions"]["gnomad-r2-notpass"]
-        with self.assertRaisesRegex(WorkflowPlanError, "missing active bindings.*gnomad-r2-notpass"):
+        del missing["bindings"]["reference"]["exclusions"]["encode-hg38-blacklist-v2"]
+        with self.assertRaisesRegex(WorkflowPlanError, "missing active bindings.*encode-hg38-blacklist-v2"):
             build_workflow_plan(missing)
 
         unknown = self.manifest("tests/smoke/run.yaml")
@@ -291,7 +291,7 @@ class WorkflowPlanTests(unittest.TestCase):
 
     def test_disabled_scientific_exclusion_does_not_require_or_stage_a_binding(self) -> None:
         manifest = self.manifest("tests/smoke/run.yaml")
-        manifest["reference"]["exclusions"]["gnomad-r2-notpass"]["enabled"] = False
+        manifest["reference"]["exclusions"]["encode-hg38-blacklist-v2"]["enabled"] = False
 
         plan = build_workflow_plan(manifest)
 

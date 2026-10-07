@@ -137,7 +137,14 @@ def prepare_generation_partition(
         intervals=candidate_intervals,
     )
     if panel.select(ALLELE_COLUMNS).is_duplicated().any():
-        raise ValueError(f"Population VCF has duplicate allele states in {partition.identifier}")
+        duplicates = panel.filter(pl.struct(ALLELE_COLUMNS).is_duplicated())
+        examples = ", ".join(
+            f"{chromosome}:{position}:{reference}:{alternate}"
+            for chromosome, position, reference, alternate in duplicates.head(10).select(ALLELE_COLUMNS).iter_rows()
+        )
+        raise ValueError(
+            f"Population VCF has duplicate allele states in {partition.identifier}: {examples}"
+        )
     states = (
         candidates.join(panel, on=ALLELE_COLUMNS, how="left")
         .with_columns(

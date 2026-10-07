@@ -54,19 +54,19 @@ class ApplyResourceRegistryTests(unittest.TestCase):
                 "testing_units",
                 "cadd_snv",
                 "cadd_indel",
-                "exclusion_gnomad-r2-notpass",
+                "exclusion_encode-hg38-blacklist-v2",
                 "exclusion_par-regions",
             ),
             registry.table_resource_ids,
         )
         self.assertEqual(
-            "(?:testing_units|cadd_snv|cadd_indel|exclusion_gnomad\\-r2\\-notpass|exclusion_par\\-regions)",
+            "(?:testing_units|cadd_snv|cadd_indel|exclusion_encode\\-hg38\\-blacklist\\-v2|exclusion_par\\-regions)",
             registry.table_resource_pattern,
         )
         self.assertEqual("output/prepared/cohort.vcf.gz", registry.prepared_input_vcf)
         self.assertEqual(
             "tests/smoke/data/exclude_full_span.bed",
-            registry.exclusion_source_by_id["exclusion_gnomad-r2-notpass"],
+            registry.exclusion_source_by_id["exclusion_encode-hg38-blacklist-v2"],
         )
         with self.assertRaises(TypeError):
             registry.table_resources["other"] = registry.table_resources["cadd_snv"]  # type: ignore[index]

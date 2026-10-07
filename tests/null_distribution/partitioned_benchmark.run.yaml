@@ -12,6 +12,9 @@ run:
 model:
   include_indels: false
 
+generation_settings:
+  variant_classes: [snv]
+
 generation:
   unobserved_policy: zero
   population_vcf: {data: tests/null_distribution/population_af.vcf, index: null}

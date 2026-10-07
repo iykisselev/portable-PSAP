@@ -10,6 +10,7 @@ model:
   include_indels: false
 
 generation_settings:
+  variant_classes: [snv]
   x_chromosome:
     mutation_rate_policy: sex_averaged_proxy
 

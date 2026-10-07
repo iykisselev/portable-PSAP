@@ -92,8 +92,8 @@ class FullWorkflowFixtureTests(unittest.TestCase):
                 resource_paths["exclusion"]["path"],
             )
             self.assertEqual(
-                shared_reference["exclusions"]["gnomad-r2-notpass"]["data"],
-                resource_paths["gnomad-r2-notpass"]["path"],
+                shared_reference["exclusions"]["encode-hg38-blacklist-v2"]["data"],
+                resource_paths["encode-hg38-blacklist-v2"]["path"],
             )
             self.assertEqual(
                 shared_reference["exclusions"]["par-regions"]["data"],
