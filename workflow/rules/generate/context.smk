@@ -1,6 +1,6 @@
 """Shared paths and wildcard helpers for generation rules."""
 
-from generation_context import GenerationRuleContext
+from generation_context import GenerationRuleContext, as_inputs
 from generation_manifests import (
     bucket_from_manifest,
     bucket_ids,
@@ -14,7 +14,7 @@ GENERATION_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "generate"
 
 
 def generation_index(resource_binding):
-    return GENERATION_CONTEXT.index_input(resource_binding)
+    return as_inputs(resource_binding)
 
 
 def optional_binding(binding, *, enabled=True):

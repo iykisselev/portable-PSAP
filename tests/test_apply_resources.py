@@ -63,10 +63,10 @@ class ApplyResourceRegistryTests(unittest.TestCase):
             "(?:testing_units|cadd_snv|cadd_indel|exclusion_encode\\-hg38\\-blacklist\\-v2|exclusion_par\\-regions)",
             registry.table_resource_pattern,
         )
-        self.assertEqual("output/prepared/cohort.vcf.gz", registry.prepared_input_vcf)
+        self.assertEqual("output/prepared/cohort.vcf.gz", registry.resource("cohort").staged_data)
         self.assertEqual(
             "tests/smoke/data/exclude_full_span.bed",
-            registry.exclusion_source_by_id["exclusion_encode-hg38-blacklist-v2"],
+            registry.resource("exclusion_encode-hg38-blacklist-v2").source,
         )
         with self.assertRaises(TypeError):
             registry.table_resources["other"] = registry.table_resources["cadd_snv"]  # type: ignore[index]
@@ -120,7 +120,6 @@ class ApplyResourceRegistryTests(unittest.TestCase):
         )
 
         self.assertFalse(registry.exclusion_sources)
-        self.assertIsNone(registry.combined_exclusions_vcf)
         self.assertNotIn("combined_exclusions", registry.resources)
 
 

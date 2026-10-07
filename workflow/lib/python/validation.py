@@ -90,11 +90,6 @@ def validate_declared_index(
     require_file(index_path, f"{description} index", errors)
 
 
-def open_text_maybe_gzip(path: str | Path):
-    """Compatibility wrapper for validation's diagnostic decoding policy."""
-    return open_text(path, errors="replace")
-
-
 def has_data_row(
     path: str | Path,
     description: str,
@@ -104,7 +99,7 @@ def has_data_row(
         return False
 
     try:
-        with open_text_maybe_gzip(path) as handle:
+        with open_text(path, errors="replace") as handle:
             for row in csv.reader(handle, delimiter="\t"):
                 if not any(value.strip() for value in row):
                     continue
@@ -622,7 +617,7 @@ def read_vcf_record_contigs(
     contigs: set[str] = set()
 
     try:
-        with open_text_maybe_gzip(path) as handle:
+        with open_text(path, errors="replace") as handle:
             for line in handle:
                 if not line or line.startswith("#"):
                     continue
@@ -709,25 +704,6 @@ def read_vcf_header_facts(path: str | Path, errors: list[str]) -> VcfHeaderFacts
     return VcfHeaderFacts(samples, frozenset(contigs), chromosomes)
 
 
-def read_vcf_record_chromosomes(
-    path: str | Path,
-    errors: list[str],
-) -> dict[str, str]:
-    """Compatibility wrapper for callers that need only canonical contigs."""
-    chromosomes: dict[str, str] = {}
-    for contig in sorted(read_vcf_record_contigs(path, errors)):
-        add_chromosome_name(chromosomes, contig, "Input VCF", errors)
-    return chromosomes
-
-
-def read_vcf(
-    path: str | Path,
-    errors: list[str],
-) -> tuple[list[str], dict[str, str]]:
-    facts = read_vcf_header_facts(path, errors)
-    return list(facts.samples), facts.canonical_map
-
-
 def read_all_vcf_contigs(path: str | Path, bcftools: str) -> set[str]:
     result = subprocess.run(
         [bcftools, "view", "--header-only", str(path)],
@@ -746,7 +722,7 @@ def read_all_vcf_contigs(path: str | Path, bcftools: str) -> set[str]:
     if contigs:
         return contigs
 
-    with open_text_maybe_gzip(path) as handle:
+    with open_text(path, errors="replace") as handle:
         return {
             line.split("\t", 1)[0]
             for line in handle
@@ -889,7 +865,7 @@ def read_testing_unit_ids(
 
     identifiers: set[str] = set()
     try:
-        with open_text_maybe_gzip(path) as handle:
+        with open_text(path, errors="replace") as handle:
             for line_number, line in enumerate(handle, start=1):
                 stripped = line.strip()
                 if (
@@ -920,7 +896,7 @@ def read_lookup_unit_ids(
 
     identifiers: set[str] = set()
     try:
-        with open_text_maybe_gzip(path) as handle:
+        with open_text(path, errors="replace") as handle:
             for row in csv.reader(handle, delimiter="\t"):
                 if not row or not row[0].strip() or row[0].lstrip().startswith("#"):
                     continue
@@ -1134,7 +1110,7 @@ def read_indexed_table_chromosomes(
     names: set[str] = set()
     inspected = 0
     try:
-        with open_text_maybe_gzip(data_path) as handle:
+        with open_text(data_path, errors="replace") as handle:
             for line in handle:
                 stripped = line.strip()
                 if not stripped or stripped.startswith("#"):
@@ -1157,7 +1133,7 @@ def validate_cadd_columns(
         return
 
     try:
-        with open_text_maybe_gzip(path) as handle:
+        with open_text(path, errors="replace") as handle:
             for line_number, line in enumerate(handle, start=1):
                 stripped = line.strip()
                 if not stripped or stripped.startswith("#"):

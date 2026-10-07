@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 from collections import defaultdict
-from itertools import chain
 import math
 from pathlib import Path
 
@@ -24,7 +23,7 @@ from bundle_contract import (
     INDEL_GENERATED_BUNDLE_SCHEMA_VERSION,
     VALIDATION_ARTIFACT_FILENAMES,
 )
-from io_contracts import write_gzip_tsv_atomic, write_json_atomic
+from io_contracts import GzipTsvAtomicWriter, write_gzip_tsv_atomic, write_json_atomic
 
 
 def applicable_roles(unit_row, hemizygote: bool) -> tuple[str, ...]:
@@ -100,13 +99,24 @@ def parquet_rows(paths, columns: list[str]):
     try:
         import pyarrow.parquet as pq
     except ImportError:
-        yield from pl.scan_parquet(paths).select(columns).collect(engine="streaming").iter_rows()
+        for frame in parquet_frames(paths, columns):
+            yield from frame.iter_rows()
         return
     for path in paths:
         parquet = pq.ParquetFile(path)
-        for batch in parquet.iter_batches(columns=columns):
+        for batch in parquet.iter_batches(columns=columns, batch_size=8192):
             values = batch.to_pydict()
             yield from zip(*(values[column] for column in columns))
+
+
+def parquet_frames(paths, columns: list[str]):
+    """Yield small selected Parquet frames without materializing a whole shard."""
+    for path in paths:
+        yield from (
+            pl.scan_parquet(path)
+            .select(columns)
+            .collect_batches(chunk_size=8192, engine="streaming")
+        )
 
 
 def masked_bed_rows(path: str | Path, allowed_units):
@@ -114,15 +124,6 @@ def masked_bed_rows(path: str | Path, allowed_units):
     for chromosome, start, end, unit in parquet_rows([path], ["CHROM", "START", "END", "testing_unit_id"]):
         if unit in allowed_units:
             yield chromosome, start, end, unit
-
-
-def rejected_rows(paths):
-    """Expose rejected states without loading all partition state tables."""
-    for chromosome, position, reference, alternate, state, reason in parquet_rows(
-        paths, ["CHROM", "POS", "REF", "ALT", "allele_state", "state_reason"]
-    ):
-        if state == "rejected":
-            yield chromosome, position, reference, alternate, reason
 
 
 def candidate_audit_rows(paths):
@@ -188,67 +189,90 @@ def variant_class_counts(state_paths, audit_paths) -> dict[str, dict[str, int]]:
     return counts
 
 
-def zero_imputed_af_rows(paths):
-    """Expose calibration alleles whose omitted population AF tag became zero."""
-    for chromosome, position, reference, alternate, tags in parquet_rows(
-        paths, ["CHROM", "POS", "REF", "ALT", "af_zero_imputed_tags"]
-    ):
-        if tags:
-            yield chromosome, position, reference, alternate, tags
-
-
-def collect_finalization_allele_rows(
+def write_finalization_allele_artifacts(
     state_paths,
     audit_paths,
+    outputs: BundleFinalizationOutputs,
     *,
     include_variant_class_counts: bool,
 ) -> tuple[
-    list[tuple[object, ...]],
-    list[tuple[object, ...]],
-    list[tuple[object, ...]],
+    int,
+    dict[str, object],
+    dict[str, object],
+    int,
+    dict[str, object],
     dict[str, dict[str, int]] | None,
 ]:
-    """Collect sparse public rows and grouped counts with native Parquet scans.
+    """Publish sparse state artifacts in one bounded pass over every shard.
 
-    Candidate-state shards can contain hundreds of millions of rows, while
-    public rejection and zero-imputation artifacts are normally tiny. Process
-    one shard and one query at a time to bound peak memory, and materialize
-    only those exceptional rows.
-    State and audit lists remain separate so excluded-allele ordering stays
-    state-first followed by structural indel rejections.
+    Each state batch is capped at 8,192 rows. The three gzip outputs stay open
+    concurrently, so state rows are read once and audit rows are not retained
+    merely to copy them into two public artifacts. Excluded allele ordering is
+    still population-state rejections followed by structural indel rejections.
     """
-    rejected: list[tuple[object, ...]] = []
-    zero_imputed: list[tuple[object, ...]] = []
     counts = _empty_variant_class_counts() if include_variant_class_counts else None
-    for state_path in state_paths:
-        states = pl.scan_parquet(state_path)
-        rejected.extend(
-            states.filter(pl.col("allele_state") == "rejected")
-            .select("CHROM", "POS", "REF", "ALT", "state_reason")
-            .collect(engine="streaming")
-            .iter_rows()
-        )
-        zero_imputed.extend(
-            states.filter(
-                pl.col("af_zero_imputed_tags").is_not_null()
-                & (pl.col("af_zero_imputed_tags") != "")
-            ).select("CHROM", "POS", "REF", "ALT", "af_zero_imputed_tags")
-            .collect(engine="streaming")
-            .iter_rows()
-        )
-        if counts is not None:
-            count_frame = (
-                states.group_by("variant_class", "allele_state")
-                .len()
-                .collect(engine="streaming")
-            )
-            _merge_variant_class_counts(
-                counts, _variant_class_counts_from_frame(count_frame)
-            )
-    audit = list(candidate_audit_rows(audit_paths))
+    state_columns = [
+        "CHROM", "POS", "REF", "ALT", "allele_state", "state_reason",
+        "af_zero_imputed_tags",
+    ]
     if counts is not None:
-        counts["indel"]["rejected"] += len(audit)
-    return rejected, zero_imputed, audit, counts
+        state_columns.append("variant_class")
+    with (
+        GzipTsvAtomicWriter(
+            outputs.excluded_alleles,
+            ["#CHROM", "POS", "REF", "ALT", "exclusion_reason"],
+        ) as excluded,
+        GzipTsvAtomicWriter(
+            outputs.candidate_audit,
+            ["#CHROM", "POS", "REF", "ALT", "rejection_reason"],
+        ) as audit,
+        GzipTsvAtomicWriter(
+            outputs.population_af_zero_imputations,
+            ["#CHROM", "POS", "REF", "ALT", "imputed_info_tags"],
+        ) as zero_imputed,
+    ):
+        for frame in parquet_frames(state_paths, state_columns):
+            if counts is not None:
+                count_frame = frame.group_by("variant_class", "allele_state").len()
+                _merge_variant_class_counts(
+                    counts, _variant_class_counts_from_frame(count_frame)
+                )
+            for row in (
+                frame.filter(pl.col("allele_state") == "rejected")
+                .select("CHROM", "POS", "REF", "ALT", "state_reason")
+                .iter_rows()
+            ):
+                excluded.write_row(row)
+            for row in (
+                frame.filter(
+                    pl.col("af_zero_imputed_tags").is_not_null()
+                    & (pl.col("af_zero_imputed_tags") != "")
+                )
+                .select("CHROM", "POS", "REF", "ALT", "af_zero_imputed_tags")
+                .iter_rows()
+            ):
+                zero_imputed.write_row(row)
+        for frame in parquet_frames(
+            audit_paths, ["CHROM", "POS", "REF", "ALT", "rejection_reason"]
+        ):
+            for row in frame.iter_rows():
+                excluded.write_row(row)
+                audit.write_row(row)
+                if counts is not None:
+                    counts["indel"]["rejected"] += 1
+    assert (
+        excluded.inventory is not None
+        and audit.inventory is not None
+        and zero_imputed.inventory is not None
+    )
+    return (
+        excluded.count,
+        excluded.inventory,
+        audit.inventory,
+        zero_imputed.count,
+        zero_imputed.inventory,
+        counts,
+    )
 
 
 def finalize_generated_bundle(
@@ -279,23 +303,18 @@ def finalize_generated_bundle(
     calibration_count, calibration_regions = write_gzip_tsv_atomic(
         outputs.calibration_regions, ["#CHROM", "START", "END", "source"], parquet_rows([inputs.effective_mask], ["CHROM", "START", "END", "mask_state"])
     )
-    rejected_state_rows, zero_imputed_rows, audit_rows, class_counts = collect_finalization_allele_rows(
+    (
+        rejected_count,
+        excluded_alleles,
+        candidate_audit,
+        zero_imputation_count,
+        population_af_zero_imputations,
+        class_counts,
+    ) = write_finalization_allele_artifacts(
         inputs.allele_states,
         inputs.candidate_audit,
+        outputs,
         include_variant_class_counts=combined_indel_bundle,
-    )
-    rejected_count, excluded_alleles = write_gzip_tsv_atomic(
-        outputs.excluded_alleles, ["#CHROM", "POS", "REF", "ALT", "exclusion_reason"],
-        chain(rejected_state_rows, audit_rows)
-    )
-    _, candidate_audit = write_gzip_tsv_atomic(
-        outputs.candidate_audit, ["#CHROM", "POS", "REF", "ALT", "rejection_reason"],
-        audit_rows,
-    )
-    zero_imputation_count, population_af_zero_imputations = write_gzip_tsv_atomic(
-        outputs.population_af_zero_imputations,
-        ["#CHROM", "POS", "REF", "ALT", "imputed_info_tags"],
-        zero_imputed_rows,
     )
     components = {
         "lookup_het": lookup_het, "lookup_hom": lookup_hom,

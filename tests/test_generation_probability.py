@@ -12,8 +12,10 @@ import polars as pl
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
+sys.path.insert(0, str(ROOT / "tests"))
 
-from generation_probability import distribution, role_probability_expression  # noqa: E402
+from generation_probability import role_probability_expression  # noqa: E402
+from oracles import distribution  # noqa: E402
 
 
 class GenerationProbabilityTests(unittest.TestCase):

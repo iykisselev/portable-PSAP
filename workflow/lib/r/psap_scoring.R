@@ -71,7 +71,7 @@ read_prepared_lookup <- function(path) {
 }
 
 
-lookup_psap <- function(variants, lookup, score_max, score_column = "CADD_PHRED", lookup_contract = "external_legacy_v0", metadata = NULL, lookup_role = "selected", row_index = NULL) {
+lookup_psap <- function(variants, lookup, score_max, score_column = "CADD_PHRED", lookup_contract = "external_legacy_v0", metadata = NULL, row_index = NULL) {
   score <- pmin(pmax(variants[[score_column]], 0), score_max)
   if (identical(lookup_contract, "external_legacy_v0")) {
     score_grid <- seq(0, score_max, length.out = ncol(lookup$values))
@@ -98,12 +98,12 @@ select_highest <- function(variants) {
 }
 
 
-score_model <- function(variants, model, genotype_class, lookup, lookup_source, lookup_role) {
+score_model <- function(variants, model, genotype_class, lookup, lookup_source) {
   selected <- variants[gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id)]
   if (nrow(selected) == 0) return(NULL)
   selected <- select_highest(selected)
   row_index <- require_lookup_units(selected, lookup, model)
-  selected[, PSAP := lookup_psap(selected, lookup, lookup_source$score_max, lookup_contract = lookup_source$type, metadata = lookup_source$metadata, lookup_role = lookup_role, row_index = row_index)]
+  selected[, PSAP := lookup_psap(selected, lookup, lookup_source$score_max, lookup_contract = lookup_source$type, metadata = lookup_source$metadata, row_index = row_index)]
   selected[, .(Key = as.character(Key), unit = as.character(.testing_unit_id), `Dz.Model` = as.character(model), PSAP = as.numeric(PSAP))]
 }
 
@@ -122,14 +122,14 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
   )
   results <- lapply(seq_len(nrow(definitions)), function(index) {
     definition <- definitions[index, ]
-    score_model(variants, definition$model, definition$genotype_class, lookups[[definition$lookup]], lookup_source, definition$lookup)
+    score_model(variants, definition$model, definition$genotype_class, lookups[[definition$lookup]], lookup_source)
   })
   if (hemizygote_model) {
     hem_variants <- copy(variants)
     hem_variants[, .chromosome := canonical_chromosome(CHROM)]
     hem_definition <- hem_disease_model()
     hem_lookup <- read_prepared_lookup(lookup_source$paths[[hem_definition$lookup]])
-    results <- c(results, list(score_model(hem_variants[.chromosome == hem_definition$required_chromosome & gt_class == hem_definition$genotype_class], hem_definition$model, hem_definition$genotype_class, hem_lookup, lookup_source, hem_definition$lookup)))
+    results <- c(results, list(score_model(hem_variants[.chromosome == hem_definition$required_chromosome & gt_class == hem_definition$genotype_class], hem_definition$model, hem_definition$genotype_class, hem_lookup, lookup_source)))
   }
   results <- Filter(Negate(is.null), results)
   if (length(results) == 0) return(empty_scoring_output())

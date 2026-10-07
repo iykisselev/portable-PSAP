@@ -145,11 +145,6 @@ def population_info_definition(path: str | Path, info_tag: str) -> tuple[str, st
     return population_info_definitions(path, [info_tag])[info_tag]
 
 
-def population_info_number(path: str | Path, info_tag: str) -> str:
-    """Backward-compatible cardinality accessor for callers outside the workflow."""
-    return population_info_definition(path, info_tag)[0]
-
-
 def validate_population_af_headers(path: str | Path, af_tags: dict[str, str]) -> None:
     """Confirm every configured population AF tag is declared before partition work."""
     population_info_definitions(path, set(af_tags.values()))

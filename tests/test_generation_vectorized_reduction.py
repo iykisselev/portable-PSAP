@@ -15,13 +15,13 @@ import polars as pl
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
+sys.path.insert(0, str(ROOT / "tests"))
 
 from generation_probability import (  # noqa: E402
     aggregate_statistics_vectorized,
-    distribution,
-    merge_statistics,
     vectorized_lookup_rows,
 )
+from oracles import distribution, merge_statistics  # noqa: E402
 
 
 STATISTICS_COLUMNS = [

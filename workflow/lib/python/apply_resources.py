@@ -37,10 +37,8 @@ class ResourceSpec:
 class ApplyResourceRegistry:
     """Immutable catalog and stable paths for one apply/full workflow run."""
 
-    input_vcf_binding: FileBinding
     resources: Mapping[str, ResourceSpec]
     prepared_dir: Path
-    combined_exclusions_vcf: str | None
 
     def resource(self, logical_name: str) -> ResourceSpec:
         """Return one named resource with a clear error for stale consumers."""
@@ -48,14 +46,6 @@ class ApplyResourceRegistry:
             return self.resources[logical_name]
         except KeyError as exc:
             raise KeyError(f"Unknown apply resource: {logical_name!r}") from exc
-
-    @property
-    def input_vcf_source(self) -> str:
-        return self.resource("cohort").source
-
-    @property
-    def prepared_input_vcf(self) -> str:
-        return self.resource("cohort").staged_data
 
     @property
     def prepared_table_dir(self) -> Path:
@@ -80,35 +70,11 @@ class ApplyResourceRegistry:
         return f"(?:{'|'.join(map(re.escape, self.table_resource_ids))})"
 
     @property
-    def table_resource_data(self) -> Mapping[str, str]:
-        return MappingProxyType(
-            {
-                name: resource_spec.staged_data
-                for name, resource_spec in self.table_resources.items()
-            }
-        )
-
-    @property
-    def table_resource_index(self) -> Mapping[str, str]:
-        return MappingProxyType(
-            {
-                name: resource_spec.staged_index
-                for name, resource_spec in self.table_resources.items()
-            }
-        )
-
-    @property
     def exclusion_ids(self) -> tuple[str, ...]:
         return tuple(
             name
             for name, resource_spec in self.table_resources.items()
             if resource_spec.scientific_role in {"variants_exclude", "par_regions"}
-        )
-
-    @property
-    def exclusion_source_by_id(self) -> Mapping[str, str]:
-        return MappingProxyType(
-            {name: self.resource(name).source for name in self.exclusion_ids}
         )
 
     @property
@@ -120,10 +86,6 @@ class ApplyResourceRegistry:
     @property
     def workflow_exclusions(self) -> tuple[str, ...]:
         return tuple(self.resource(name).staged_data for name in self.exclusion_ids)
-
-    @property
-    def workflow_exclusion_indexes(self) -> tuple[str, ...]:
-        return tuple(self.resource(name).staged_index for name in self.exclusion_ids)
 
     @property
     def exclusion_sources(self) -> tuple[str, ...]:
@@ -245,7 +207,6 @@ def build_apply_resource_registry(
             origin=resource_origin,
         )
 
-    combined_exclusions_vcf = None
     if any(
         resource_spec.scientific_role in {"variants_exclude", "par_regions"}
         for resource_spec in resource_specs.values()
@@ -265,10 +226,8 @@ def build_apply_resource_registry(
             stage=False,
         )
     return ApplyResourceRegistry(
-        input_vcf_binding=apply_plan.inputs.vcf,
         resources=MappingProxyType(dict(resource_specs)),
         prepared_dir=prepared_dir,
-        combined_exclusions_vcf=combined_exclusions_vcf,
     )
 
 

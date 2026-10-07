@@ -23,6 +23,11 @@ from workflow_plan import (
 )
 
 
+def as_inputs(binding: FileBinding) -> list[str]:
+    """Return a declared optional index as a Snakemake input list."""
+    return [binding.index] if binding.index else []
+
+
 @dataclass(frozen=True)
 class GenerationRuleContext:
     """Expose generation inputs, paths, and derived execution layout together."""
@@ -133,10 +138,6 @@ class GenerationRuleContext:
             name: MappingProxyType({"identity": identities.get(name, name), "path": str(path)})
             for name, path in paths.items() if path
         })
-
-    def index_input(self, binding: FileBinding) -> list[str]:
-        """Return a declared index as an optional Snakemake input list."""
-        return [binding.index] if binding.index else []
 
     def mutation_rate_data(self) -> list[str]:
         """Return the optional mutation-rate table without a placeholder path."""

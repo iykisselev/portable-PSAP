@@ -33,14 +33,14 @@ def affected_sample_sex(wildcards):
     ).sex
 
 
-def sample_ids_for(wildcards, phenotype):
+def sample_ids_for(phenotype):
     return SAMPLE_INDEX.sample_ids(phenotype)
 
 
 def control_annotated_tables(wildcards):
     return expand(
         str(ANNOTATED_DIR / "{sample}.{testing_unit}.tsv.gz"),
-        sample=sample_ids_for(wildcards, "unaffected"),
+        sample=sample_ids_for("unaffected"),
         testing_unit=[TESTING_UNIT],
     )
 
@@ -48,7 +48,7 @@ def control_annotated_tables(wildcards):
 def control_psap_tables(wildcards):
     return expand(
         str(SCORED_DIR / "{sample}.{testing_unit}.tsv.gz"),
-        sample=sample_ids_for(wildcards, "unaffected"),
+        sample=sample_ids_for("unaffected"),
         testing_unit=[TESTING_UNIT],
     )
 
@@ -56,13 +56,13 @@ def control_psap_tables(wildcards):
 def affected_candidate_tables(wildcards):
     return expand(
         str(CANDIDATE_DIR / "{sample}.{testing_unit}.tsv.gz"),
-        sample=sample_ids_for(wildcards, "affected"),
+        sample=sample_ids_for("affected"),
         testing_unit=[TESTING_UNIT],
     )
 
 
 def control_pids(wildcards):
-    return sample_ids_for(wildcards, "unaffected")
+    return sample_ids_for("unaffected")
 
 
 def control_sexes(wildcards):

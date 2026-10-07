@@ -204,6 +204,47 @@ class _DigestWriter:
         return self.handle.tell()
 
 
+class GzipTsvAtomicWriter:
+    """Incrementally write one deterministic gzip TSV, then publish it atomically."""
+
+    def __init__(self, path: str | Path, header: Sequence[object]):
+        self.destination = Path(path)
+        self.temporary = _temporary_path(self.destination)
+        self.header = header
+        self.count = 0
+        self.inventory: dict[str, object] | None = None
+        self._raw = None
+        self._text = None
+        self._writer = None
+        self._digest = hashlib.sha256()
+
+    def __enter__(self) -> "GzipTsvAtomicWriter":
+        self._raw = self.temporary.open("wb")
+        digest_writer = _DigestWriter(self._raw, self._digest)
+        compressed = gzip.GzipFile(fileobj=digest_writer, mode="wb", mtime=0)
+        self._text = io.TextIOWrapper(compressed, encoding="utf-8", newline="")
+        self._writer = csv.writer(self._text, delimiter="\t", lineterminator="\n")
+        self._writer.writerow(self.header)
+        return self
+
+    def write_row(self, row: Sequence[object]) -> None:
+        """Append one row while keeping only the active row in memory."""
+        assert self._writer is not None
+        self._writer.writerow(row)
+        self.count += 1
+
+    def __exit__(self, exc_type, exc_value, traceback) -> bool:
+        assert self._text is not None and self._raw is not None
+        self._text.close()
+        self._raw.close()
+        if exc_type is not None:
+            self.temporary.unlink(missing_ok=True)
+            return False
+        os.replace(self.temporary, self.destination)
+        self.inventory = component_inventory(self.destination, self._digest.hexdigest())
+        return False
+
+
 def write_gzip_tsv_atomic(
     path: str | Path,
     header: Sequence[object],
@@ -214,21 +255,11 @@ def write_gzip_tsv_atomic(
     Gzip's fixed ``mtime`` is required: bundle component checksums are part of
     the public certificate and must not vary between equivalent reruns.
     """
-    destination = Path(path)
-    temporary = _temporary_path(destination)
-    digest = hashlib.sha256()
-    count = 0
-    with temporary.open("wb") as raw:
-        digest_writer = _DigestWriter(raw, digest)
-        with gzip.GzipFile(fileobj=digest_writer, mode="wb", mtime=0) as compressed:
-            with io.TextIOWrapper(compressed, encoding="utf-8", newline="") as text:
-                writer = csv.writer(text, delimiter="\t", lineterminator="\n")
-                writer.writerow(header)
-                for row in rows:
-                    writer.writerow(row)
-                    count += 1
-    os.replace(temporary, destination)
-    return count, component_inventory(destination, digest.hexdigest())
+    with GzipTsvAtomicWriter(path, header) as writer:
+        for row in rows:
+            writer.write_row(row)
+    assert writer.inventory is not None
+    return writer.count, writer.inventory
 
 
 def component_inventory(path: str | Path, sha256: str | None = None) -> dict[str, object]:

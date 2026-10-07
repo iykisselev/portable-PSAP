@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import csv
+import gzip
 import unittest
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from types import SimpleNamespace
 
 import polars as pl
 
@@ -14,12 +16,24 @@ import polars as pl
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
-import bundle_finalization  # noqa: E402
 from bundle_finalization import (  # noqa: E402
     classify_units,
-    collect_finalization_allele_rows,
     variant_class_counts,
+    write_finalization_allele_artifacts,
 )
+
+
+def allele_outputs(directory: Path) -> SimpleNamespace:
+    return SimpleNamespace(
+        excluded_alleles=str(directory / "excluded_alleles.tsv.gz"),
+        candidate_audit=str(directory / "candidate_audit.tsv.gz"),
+        population_af_zero_imputations=str(directory / "zero_imputations.tsv.gz"),
+    )
+
+
+def gzip_rows(path: str) -> list[list[str]]:
+    with gzip.open(path, "rt", newline="", encoding="utf-8") as handle:
+        return list(csv.reader(handle, delimiter="\t"))[1:]
 
 class BundleFinalizationTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -135,8 +149,9 @@ class BundleFinalizationTests(unittest.TestCase):
                 "ALT": pl.String, "rejection_reason": pl.String,
             }).write_parquet(audit)
             with self.assertRaisesRegex(ValueError, "Unsupported allele state"):
-                collect_finalization_allele_rows(
-                    [states], [audit], include_variant_class_counts=True
+                write_finalization_allele_artifacts(
+                    [states], [audit], allele_outputs(Path(temporary)),
+                    include_variant_class_counts=True,
                 )
 
     def test_finalization_preserves_partition_order_across_sequential_state_scans(self) -> None:
@@ -163,15 +178,19 @@ class BundleFinalizationTests(unittest.TestCase):
                 "ALT": pl.String, "rejection_reason": pl.String,
             }).write_parquet(audit)
 
-            rejected, zero_imputed, _, _ = collect_finalization_allele_rows(
-                [first, second], [audit], include_variant_class_counts=False
+            outputs = allele_outputs(directory)
+            write_finalization_allele_artifacts(
+                [first, second], [audit], outputs, include_variant_class_counts=False
             )
 
             self.assertEqual(
-                [("1", 2, "A", "C", "first"), ("1", 5, "G", "T", "second")],
-                rejected,
+                [["1", "2", "A", "C", "first"], ["1", "5", "G", "T", "second"]],
+                gzip_rows(outputs.excluded_alleles),
             )
-            self.assertEqual([("1", 5, "G", "T", "AF")], zero_imputed)
+            self.assertEqual(
+                [["1", "5", "G", "T", "AF"]],
+                gzip_rows(outputs.population_af_zero_imputations),
+            )
 
     def test_finalization_collects_public_allele_rows_and_v3_counts_with_native_state_scans(self) -> None:
         with TemporaryDirectory() as temporary:
@@ -195,22 +214,22 @@ class BundleFinalizationTests(unittest.TestCase):
                 }
             ).write_parquet(audit)
 
-            with patch.object(
-                bundle_finalization,
-                "parquet_rows",
-                wraps=bundle_finalization.parquet_rows,
-            ) as reader:
-                rejected, zero_imputed, audit_rows, counts = collect_finalization_allele_rows(
-                    [states], [audit], include_variant_class_counts=True
-                )
+            outputs = allele_outputs(directory)
+            _, _, _, _, _, counts = write_finalization_allele_artifacts(
+                [states], [audit], outputs, include_variant_class_counts=True
+            )
 
-            self.assertEqual([("1", 2, "C", "G", "filtered")], rejected)
             self.assertEqual(
-                [("1", 2, "C", "G", "AF"), ("X", 3, "G", "GA", "AF_FEMALE")],
-                zero_imputed,
+                [["1", "2", "C", "G", "filtered"], ["X", "4", "AA", "A", "crosses_mask_boundary"]],
+                gzip_rows(outputs.excluded_alleles),
             )
             self.assertEqual(
-                [("X", 4, "AA", "A", "crosses_mask_boundary")], audit_rows,
+                [["1", "2", "C", "G", "AF"], ["X", "3", "G", "GA", "AF_FEMALE"]],
+                gzip_rows(outputs.population_af_zero_imputations),
+            )
+            self.assertEqual(
+                [["X", "4", "AA", "A", "crosses_mask_boundary"]],
+                gzip_rows(outputs.candidate_audit),
             )
             self.assertEqual(
                 {
@@ -219,7 +238,6 @@ class BundleFinalizationTests(unittest.TestCase):
                 },
                 counts,
             )
-            self.assertEqual(1, reader.call_count)
 
 
 if __name__ == "__main__":
