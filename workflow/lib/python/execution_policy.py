@@ -83,7 +83,7 @@ EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
         "prepare_generation_partition": ExecutionPolicy(16384, 360),
         "calculate_partition_null_distribution": ExecutionPolicy(16384, 240),
         "reduce_null_distribution_bucket": ExecutionPolicy(4096, 120),
-        "finalize_null_distribution_bundle": ExecutionPolicy(2048, 120),
+        "finalize_null_distribution_bundle": ExecutionPolicy(8192, 120),
         "validate_null_distribution_bundle": ExecutionPolicy(1024, 120),
         "validate_cohort": ExecutionPolicy(4096, 30),
         "validate_resources": ExecutionPolicy(4096, 30),

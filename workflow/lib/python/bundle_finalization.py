@@ -163,15 +163,26 @@ def _variant_class_counts_from_frame(count_frame: pl.DataFrame) -> dict[str, dic
     return counts
 
 
+def _merge_variant_class_counts(
+    target: dict[str, dict[str, int]], source: dict[str, dict[str, int]]
+) -> None:
+    """Add compact per-shard counts without retaining a candidate-state frame."""
+    for variant_class, source_counts in source.items():
+        for state, amount in source_counts.items():
+            target[variant_class][state] += amount
+
+
 def variant_class_counts(state_paths, audit_paths) -> dict[str, dict[str, int]]:
     """Count retained, population-rejected, and structural candidates by class."""
-    count_frame = (
-        pl.scan_parquet(state_paths)
-        .group_by("variant_class", "allele_state")
-        .len()
-        .collect(engine="streaming")
-    )
-    counts = _variant_class_counts_from_frame(count_frame)
+    counts = _empty_variant_class_counts()
+    for state_path in state_paths:
+        count_frame = (
+            pl.scan_parquet(state_path)
+            .group_by("variant_class", "allele_state")
+            .len()
+            .collect(engine="streaming")
+        )
+        _merge_variant_class_counts(counts, _variant_class_counts_from_frame(count_frame))
     for _ in candidate_audit_rows(audit_paths):
         counts["indel"]["rejected"] += 1
     return counts
@@ -200,32 +211,41 @@ def collect_finalization_allele_rows(
     """Collect sparse public rows and grouped counts with native Parquet scans.
 
     Candidate-state shards can contain hundreds of millions of rows, while
-    public rejection and zero-imputation artifacts are normally tiny. Keep the
-    candidate scan in Polars and materialize only those exceptional rows.
+    public rejection and zero-imputation artifacts are normally tiny. Process
+    one shard and one query at a time to bound peak memory, and materialize
+    only those exceptional rows.
     State and audit lists remain separate so excluded-allele ordering stays
     state-first followed by structural indel rejections.
     """
-    states = pl.scan_parquet(state_paths)
-    scans = [
-        states.filter(pl.col("allele_state") == "rejected").select(
-            "CHROM", "POS", "REF", "ALT", "state_reason"
-        ),
-        states.filter(
-            pl.col("af_zero_imputed_tags").is_not_null()
-            & (pl.col("af_zero_imputed_tags") != "")
-        ).select("CHROM", "POS", "REF", "ALT", "af_zero_imputed_tags"),
-    ]
-    if include_variant_class_counts:
-        scans.append(states.group_by("variant_class", "allele_state").len())
-    collected = pl.collect_all(scans, engine="streaming")
-    rejected = list(collected[0].iter_rows())
-    zero_imputed = list(collected[1].iter_rows())
+    rejected: list[tuple[object, ...]] = []
+    zero_imputed: list[tuple[object, ...]] = []
+    counts = _empty_variant_class_counts() if include_variant_class_counts else None
+    for state_path in state_paths:
+        states = pl.scan_parquet(state_path)
+        rejected.extend(
+            states.filter(pl.col("allele_state") == "rejected")
+            .select("CHROM", "POS", "REF", "ALT", "state_reason")
+            .collect(engine="streaming")
+            .iter_rows()
+        )
+        zero_imputed.extend(
+            states.filter(
+                pl.col("af_zero_imputed_tags").is_not_null()
+                & (pl.col("af_zero_imputed_tags") != "")
+            ).select("CHROM", "POS", "REF", "ALT", "af_zero_imputed_tags")
+            .collect(engine="streaming")
+            .iter_rows()
+        )
+        if counts is not None:
+            count_frame = (
+                states.group_by("variant_class", "allele_state")
+                .len()
+                .collect(engine="streaming")
+            )
+            _merge_variant_class_counts(
+                counts, _variant_class_counts_from_frame(count_frame)
+            )
     audit = list(candidate_audit_rows(audit_paths))
-    counts = (
-        _variant_class_counts_from_frame(collected[2])
-        if include_variant_class_counts
-        else None
-    )
     if counts is not None:
         counts["indel"]["rejected"] += len(audit)
     return rejected, zero_imputed, audit, counts

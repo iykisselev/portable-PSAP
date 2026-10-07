@@ -139,6 +139,40 @@ class BundleFinalizationTests(unittest.TestCase):
                     [states], [audit], include_variant_class_counts=True
                 )
 
+    def test_finalization_preserves_partition_order_across_sequential_state_scans(self) -> None:
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            first, second = directory / "first.parquet", directory / "second.parquet"
+            audit = directory / "audit.parquet"
+            schema = {
+                "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String,
+                "ALT": pl.String, "allele_state": pl.String,
+                "state_reason": pl.String, "af_zero_imputed_tags": pl.String,
+                "variant_class": pl.String,
+            }
+            pl.DataFrame(
+                [("1", 2, "A", "C", "rejected", "first", None, "snv")],
+                schema=schema, orient="row",
+            ).write_parquet(first)
+            pl.DataFrame(
+                [("1", 5, "G", "T", "rejected", "second", "AF", "snv")],
+                schema=schema, orient="row",
+            ).write_parquet(second)
+            pl.DataFrame(schema={
+                "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String,
+                "ALT": pl.String, "rejection_reason": pl.String,
+            }).write_parquet(audit)
+
+            rejected, zero_imputed, _, _ = collect_finalization_allele_rows(
+                [first, second], [audit], include_variant_class_counts=False
+            )
+
+            self.assertEqual(
+                [("1", 2, "A", "C", "first"), ("1", 5, "G", "T", "second")],
+                rejected,
+            )
+            self.assertEqual([("1", 5, "G", "T", "AF")], zero_imputed)
+
     def test_finalization_collects_public_allele_rows_and_v3_counts_with_native_state_scans(self) -> None:
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
