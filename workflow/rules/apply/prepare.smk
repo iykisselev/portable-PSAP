@@ -1,5 +1,5 @@
 rule prepare_vcf_resource:
-    """Stage either the cohort or projected exclusions at a stable VCF target."""
+    """Stage the cohort VCF at a stable BGZF target."""
     input:
         source=vcf_resource_source,
         source_index=vcf_resource_source_index,
@@ -63,32 +63,3 @@ rule prepare_table_resource:
         str(APPLY_LOG_DIR / "prepare" / "table_{resource}_{extension}.log")
     script:
         str(APPLY_SCRIPT_DIR / "prepare_resource.py")
-
-
-rule combine_exclusions:
-    """Project full-span interval and exact-allele exclusions onto the cohort VCF."""
-    input:
-        cohort=apply_resource("cohort").staged_data,
-        cohort_index=apply_resource("cohort").staged_index,
-        exclusions=list(APPLY_RESOURCE_REGISTRY.workflow_exclusions),
-        validated=validation_marker
-    output:
-        vcf=ensure(APPLY_RESOURCE_REGISTRY.combined_exclusions_vcf, non_empty=True)
-    params:
-        sources=[
-            f"{APPLY_RESOURCE_REGISTRY.exclusion_kind_by_id[item]}:"
-            f"{APPLY_RESOURCE_REGISTRY.workflow_exclusions[position]}"
-            for position, item in enumerate(APPLY_RESOURCE_REGISTRY.exclusion_ids)
-        ]
-    threads: 1
-    resources:
-        mem_mb=policy_resources("combine_exclusions").mem_mb,
-        runtime=policy_resources("combine_exclusions").runtime
-    conda:
-        env("validation")
-    envmodules: *mod("validation")
-    container: sif("validation")
-    log:
-        str(APPLY_LOG_DIR / "prepare" / "combine_exclusions.log")
-    script:
-        str(APPLY_SCRIPT_DIR / "combine_exclusions.py")

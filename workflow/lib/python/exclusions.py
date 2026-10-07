@@ -6,7 +6,9 @@ from __future__ import annotations
 import bisect
 import gzip
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
+from typing import TextIO
 
 from genomic_contracts import canonical_chromosome
 
@@ -181,37 +183,46 @@ def collect_exclusions(specifications: list[str]):
     return merged_interval_index(intervals), variants
 
 
+def project_vcf_records(
+    cohort: Iterable[str],
+    output: TextIO,
+    intervals: dict[str, tuple[list[int], list[int]]],
+    variants: set[tuple[str, int, str, str]],
+    source_name: str,
+) -> None:
+    """Write matching records from an already-filtered, sites-only VCF stream."""
+    for line_number, line in enumerate(cohort, start=1):
+        if line.startswith("#"):
+            output.write(line)
+            continue
+        columns = line.rstrip("\n").split("\t")
+        if len(columns) < 5:
+            raise ValueError(
+                f"{source_name}:{line_number}: cohort VCF row has fewer than 5 columns"
+            )
+        try:
+            position, record_end = vcf_record_span(columns)
+        except ValueError as exc:
+            raise ValueError(f"{source_name}:{line_number}: {exc}") from exc
+        interval_match = interval_overlaps_variant(
+            intervals, columns[0], position, record_end
+        )
+        chromosome = canonical_chromosome(columns[0])
+        variant_match = any(
+            (chromosome, position, columns[3], alternate) in variants
+            for alternate in columns[4].split(",")
+        )
+        if interval_match or variant_match:
+            output.write(line)
+
+
 def write_projected_vcf(
     cohort_path: Path,
     output_path: Path,
     intervals: dict[str, tuple[list[int], list[int]]],
     variants: set[tuple[str, int, str, str]],
 ) -> None:
+    """Project a VCF path onto exclusion targets for direct library callers."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open_text(cohort_path) as cohort, output_path.open("w", encoding="utf-8") as output:
-        for line_number, line in enumerate(cohort, start=1):
-            if line.startswith("#"):
-                output.write(line)
-                continue
-            columns = line.rstrip("\n").split("\t")
-            if len(columns) < 5:
-                raise ValueError(
-                    f"{cohort_path}:{line_number}: cohort VCF row has fewer than 5 columns"
-                )
-            try:
-                position, record_end = vcf_record_span(columns)
-            except ValueError as exc:
-                raise ValueError(f"{cohort_path}:{line_number}: {exc}") from exc
-            interval_match = interval_overlaps_variant(
-                intervals,
-                columns[0],
-                position,
-                record_end,
-            )
-            chromosome = canonical_chromosome(columns[0])
-            variant_match = any(
-                (chromosome, position, columns[3], alternate) in variants
-                for alternate in columns[4].split(",")
-            )
-            if interval_match or variant_match:
-                output.write(line)
+        project_vcf_records(cohort, output, intervals, variants, str(cohort_path))

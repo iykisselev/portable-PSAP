@@ -14,7 +14,7 @@ TABLE_RESOURCE_POLICY_BY_ID = {
     resource_id: table_resource_policy(resource_spec.scientific_role)
     for resource_id, resource_spec in APPLY_RESOURCE_REGISTRY.table_resources.items()
 }
-VCF_RESOURCE_PATTERN = "(?:cohort|combined_exclusions)"
+VCF_RESOURCE_PATTERN = "cohort"
 
 
 def apply_resource(name):

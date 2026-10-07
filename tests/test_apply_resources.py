@@ -108,6 +108,21 @@ class ApplyResourceRegistryTests(unittest.TestCase):
             registry.resource("testing_units").source,
         )
 
+    def test_registry_omits_derived_exclusions_when_none_are_configured(self) -> None:
+        configuration = merge(
+            load_yaml(ROOT / "config" / "config.yaml"),
+            load_yaml(ROOT / "tests" / "smoke" / "run.yaml"),
+        )
+        configuration["reference"]["exclusions"] = {}
+        configuration["bindings"]["reference"]["exclusions"] = {}
+        registry = build_apply_resource_registry(
+            build_workflow_plan(configuration), Path("output") / "prepared"
+        )
+
+        self.assertFalse(registry.exclusion_sources)
+        self.assertIsNone(registry.combined_exclusions_vcf)
+        self.assertNotIn("combined_exclusions", registry.resources)
+
 
 if __name__ == "__main__":
     unittest.main()

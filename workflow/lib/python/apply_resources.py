@@ -40,7 +40,7 @@ class ApplyResourceRegistry:
     input_vcf_binding: FileBinding
     resources: Mapping[str, ResourceSpec]
     prepared_dir: Path
-    combined_exclusions_vcf: str
+    combined_exclusions_vcf: str | None
 
     def resource(self, logical_name: str) -> ResourceSpec:
         """Return one named resource with a clear error for stale consumers."""
@@ -245,20 +245,25 @@ def build_apply_resource_registry(
             origin=resource_origin,
         )
 
-    combined_exclusions_vcf = str(prepared_dir / "combined_exclusions.vcf")
-    staged_combined_exclusions_vcf = f"{combined_exclusions_vcf}.gz"
-    resource_specs["combined_exclusions"] = ResourceSpec(
-        logical_name="combined_exclusions",
-        source=combined_exclusions_vcf,
-        source_index="",
-        kind="vcf",
-        scientific_role="combined_exclusions",
-        requires_chromosome_normalization=False,
-        staged_data=staged_combined_exclusions_vcf,
-        staged_index=f"{staged_combined_exclusions_vcf}.tbi",
-        tsv_layout=None,
-        origin="run_derived",
-    )
+    combined_exclusions_vcf = None
+    if any(
+        resource_spec.scientific_role in {"variants_exclude", "par_regions"}
+        for resource_spec in resource_specs.values()
+    ):
+        combined_exclusions_vcf = str(prepared_dir / "combined_exclusions.vcf.gz")
+        resource_specs["combined_exclusions"] = ResourceSpec(
+            logical_name="combined_exclusions",
+            source=combined_exclusions_vcf,
+            source_index="",
+            kind="vcf",
+            scientific_role="combined_exclusions",
+            requires_chromosome_normalization=False,
+            staged_data=combined_exclusions_vcf,
+            staged_index=f"{combined_exclusions_vcf}.tbi",
+            tsv_layout=None,
+            origin="run_derived",
+            stage=False,
+        )
     return ApplyResourceRegistry(
         input_vcf_binding=apply_plan.inputs.vcf,
         resources=MappingProxyType(dict(resource_specs)),
