@@ -10,8 +10,11 @@ run:
   generation_prefix: full-demo
 
 model:
-  include_indels: false
+  include_indels: true
   hemizygote: true
+
+generation_settings:
+  variant_classes: [snv, indel]
 
 inputs:
   vcf: {data: tests/smoke/data/cohort.vcf, index: null}
@@ -31,6 +34,7 @@ bindings:
       par-regions: {data: tests/null_distribution/par_regions.bed, index: null}
     cadd:
       snv: {data: tests/null_distribution/generation_scores.tsv, index: null}
+      indel: {data: tests/smoke/data/cadd_indel.tsv, index: null}
 
 generation:
   execution:

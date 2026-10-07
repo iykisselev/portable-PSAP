@@ -23,7 +23,7 @@ from generation_bindings import (  # noqa: E402
 )
 from generation_partition import prepare_generation_partition
 from generation_population import POPULATION_SCHEMA
-from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
+from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, mutation_rate_rows, score_rows
 
 
 class GenerationPartitionTests(unittest.TestCase):
@@ -127,6 +127,17 @@ class GenerationPartitionTests(unittest.TestCase):
         for intervals in ([], [(20, 30)]):
             scores = score_rows("does-not-exist", "does-not-exist.tbi", "1", 0, 10, intervals=intervals)
             assert_frame_equal(scores, pl.DataFrame(schema=SCORE_SCHEMA))
+
+    def test_mutation_rates_are_limited_to_candidate_intervals(self):
+        rates_path = self.directory / "mutation_rates"
+        rates_path.write_text("".join(
+            f"chr1\t{position}\tA\tC\t0.0001\n"
+            for position in range(1, 11)
+        ))
+        rates = mutation_rate_rows(
+            rates_path, None, "1", 0, 10, intervals=[(0, 2), (4, 6)]
+        )
+        self.assertEqual(rates["POS"].to_list(), [1, 2, 5, 6])
 
     def test_partition_limits_scores_to_eligible_masked_units(self):
         with patch("generation_partition.score_rows", wraps=score_rows) as read_scores:

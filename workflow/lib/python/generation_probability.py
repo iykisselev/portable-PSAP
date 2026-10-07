@@ -36,12 +36,27 @@ def role_probability_expression(role: str, af_column: str = "effective_af") -> p
     raise ValueError(f"Unsupported generated null-distribution role {role!r}")
 
 
-def unit_bucket_frame(units: pl.DataFrame, bucket_size: int) -> pl.DataFrame:
-    """Assign eligible unit IDs to contiguous, deterministic bucket ranges."""
+def unit_bucket_frame(
+    units: pl.DataFrame,
+    bucket_size: int,
+    unit_intervals: pl.DataFrame,
+) -> pl.DataFrame:
+    """Assign eligible units to deterministic, genomically compact buckets."""
     if bucket_size <= 0:
         raise ValueError("generation.execution.unit_bucket_size must be positive")
-    eligible = units.filter(pl.col("status") == "eligible").select("testing_unit_id").sort("testing_unit_id")
-    return eligible.with_row_index("unit_ordinal").with_columns(
+    eligible = units.filter(pl.col("status") == "eligible").select("testing_unit_id")
+    first_locations = unit_intervals.group_by("testing_unit_id").agg(
+        pl.col("CHROM").first().alias("_chromosome"),
+        pl.col("START").min().alias("_first_start"),
+    )
+    ordered = eligible.join(first_locations, on="testing_unit_id", how="inner")
+    if ordered.height != eligible.height:
+        raise ValueError("Eligible testing units require genomic intervals")
+    # Scope preparation accepts only canonical autosomes and chrX, so numeric
+    # contig order followed by X is stable across platforms and input BED order.
+    return ordered.with_columns(
+        pl.col("_chromosome").cast(pl.Int64, strict=False).fill_null(23).alias("_chromosome_order")
+    ).sort("_chromosome_order", "_first_start", "testing_unit_id").select("testing_unit_id").with_row_index("unit_ordinal").with_columns(
         (pl.col("unit_ordinal") // bucket_size).cast(pl.Int64).alias("unit_bucket")
     ).drop("unit_ordinal")
 

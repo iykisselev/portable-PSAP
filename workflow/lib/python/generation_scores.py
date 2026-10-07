@@ -67,10 +67,17 @@ def mutation_rate_rows(
     chromosome: str,
     start: int,
     end: int,
+    *,
+    intervals: list[tuple[int, int]] | None = None,
 ) -> pl.DataFrame:
-    """Read per-allele mutation rates from one requested genomic window."""
+    """Read mutation rates in a window, optionally only at candidate intervals."""
+    regions = intersect_intervals([(start, end)], intervals) if intervals is not None else [(start, end)]
+    schema = {"CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String, "mu": pl.Float64}
+    if not regions:
+        return pl.DataFrame(schema=schema)
+    region_starts = [region_start for region_start, _ in regions]
     records: list[dict[str, object]] = []
-    for raw in indexed_lines(path, index, chromosome, start, end):
+    for raw in indexed_lines(path, index, chromosome, start, end, intervals=regions):
         if not raw.strip() or raw.startswith("#"):
             continue
         fields = raw.rstrip("\n").split("\t")
@@ -79,12 +86,15 @@ def mutation_rate_rows(
         key = allele_key(fields[0], int(fields[1]), fields[2], fields[3])
         if key[0] != chromosome or not start < key[1] <= end:
             continue
+        region_index = bisect_right(region_starts, key[1] - 1) - 1
+        if region_index < 0 or key[1] > regions[region_index][1]:
+            continue
         rate = float(fields[4])
         if not math.isfinite(rate) or not 0 <= rate <= 1:
             raise ValueError(f"Mutation-rate resource has invalid mu for {key!r}")
         records.append({"CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3], "mu": rate})
     return pl.DataFrame(
         records,
-        schema={"CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String, "mu": pl.Float64},
+        schema=schema,
         strict=False,
     )

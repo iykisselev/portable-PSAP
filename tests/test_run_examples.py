@@ -20,6 +20,18 @@ EXAMPLES = {
 
 @unittest.skipUnless(SNAKEMAKE, "Snakemake is required for example-manifest tests")
 class RunExampleTests(unittest.TestCase):
+    def test_combined_examples_bind_separate_indel_cadd_resources(self) -> None:
+        generate = yaml.safe_load((ROOT / "runs/generate.example.yaml").read_text())
+        full = yaml.safe_load((ROOT / "runs/full.example.yaml").read_text())
+
+        self.assertTrue(generate["model"]["include_indels"])
+        self.assertEqual(["snv", "indel"], generate["generation_settings"]["variant_classes"])
+        self.assertIn("score_indel", generate["generation"])
+
+        self.assertTrue(full["model"]["include_indels"])
+        self.assertEqual(["snv", "indel"], full["generation_settings"]["variant_classes"])
+        self.assertIn("indel", full["bindings"]["reference"]["cadd"])
+
     def test_unindexed_production_generation_fails_during_dag_construction(self) -> None:
         with tempfile.TemporaryDirectory(prefix="portable-psap-index-required-") as temporary:
             directory = Path(temporary)

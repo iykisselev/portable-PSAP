@@ -7,6 +7,9 @@ outdir: results
 workflow:
   mode: apply
 
+model:
+  include_indels: true
+
 run:
   apply_prefix: apply-demo
 

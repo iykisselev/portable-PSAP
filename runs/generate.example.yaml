@@ -9,7 +9,10 @@ run:
   generation_prefix: generate-demo
 
 model:
-  include_indels: false
+  include_indels: true
+
+generation_settings:
+  variant_classes: [snv, indel]
 
 generation:
   execution:
@@ -17,6 +20,7 @@ generation:
   unobserved_policy: zero
   population_vcf: {data: tests/null_distribution/population_af.vcf, index: null}
   score_snv: {data: tests/null_distribution/generation_scores.tsv, index: null}
+  score_indel: {data: tests/smoke/data/cadd_indel.tsv, index: null}
   exclusion: {data: tests/null_distribution/exclusion.bed, index: null}
   testing_unit_bed: {data: tests/null_distribution/testing_units.bed, index: null}
   par_regions: {data: tests/null_distribution/par_regions.bed, index: null}

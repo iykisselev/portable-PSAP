@@ -7,6 +7,7 @@ otherwise rejected observed allele before probability assignment.
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections import defaultdict
 from pathlib import Path
 import gzip
@@ -142,27 +143,96 @@ def merged_length(intervals: list[tuple[int, int]]) -> int:
     return sum(end - start for start, end in merge_intervals(intervals))
 
 
-def overlap_length(intervals: list[tuple[int, int]], regions: list[tuple[int, int]]) -> int:
+def overlap_sorted(
+    intervals: list[tuple[int, int]],
+    merged_regions: list[tuple[int, int]],
+    region_starts: list[int] | None = None,
+) -> list[tuple[int, int]]:
+    """Return portions of ``intervals`` covered by sorted, merged regions.
+
+    A unit has only a few intervals while a chromosome-scale mask can have many
+    thousands.  Binary-searching the mask prevents repeatedly scanning its
+    earlier regions for every unit.
+    """
+    if not merged_regions:
+        return []
+    if region_starts is None:
+        region_starts = [start for start, _ in merged_regions]
     pieces: list[tuple[int, int]] = []
-    for start, end in intervals:
-        for region_start, region_end in regions:
+    for start, end in merge_intervals(intervals):
+        # The preceding region is the only one that can start before ``start``
+        # and still overlap it because regions are non-overlapping.
+        index = max(0, bisect_right(region_starts, start) - 1)
+        while index < len(merged_regions) and merged_regions[index][0] < end:
+            region_start, region_end = merged_regions[index]
             left, right = max(start, region_start), min(end, region_end)
             if left < right:
                 pieces.append((left, right))
-    return merged_length(pieces)
+            index += 1
+    return pieces
 
 
-def retention_rows(units, retained_regions, minimum: float, denominator_scope=None):
+def overlap_length(intervals: list[tuple[int, int]], regions: list[tuple[int, int]]) -> int:
+    """Return covered bases for arbitrary interval collections."""
+    merged_regions = merge_intervals(regions)
+    return sum(
+        end - start
+        for start, end in overlap_sorted(
+            intervals,
+            merged_regions,
+            [start for start, _ in merged_regions],
+        )
+    )
+
+
+def retention_rows(
+    units,
+    retained_regions,
+    minimum: float,
+    denominator_scope=None,
+    *,
+    retained_region_starts=None,
+    denominator_region_starts=None,
+    callable_intervals_by_unit=None,
+):
+    """Calculate per-unit retention and optionally retain callable pieces.
+
+    Callers that already hold chromosome masks can supply their start offsets
+    once and receive the retained pieces used downstream, avoiding a second
+    mask intersection for every unit.
+    """
+    if retained_region_starts is None:
+        retained_region_starts = {
+            chrom: [start for start, _ in regions]
+            for chrom, regions in retained_regions.items()
+        }
+    if denominator_scope is not None and denominator_region_starts is None:
+        denominator_region_starts = {
+            chrom: [start for start, _ in regions]
+            for chrom, regions in denominator_scope.items()
+        }
     rows = []
     for unit, intervals in sorted(units.items()):
         chrom = intervals[0][0]
         simple_intervals = [(start, end) for _, start, end in intervals]
-        total = (
-            overlap_length(simple_intervals, denominator_scope.get(chrom, []))
+        denominator_pieces = (
+            overlap_sorted(
+                simple_intervals,
+                denominator_scope.get(chrom, []),
+                denominator_region_starts.get(chrom, []),
+            )
             if denominator_scope is not None
-            else merged_length(simple_intervals)
+            else merge_intervals(simple_intervals)
         )
-        retained = overlap_length(simple_intervals, retained_regions.get(chrom, []))
+        retained_pieces = overlap_sorted(
+            simple_intervals,
+            retained_regions.get(chrom, []),
+            retained_region_starts.get(chrom, []),
+        )
+        if callable_intervals_by_unit is not None:
+            callable_intervals_by_unit[unit] = retained_pieces
+        total = sum(end - start for start, end in denominator_pieces)
+        retained = sum(end - start for start, end in retained_pieces)
         fraction = retained / total if total else 0.0
         if total == 0:
             status = "no_calibration_scope"

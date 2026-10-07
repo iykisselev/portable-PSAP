@@ -132,7 +132,7 @@ is invoked. For production and cluster runs, absolute paths are safer.
 | `run.apply_prefix` | Names one apply output tree |
 | `model.unit` | Testing-unit identifier class |
 | `model.hemizygote` | Enables the chromosome-X HEM model |
-| `model.include_indels` | Enables indel annotation in apply mode; generation currently requires `false` |
+| `model.include_indels` | Enables indel annotation and, with `generation_settings.variant_classes: [snv, indel]`, combined SNV/indel generation |
 | `model.score_max` | Maximum CADD-PHRED value represented by the lookup grid |
 
 ### Resource identities versus paths
@@ -262,8 +262,9 @@ The SNV and optional indel tables use the first six CADD columns:
 Chrom  Pos  Ref  Alt  RawScore  PHRED
 ```
 
-Generation currently calibrates SNVs only. Apply mode can annotate indels when
-`model.include_indels: true` and an indel score resource is configured.
+Combined generation uses a separate `generation.score_indel` resource whenever
+`model.include_indels: true` and `generation_settings.variant_classes` includes
+`indel`. Apply mode uses `bindings.reference.cadd.indel` for indel annotation.
 
 ### Population VCF
 
@@ -587,8 +588,6 @@ as recovery points for large runs.
 ├── variants/
 ├── annotations/
 ├── raw/
-├── standardized/
-├── sex_classified/
 ├── annotated/
 ├── scored/
 ├── candidates/

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from generation_prep import (  # noqa: E402
+    overlap_sorted,
     retention_rows,
     effective_calibration_mask,
     read_bed_units,
@@ -25,7 +26,7 @@ from generation_prep import (  # noqa: E402
     subtract_intervals,
 )
 from generation_population import population_rows, validate_population_af_headers  # noqa: E402
-from generation_probability import role_probability_expression  # noqa: E402
+from generation_probability import role_probability_expression, unit_bucket_frame  # noqa: E402
 from generation_bindings import (  # noqa: E402
     GenerationScopeInputs,
     GenerationScopeOutputs,
@@ -35,6 +36,30 @@ from generation_scope import prepare_generation_scope
 
 
 class GenerationPreparationTests(unittest.TestCase):
+    def test_unit_buckets_follow_genomic_order_not_unit_id(self):
+        units = pl.DataFrame({
+            "testing_unit_id": ["ZETA", "ALPHA", "MID", "excluded"],
+            "status": ["eligible", "eligible", "eligible", "fully_excluded"],
+        })
+        intervals = pl.DataFrame({
+            "testing_unit_id": ["ZETA", "ALPHA", "MID", "excluded"],
+            "CHROM": ["1", "2", "1", "1"],
+            "START": [50, 1, 10, 0],
+            "END": [60, 2, 20, 1],
+        })
+        self.assertEqual(
+            unit_bucket_frame(units, 2, intervals).rows(),
+            [("MID", 0), ("ZETA", 0), ("ALPHA", 1)],
+        )
+
+    def test_sorted_overlap_finds_only_overlapping_mask_regions(self):
+        intervals = [(35, 48), (5, 17), (14, 23)]
+        mask = [(0, 10), (15, 20), (30, 40), (45, 50)]
+        self.assertEqual(
+            overlap_sorted(intervals, mask, [start for start, _ in mask]),
+            [(5, 10), (15, 20), (35, 40), (45, 48)],
+        )
+
     def test_subtraction_matches_independent_base_sets(self):
         rng = random.Random(42)
         for _ in range(100):

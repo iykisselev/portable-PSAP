@@ -23,7 +23,6 @@ from generation_population import validate_population_af_headers
 from generation_prep import (
     retention_rows,
     effective_calibration_mask,
-    intersect_intervals,
     merge_intervals,
     read_bed_units,
     read_intervals,
@@ -122,11 +121,23 @@ def prepare_generation_scope(
         par_intervals,
     )
     calibration_mask = effective_calibration_mask(excluded_intervals, supported_scope)
+    supported_scope_starts = {
+        chromosome: [start for start, _ in intervals]
+        for chromosome, intervals in supported_scope.items()
+    }
+    calibration_mask_starts = {
+        chromosome: [start for start, _ in intervals]
+        for chromosome, intervals in calibration_mask.items()
+    }
+    callable_pieces_by_unit: dict[str, list[tuple[int, int]]] = {}
     unit_retention_rows = retention_rows(
         units_by_id,
         calibration_mask,
         float(params.minimum_retained_fraction),
         denominator_scope=supported_scope,
+        retained_region_starts=calibration_mask_starts,
+        denominator_region_starts=supported_scope_starts,
+        callable_intervals_by_unit=callable_pieces_by_unit,
     )
     unit_intervals = []
     callable_unit_intervals = []
@@ -137,9 +148,7 @@ def prepare_generation_scope(
         )
         for start, end in merged_intervals:
             unit_intervals.append((unit_id, chromosome, start, end))
-        for start, end in intersect_intervals(
-            merged_intervals, calibration_mask.get(chromosome, [])
-        ):
+        for start, end in callable_pieces_by_unit[unit_id]:
             callable_unit_intervals.append((unit_id, chromosome, start, end))
     unit_retention_frame = pl.DataFrame(
         unit_retention_rows,
@@ -193,15 +202,12 @@ def prepare_generation_scope(
         ],
     )
     write_parquet_atomic(unit_retention_frame, outputs.units, params.compression)
-    write_parquet_atomic(
-        pl.DataFrame(
-            unit_intervals,
-            schema=["testing_unit_id", "CHROM", "START", "END"],
-            orient="row",
-        ),
-        outputs.unit_intervals,
-        params.compression,
+    unit_intervals_frame = pl.DataFrame(
+        unit_intervals,
+        schema=["testing_unit_id", "CHROM", "START", "END"],
+        orient="row",
     )
+    write_parquet_atomic(unit_intervals_frame, outputs.unit_intervals, params.compression)
     write_parquet_atomic(
         pl.DataFrame(
             callable_unit_intervals,
@@ -242,7 +248,7 @@ def prepare_generation_scope(
         },
     )
     bucket_assignments = unit_bucket_frame(
-        unit_retention_frame, int(params.unit_bucket_size)
+        unit_retention_frame, int(params.unit_bucket_size), unit_intervals_frame
     )
     bucket_by_unit = {
         str(unit_id): int(bucket_id)
@@ -268,7 +274,9 @@ def prepare_generation_scope(
                     "bucket_id": f"{ordinal:05d}",
                     "ordinal": ordinal,
                     "unit_count": len(unit_ids),
-                    "unit_ids": unit_ids,
+                    # Keep manifest identifiers lexically sorted even though
+                    # assignment itself follows genomic order.
+                    "unit_ids": sorted(unit_ids),
                     "partition_ids": list(partition_ids_by_bucket[ordinal]),
                 }
                 for ordinal, unit_ids in sorted(unit_ids_by_bucket.items())

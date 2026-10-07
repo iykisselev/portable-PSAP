@@ -16,6 +16,20 @@ from generation_scores import ALLELE_COLUMNS, mutation_rate_rows
 from io_contracts import write_parquet_atomic
 
 
+def candidate_intervals(events: pl.DataFrame, variant_class: str) -> list[tuple[int, int]]:
+    """Return merged-source-compatible one-base intervals for candidate alleles."""
+    return [
+        (int(position) - 1, int(position))
+        for (position,) in (
+            events.filter(pl.col("variant_class") == variant_class)
+            .select("POS")
+            .unique()
+            .sort("POS")
+            .iter_rows()
+        )
+    ]
+
+
 def calculate_partition_statistics(
     inputs: PartitionStatisticsInputs,
     outputs: PartitionStatisticsOutputs,
@@ -59,7 +73,12 @@ def calculate_partition_statistics(
             pl.when(pl.col("allele_state") == "absent").then(pl.lit(0.0)).otherwise(male_af).alias("effective_af_hem"),
         )
     else:
-        rates = mutation_rate_rows(inputs.mutation_rate, inputs.mutation_rate_index, partition.chromosome, partition.start, partition.end)
+        snv_intervals = candidate_intervals(events, "snv")
+        rates = mutation_rate_rows(
+            inputs.mutation_rate, inputs.mutation_rate_index,
+            partition.chromosome, partition.start, partition.end,
+            intervals=snv_intervals,
+        )
         needs_snv_rate = (pl.col("allele_state") == "absent") & (pl.col("variant_class") != "indel")
         if params.x_mutation_rate_policy == "reject" and events.filter((pl.col("CHROM") == "X") & needs_snv_rate).height:
             raise ValueError(
@@ -67,12 +86,14 @@ def calculate_partition_statistics(
             )
         events = events.join(rates, on=ALLELE_COLUMNS, how="left")
         if inputs.mutation_rate_indel is not None:
+            indel_intervals = candidate_intervals(events, "indel")
             indel_rates = mutation_rate_rows(
                 inputs.mutation_rate_indel,
                 inputs.mutation_rate_indel_index,
                 partition.chromosome,
                 partition.start,
                 partition.end,
+                intervals=indel_intervals,
             ).rename({"mu": "mu_indel"})
             events = events.join(indel_rates, on=ALLELE_COLUMNS, how="left")
         else:

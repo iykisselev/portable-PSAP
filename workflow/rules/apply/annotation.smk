@@ -1,3 +1,6 @@
+import shlex
+
+
 ANNOTATED_VCF = ANNOTATION_DIR / f"{TESTING_UNIT}.vcf.gz"
 ANNOTATED_VCF_CSI = Path(f"{ANNOTATED_VCF}.csi")
 RAW_UNIT_ANNOTATIONS = ANNOTATION_DIR / f"{TESTING_UNIT}.annotated.tsv.gz"
@@ -35,8 +38,22 @@ rule annotate_variants:
         csi=ensure(str(ANNOTATED_VCF_CSI), non_empty=True),
         annotations=ensure(str(RAW_UNIT_ANNOTATIONS), non_empty=True)
     params:
-        include_indels=WORKFLOW_PLAN.model.include_indels,
-        testing_unit=TESTING_UNIT
+        cadd_header=(
+            "##INFO=<ID=PSAP_CADD_PHRED,Number=1,Type=Float,"
+            "Description=\"CADD PHRED score\">"
+        ),
+        unit_header=(
+            "##INFO=<ID=TESTING_UNIT,Number=.,Type=String,"
+            f"Description=\"PSAP {TESTING_UNIT} unit IDs\">"
+        ),
+        indel_stage=lambda wc, input: (
+            "bcftools annotate "
+            f"--annotations {shlex.quote(str(input.cadd_indel[0]))} "
+            "--columns CHROM,POS,REF,ALT,-,+INFO/PSAP_CADD_PHRED "
+            "--pair-logic exact -Ou - |"
+            if input.cadd_indel
+            else ""
+        )
     threads: 8
     resources:
         mem_mb=policy_resources("annotate_variants").mem_mb,
@@ -49,8 +66,37 @@ rule annotate_variants:
         str(BENCHMARK_DIR / "annotate_variants.tsv")
     log:
         str(APPLY_LOG_DIR / "annotation" / "annotate_variants.log")
-    script:
-        str(APPLY_SCRIPT_DIR / "annotate_variants.py")
+    shell:
+        """
+        {{
+            bcftools annotate \
+                --annotations {input.cadd_snv:q} \
+                --columns CHROM,POS,REF,ALT,-,INFO/PSAP_CADD_PHRED \
+                --header-line {params.cadd_header:q} \
+                --pair-logic exact \
+                -Ou \
+                {input.vcf:q} |
+            {params.indel_stage}
+            bcftools annotate \
+                --annotations {input.unit_bed:q} \
+                --columns CHROM,FROM,TO,INFO/TESTING_UNIT \
+                --header-line {params.unit_header:q} \
+                --merge-logic TESTING_UNIT:unique \
+                --threads {threads} \
+                -Oz \
+                -o {output.vcf:q} \
+                -
+
+            bcftools index --threads {threads} --force {output.vcf:q}
+
+            {{
+                printf 'CHROM\\tPOS\\tREF\\tALT\\tCADD_PHRED\\tunit\\n'
+                bcftools query \
+                    --format '%CHROM\\t%POS\\t%REF\\t%ALT\\t%INFO/PSAP_CADD_PHRED\\t%INFO/TESTING_UNIT\\n' \
+                    {output.vcf:q}
+            }} | bgzip --threads {threads} --stdout > {output.annotations:q}
+        }} > {log:q} 2>&1
+        """
 
 
 rule summarize_annotations:
