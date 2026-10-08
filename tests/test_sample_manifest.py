@@ -15,9 +15,20 @@ from sample_manifest import (  # noqa: E402
     configured_sample_index,
     read_sample_manifest_index,
 )
+from sample_metadata import SampleRow, normalize_sample  # noqa: E402
 
 
 class SampleManifestTests(unittest.TestCase):
+    def test_shared_normalizer_defines_safe_manifest_rows(self) -> None:
+        sample = normalize_sample(SampleRow(7, " F ", " affected ", " 1 ", " 2 "))
+        self.assertTrue(sample.is_safe)
+        self.assertEqual(
+            {"family_id": "F", "pid": "affected", "sex": "1", "phenotype": "affected"},
+            sample.manifest_row(),
+        )
+        unsafe = normalize_sample(SampleRow(8, "F", "bad/name", "2", "1"))
+        self.assertFalse(unsafe.is_safe)
+
     def test_configured_index_is_immutable_and_keeps_safe_manifest_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             samples = Path(temporary_dir) / "samples.tsv"

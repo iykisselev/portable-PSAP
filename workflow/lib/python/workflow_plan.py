@@ -17,6 +17,7 @@ import warnings
 
 from generation_resource_policy import check_generation_index_binding
 from config_validation import ConfigurationValidationError, validate_configuration
+from io_contracts import is_missing_token
 from bundle_contract import (
     BUNDLE_COMPONENT_FILENAMES,
     CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
@@ -71,20 +72,16 @@ def _mapping(value: Any, key: str) -> Mapping[str, Any]:
 
 
 def _required(value: Any, key: str) -> str:
-    if value is None:
+    if is_missing_token(value):
         raise WorkflowPlanError(f"Required configuration value is missing: {key}")
     path = str(value).strip()
-    if not path or path.lower() in {"na", "none", "null", ".", "-"}:
-        raise WorkflowPlanError(f"Required configuration value is missing: {key}")
     return str(Path(path).expanduser())
 
 
 def _optional(value: Any) -> str | None:
-    if value is None:
+    if is_missing_token(value):
         return None
     path = str(value).strip()
-    if path.lower() in {"", "na", "none", "null", ".", "-"}:
-        return None
     return str(Path(path).expanduser())
 
 

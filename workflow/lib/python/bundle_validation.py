@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import csv
-from decimal import Decimal, ROUND_CEILING
-import gzip
 import json
 import math
 from pathlib import Path
@@ -14,15 +12,20 @@ import yaml
 
 from generation_bindings import BundleValidationInputs, BundleValidationOutputs
 from bundle_certificate import BundleCertificateError, validate_bundle_component
-from bundle_contract import HEM_COMPONENT, VALIDATION_ARTIFACT_FILENAMES
+from bundle_contract import (
+    HEM_COMPONENT,
+    VALIDATION_ARTIFACT_FILENAMES,
+    fixed_width_bin_count,
+)
 from indel_bundle_contract import validate_indel_bundle_metadata
-from io_contracts import sha256_file, write_text_atomic
+from genomic_contracts import canonical_chromosome
+from io_contracts import open_text, sha256_file, write_text_atomic
 
 
 def validate_lookup(path: str | Path, bin_count: int) -> set[str]:
     """Validate one compressed lookup row at a time and retain only unit IDs."""
     identifiers: set[str] = set()
-    with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+    with open_text(path, newline="", require_gzip=True) as handle:
         rows = csv.reader(handle, delimiter="\t")
         header = next(rows, None)
         if not header or header[0] != "testing_unit_id" or len(header) != bin_count + 1:
@@ -41,7 +44,7 @@ def validate_lookup(path: str | Path, bin_count: int) -> set[str]:
 
 def data_row_count(path: str | Path) -> int:
     """Count compressed data rows without retaining their values."""
-    with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+    with open_text(path, newline="", require_gzip=True) as handle:
         rows = csv.reader(handle, delimiter="\t")
         next(rows, None)
         return sum(1 for _ in rows)
@@ -50,14 +53,13 @@ def data_row_count(path: str | Path) -> int:
 def eligible_units(path: str | Path) -> dict[str, set[str]]:
     """Read eligible IDs with their canonical chromosomes from the bundle BED."""
     identifiers: dict[str, set[str]] = {}
-    with gzip.open(path, "rt", encoding="utf-8", newline="") as handle:
+    with open_text(path, newline="", require_gzip=True) as handle:
         rows = csv.reader(handle, delimiter="\t")
         next(rows, None)
         for row in rows:
             if len(row) < 4 or not row[3]:
                 raise ValueError("Eligible testing-unit BED contains an invalid row")
-            chromosome = row[0][3:] if row[0].lower().startswith("chr") else row[0]
-            identifiers.setdefault(row[3], set()).add(chromosome.upper())
+            identifiers.setdefault(row[3], set()).add(canonical_chromosome(row[0]))
     return identifiers
 
 
@@ -72,7 +74,9 @@ def validate_generated_bundle(
     if metadata["contract"] == "generated_bundle_v3":
         validate_indel_bundle_metadata(metadata)
     binning = metadata["binning"]
-    expected_count = int((Decimal(str(binning["score_max"])) / Decimal(str(binning["bin_width"]))).to_integral_value(rounding=ROUND_CEILING))
+    expected_count = fixed_width_bin_count(
+        binning["score_max"], binning["bin_width"]
+    )
     if binning["bin_count"] != expected_count:
         raise ValueError("Bundle bin_count is inconsistent with score_max and bin_width")
     components = {

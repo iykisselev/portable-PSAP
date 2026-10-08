@@ -21,7 +21,9 @@ VALIDATION_LIBRARIES = [
         "validation_model.py",
         "validation_reporting.py",
         "bundle_certificate.py",
+        "exclusions.py",
         "sample_manifest.py",
+        "sample_metadata.py",
     )
 ]
 VALIDATION_REPORT_SCHEMA = str(

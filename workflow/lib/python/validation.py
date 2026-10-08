@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import csv
-import gzip
 import os
 import shutil
 import subprocess
@@ -14,9 +13,11 @@ from pathlib import Path
 from typing import Sequence
 
 from bgzf import has_bgzf_eof, is_bgzf
-from genomic_contracts import canonical_chromosome
+from exclusions import data_rows, parse_exclusion_tsv_row
+from genomic_contracts import canonical_chromosome, read_fai
+from io_contracts import BedFormatError, is_missing_token, iter_bed, open_text
+from sample_metadata import iter_sample_rows, normalize_sample
 
-MISSING_CONFIG_VALUES = {"", "na", "none", "null", ".", "-"}
 CANONICAL_CHROMOSOMES = tuple(str(chromosome) for chromosome in range(1, 23)) + (
     "X",
     "Y",
@@ -80,7 +81,7 @@ def validate_declared_index(
     errors: list[str],
     warnings: list[str],
 ) -> None:
-    if index_path is None or str(index_path).strip().lower() in MISSING_CONFIG_VALUES:
+    if is_missing_token(index_path):
         warnings.append(
             f"{description} has no configured index; the workflow will prepare "
             "an index under its output directory"
@@ -90,16 +91,8 @@ def validate_declared_index(
 
 
 def open_text_maybe_gzip(path: str | Path):
-    file_path = Path(path)
-    try:
-        with file_path.open("rb") as handle:
-            compressed = handle.read(2) == b"\x1f\x8b"
-    except OSError:
-        compressed = file_path.suffix in {".gz", ".bgz", ".bgzf"}
-    if compressed:
-        return gzip.open(file_path, "rt", encoding="utf-8", errors="replace")
-
-    return file_path.open("rt", encoding="utf-8", errors="replace")
+    """Compatibility wrapper for validation's diagnostic decoding policy."""
+    return open_text(path, errors="replace")
 
 
 def has_data_row(
@@ -160,56 +153,22 @@ def validate_bed_regions(
 
     data_rows = 0
     chromosomes: set[str] = set()
+    def report(error: BedFormatError) -> None:
+        nonlocal data_rows
+        data_rows += 1
+        errors.append(f"{description} {error}")
+
     try:
-        with open_text_maybe_gzip(path) as handle:
-            for line_number, line in enumerate(handle, start=1):
-                stripped = line.strip()
-                if (
-                    not stripped
-                    or stripped.startswith("#")
-                    or stripped.startswith("track ")
-                    or stripped.startswith("browser ")
-                ):
-                    continue
-
-                data_rows += 1
-                columns = stripped.split("\t")
-                if len(columns) < required_columns:
-                    errors.append(
-                        f"{description} line {line_number} must contain at least "
-                        f"{required_columns} tab-delimited BED columns"
-                    )
-                    continue
-
-                if require_unit_id and columns[3].strip() in MISSING_CONFIG_VALUES:
-                    errors.append(
-                        f"{description} line {line_number} has a missing unit ID "
-                        "in column 4"
-                    )
-
-                chromosome = columns[0].strip()
-                if not chromosome:
-                    errors.append(
-                        f"{description} line {line_number} has an empty chromosome"
-                    )
-                else:
-                    chromosomes.add(chromosome)
-
-                try:
-                    start = int(columns[1])
-                    end = int(columns[2])
-                except ValueError:
-                    errors.append(
-                        f"{description} line {line_number} has non-integer "
-                        "start or end coordinates"
-                    )
-                    continue
-
-                if start < 0 or end <= start:
-                    errors.append(
-                        f"{description} line {line_number} must satisfy "
-                        f"0 <= start < end; received {start}, {end}"
-                    )
+        for row in iter_bed(
+            path, required_columns, errors="replace", on_error=report
+        ):
+            data_rows += 1
+            if require_unit_id and is_missing_token(row.fields[3]):
+                errors.append(
+                    f"{description} line {row.line_number} has a missing unit ID "
+                    "in column 4"
+                )
+            chromosomes.add(row.chromosome)
     except OSError as exc:
         errors.append(f"Could not read {description}: {path}: {exc}")
         return set()
@@ -232,47 +191,14 @@ def validate_exclusion_tsv(
     chromosomes: set[str] = set()
     data_count = 0
     try:
-        with open_text_maybe_gzip(path) as handle:
-            for line_number, line in enumerate(handle, start=1):
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#"):
-                    continue
-                data_count += 1
-                columns = stripped.split("\t")
-                if len(columns) < 3:
-                    errors.append(
-                        f"{description} line {line_number} must have at least 3 columns"
-                    )
-                    continue
-                chromosome = columns[0].strip()
-                if not chromosome:
-                    errors.append(
-                        f"{description} line {line_number} has an empty chromosome"
-                    )
-                else:
-                    chromosomes.add(chromosome)
-                try:
-                    start = int(columns[1])
-                except ValueError:
-                    errors.append(
-                        f"{description} line {line_number} has a non-integer position"
-                    )
-                    continue
-
-                try:
-                    end = int(columns[2])
-                except ValueError:
-                    if len(columns) < 4 or start < 1 or not columns[2] or not columns[3]:
-                        errors.append(
-                            f"{description} line {line_number} must contain either "
-                            "CHROM,START,END or CHROM,POS,REF,ALT"
-                        )
-                else:
-                    if start < 1 or end < start:
-                        errors.append(
-                            f"{description} line {line_number} interval must satisfy "
-                            f"1 <= start <= end; received {start}, {end}"
-                        )
+        for line_number, columns in data_rows(Path(path)):
+            data_count += 1
+            try:
+                target = parse_exclusion_tsv_row(columns)
+            except ValueError as exc:
+                errors.append(f"{description} line {line_number} {exc}")
+                continue
+            chromosomes.add(target.chromosome)
     except OSError as exc:
         errors.append(f"Could not read {description}: {path}: {exc}")
 
@@ -584,39 +510,21 @@ def read_ped(
     data_rows = 0
 
     try:
-        with Path(path).open(
-            "rt",
-            encoding="utf-8",
-            errors="replace",
-            newline="",
-        ) as handle:
-            for line_number, row in enumerate(
-                csv.reader(handle, delimiter="\t"),
-                start=1,
-            ):
-                if not row or all(not value.strip() for value in row):
-                    continue
+        def report(issue):
+            nonlocal data_rows
+            data_rows += 1
+            errors.append(f"PED line {issue.line_number} {issue}")
 
-                data_rows += 1
-                if len(row) < 6:
-                    errors.append(
-                        f"PED line {line_number} has {len(row)} columns; "
-                        "at least 6 are required"
-                    )
-                    continue
-
-                family_id = row[0].strip()
-                sample_id = row[1].strip()
-                sex = row[4].strip()
-                phenotype = row[5].strip()
-
-                summary.add_row(
-                    line_number,
-                    family_id,
-                    sample_id,
-                    sex,
-                    phenotype,
-                )
+        for row in iter_sample_rows(path, "ped", errors="replace", on_error=report):
+            data_rows += 1
+            sample = normalize_sample(row)
+            summary.add_row(
+                row.line_number,
+                sample.family_id,
+                sample.pid,
+                sample.sex,
+                sample.phenotype,
+            )
     except OSError as exc:
         errors.append(f"Could not read PED file {path}: {exc}")
 
@@ -643,35 +551,26 @@ def read_samples_tsv(
         warnings=warnings,
     )
     data_rows = 0
-    required_columns = ["family_id", "pid", "sex", "phenotype"]
-
     try:
-        with Path(path).open("rt", encoding="utf-8", newline="") as handle:
-            reader = csv.DictReader(handle, delimiter="\t")
-            headers = reader.fieldnames or []
-            missing = [name for name in required_columns if name not in headers]
-            if missing:
-                errors.append(
-                    "Sample sheet is missing required column(s): " + ", ".join(missing)
-                )
-                return empty_ped_summary()
+        header_error = False
 
-            for line_number, row in enumerate(reader, start=2):
-                if not row or not any((value or "").strip() for value in row.values()):
-                    continue
-                data_rows += 1
-                family_id = (row.get("family_id") or "").strip()
-                sample_id = (row.get("pid") or "").strip()
-                sex = (row.get("sex") or "").strip()
-                phenotype = (row.get("phenotype") or "").strip()
+        def report(issue):
+            nonlocal header_error
+            header_error = True
+            errors.append(f"Sample sheet {issue}")
 
-                summary.add_row(
-                    line_number,
-                    family_id,
-                    sample_id,
-                    sex,
-                    phenotype,
-                )
+        for row in iter_sample_rows(path, "samples", on_error=report):
+            data_rows += 1
+            sample = normalize_sample(row)
+            summary.add_row(
+                row.line_number,
+                sample.family_id,
+                sample.pid,
+                sample.sex,
+                sample.phenotype,
+            )
+        if header_error:
+            return empty_ped_summary()
     except OSError as exc:
         errors.append(f"Could not read sample sheet {path}: {exc}")
 
@@ -855,16 +754,11 @@ def read_all_vcf_contigs(path: str | Path, bcftools: str) -> set[str]:
         }
 
 
-def read_fasta_contigs(index_path: str | Path) -> set[str]:
+def read_fasta_contigs(index_path: str | Path) -> dict[str, str]:
     index_path = Path(index_path)
     if not index_path.is_file():
-        return set()
-    with index_path.open("rt", encoding="utf-8", errors="replace") as handle:
-        return {
-            line.split("\t", 1)[0].strip()
-            for line in handle
-            if line.strip()
-        }
+        return {}
+    return {chromosome: record.name for chromosome, record in read_fai(index_path).items()}
 
 
 def validate_normalized_split_vcf(
@@ -887,9 +781,19 @@ def validate_normalized_split_vcf(
         if vcf_facts is not None
         else read_all_vcf_contigs(vcf_path, bcftools)
     )
-    fasta_contigs = read_fasta_contigs(fasta_index_path)
-    shared_contigs = sorted(vcf_contigs & fasta_contigs)
-    unsupported_contigs = sorted(vcf_contigs - fasta_contigs)
+    try:
+        fasta_contigs = read_fasta_contigs(fasta_index_path)
+    except ValueError as exc:
+        errors.append(f"Reference FASTA index is invalid: {exc}")
+        return
+    vcf_by_canonical = {
+        canonical_chromosome(contig): contig for contig in vcf_contigs
+    }
+    shared_contigs = sorted(set(vcf_by_canonical) & set(fasta_contigs))
+    unsupported_contigs = sorted(
+        contig for canonical, contig in vcf_by_canonical.items()
+        if canonical not in fasta_contigs
+    )
     if unsupported_contigs:
         examples = ", ".join(unsupported_contigs[:10])
         remainder = len(unsupported_contigs) - min(len(unsupported_contigs), 10)
@@ -901,7 +805,7 @@ def validate_normalized_split_vcf(
 
     if not shared_contigs:
         errors.append(
-            "Input VCF and reference FASTA have no identically named contigs; "
+            "Input VCF and reference FASTA have no canonically compatible contigs; "
             "check the assembly and chromosome naming convention"
         )
 
@@ -958,7 +862,7 @@ def validate_lookup_files(
     checked_paths: list[str] = []
     for name in required:
         path = lookup_paths.get(name, "").strip()
-        if path.lower() in MISSING_CONFIG_VALUES:
+        if is_missing_token(path):
             errors.append(
                 f"PSAP lookup path for {name!r} is required when its model is enabled"
             )
@@ -999,7 +903,7 @@ def read_testing_unit_ids(
                 if len(columns) < 4:
                     continue
                 identifier = columns[3].strip()
-                if identifier.lower() not in MISSING_CONFIG_VALUES:
+                if not is_missing_token(identifier):
                     identifiers.add(identifier)
     except OSError as exc:
         errors.append(f"Could not read testing-unit IDs from {path}: {exc}")
@@ -1041,7 +945,7 @@ def validate_lookup_unit_overlap(
 
     for name in required_lookup_names(settings):
         path = lookup_paths.get(name, "").strip()
-        if path.lower() in MISSING_CONFIG_VALUES:
+        if is_missing_token(path):
             continue
         lookup_ids = read_lookup_unit_ids(
             path,
@@ -1155,7 +1059,7 @@ def validate_fasta(
     if require_file(path, "Reference FASTA", errors):
         require_file(index_path, "Reference FASTA index", errors)
         if str(path).endswith(".gz"):
-            if gzi_path is None or str(gzi_path).strip().lower() in MISSING_CONFIG_VALUES:
+            if is_missing_token(gzi_path):
                 errors.append("BGZF FASTA index binding is required for a compressed reference FASTA")
             else:
                 require_file(gzi_path, "BGZF FASTA index", errors)
@@ -1172,7 +1076,7 @@ def validate_cadd_resources(
 ) -> dict[str, set[str]]:
     resources = [("whole_genome_SNVs.tsv.gz", Path(cadd_snv), cadd_snv_index)]
     if include_indels:
-        if not cadd_indel or str(cadd_indel).strip().lower() in MISSING_CONFIG_VALUES:
+        if is_missing_token(cadd_indel):
             errors.append("CADD indel resource is required when include_indels is enabled")
             return {}
         resources.append(("InDels.tsv.gz", Path(cadd_indel), cadd_indel_index))

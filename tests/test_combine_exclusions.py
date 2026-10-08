@@ -8,14 +8,46 @@ SCRIPT_DIR = Path(__file__).parents[1] / "workflow" / "lib" / "python"
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from exclusions import (  # noqa: E402
+    collect_exclusions,
     interval_overlaps_variant,
     merged_interval_index,
     vcf_record_span,
     write_projected_vcf,
 )
+from validation import validate_exclusion_tsv  # noqa: E402
 
 
 class ExclusionOverlapTests(unittest.TestCase):
+    def test_validation_and_staging_share_tsv_target_semantics(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "targets.tsv"
+            source.write_text(
+                "# comment\ntrack name=ignored\nbrowser position ignored\n"
+                "chr1\t10\t12\nchrM\t15\tA\tC,T\n",
+                encoding="utf-8",
+            )
+            errors: list[str] = []
+            chromosomes = validate_exclusion_tsv(source, "Exclusion TSV", errors)
+            intervals, variants = collect_exclusions([f"tsv:{source}"])
+
+        self.assertEqual([], errors)
+        self.assertEqual({"1", "MT"}, chromosomes)
+        self.assertEqual(([10], [12]), intervals["1"])
+        self.assertEqual(
+            {("MT", 15, "A", "C"), ("MT", 15, "A", "T")}, variants
+        )
+
+    def test_validation_and_staging_reject_the_same_bad_tsv_row(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "targets.tsv"
+            source.write_text("1\t4\tA\tC,\n", encoding="utf-8")
+            errors: list[str] = []
+            validate_exclusion_tsv(source, "Exclusion TSV", errors)
+            with self.assertRaisesRegex(ValueError, "empty ALT allele"):
+                collect_exclusions([f"tsv:{source}"])
+
+        self.assertEqual(["Exclusion TSV line 1 has an empty ALT allele"], errors)
+
     def test_deletion_span_overlaps_interval_after_its_position(self) -> None:
         index = merged_interval_index({"1": [(100, 110)]})
 

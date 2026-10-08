@@ -8,9 +8,10 @@ import gzip
 import math
 from pathlib import Path
 
+from io_contracts import is_missing_token
+
 
 REQUIRED_COLUMNS = ("CHROM", "POS", "REF", "ALT", "CADD_PHRED", "unit")
-MISSING_VALUES = {"", ".", "na", "nan", "none", "null", "-"}
 
 
 def is_snv(ref: str, alt: str) -> bool:
@@ -18,7 +19,7 @@ def is_snv(ref: str, alt: str) -> bool:
 
 
 def has_value(value: str) -> bool:
-    return value.strip().lower() not in MISSING_VALUES
+    return not is_missing_token(value)
 
 
 def summarize_annotations(path: str | Path, include_indels: bool) -> dict:
@@ -104,4 +105,3 @@ def summarize_annotations(path: str | Path, include_indels: bool) -> dict:
         "warnings": [],
         "summary": counts,
     }
-

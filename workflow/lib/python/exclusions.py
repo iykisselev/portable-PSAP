@@ -4,25 +4,37 @@
 from __future__ import annotations
 
 import bisect
-import gzip
 from collections import defaultdict
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
 from genomic_contracts import canonical_chromosome
+from io_contracts import iter_bed, open_text
 
 
-def open_text(path: Path):
-    with path.open("rb") as handle:
-        compressed = handle.read(2) == b"\x1f\x8b"
-    if compressed:
-        return gzip.open(path, "rt", encoding="utf-8", errors="replace")
-    return path.open("rt", encoding="utf-8", errors="replace")
+@dataclass(frozen=True)
+class ExclusionInterval:
+    """One 1-based inclusive exclusion interval."""
+
+    chromosome: str
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class ExclusionAlleles:
+    """One 1-based exclusion anchor and its alternate alleles."""
+
+    chromosome: str
+    position: int
+    reference: str
+    alternates: tuple[str, ...]
 
 
 def data_rows(path: Path):
-    with open_text(path) as handle:
+    with open_text(path, errors="replace") as handle:
         for line_number, line in enumerate(handle, start=1):
             stripped = line.strip()
             if (
@@ -35,19 +47,36 @@ def data_rows(path: Path):
             yield line_number, stripped.split("\t")
 
 
-def add_bed_interval(
-    path: Path,
-    line_number: int,
+def parse_exclusion_tsv_row(
     columns: list[str],
-    intervals: dict[str, list[tuple[int, int]]],
-) -> None:
+) -> ExclusionInterval | ExclusionAlleles:
+    """Parse one interval or allele exclusion TSV row into canonical targets."""
     if len(columns) < 3:
-        raise ValueError(f"{path}:{line_number}: BED row has fewer than 3 columns")
-    start = int(columns[1])
-    end = int(columns[2])
-    if start < 0 or end <= start:
-        raise ValueError(f"{path}:{line_number}: invalid BED interval {start}, {end}")
-    intervals[canonical_chromosome(columns[0])].append((start + 1, end))
+        raise ValueError("must have at least 3 columns")
+    chromosome = canonical_chromosome(columns[0])
+    if not chromosome:
+        raise ValueError("has an empty chromosome")
+    try:
+        start = int(columns[1])
+    except ValueError as exc:
+        raise ValueError("has a non-integer position") from exc
+
+    try:
+        end = int(columns[2])
+    except ValueError:
+        if len(columns) < 4 or start < 1 or not columns[2] or not columns[3]:
+            raise ValueError("must contain either CHROM,START,END or CHROM,POS,REF,ALT")
+        alternates = tuple(columns[3].split(","))
+        if any(not alternate for alternate in alternates):
+            raise ValueError("has an empty ALT allele")
+        return ExclusionAlleles(chromosome, start, columns[2], alternates)
+
+    if start < 1 or end < start:
+        raise ValueError(
+            "interval must satisfy 1 <= start <= end; "
+            f"received {start}, {end}"
+        )
+    return ExclusionInterval(chromosome, start, end)
 
 
 def add_tsv_target(
@@ -57,30 +86,18 @@ def add_tsv_target(
     intervals: dict[str, list[tuple[int, int]]],
     variants: set[tuple[str, int, str, str]],
 ) -> None:
-    if len(columns) < 3:
-        raise ValueError(f"{path}:{line_number}: TSV row has fewer than 3 columns")
+    """Add one shared-parsed TSV target to staging collections."""
     try:
-        start = int(columns[1])
+        target = parse_exclusion_tsv_row(columns)
     except ValueError as exc:
-        raise ValueError(f"{path}:{line_number}: TSV position is not an integer") from exc
-
-    try:
-        end = int(columns[2])
-    except ValueError:
-        if len(columns) < 4 or start < 1 or not columns[2] or not columns[3]:
-            raise ValueError(
-                f"{path}:{line_number}: expected CHROM/POS/REF/ALT variant columns"
-            )
-        for alternate in columns[3].split(","):
-            variants.add((canonical_chromosome(columns[0]), start, columns[2], alternate))
-        return
-
-    if start < 1 or end < start:
-        raise ValueError(
-            f"{path}:{line_number}: TSV intervals are 1-based inclusive and must "
-            f"satisfy 1 <= start <= end; received {start}, {end}"
+        raise ValueError(f"{path}:{line_number}: TSV row {exc}") from exc
+    if isinstance(target, ExclusionInterval):
+        intervals[target.chromosome].append((target.start, target.end))
+    else:
+        variants.update(
+            (target.chromosome, target.position, target.reference, alternate)
+            for alternate in target.alternates
         )
-    intervals[canonical_chromosome(columns[0])].append((start, end))
 
 
 def add_vcf_variants(
@@ -173,10 +190,14 @@ def collect_exclusions(specifications: list[str]):
         if not separator or kind not in {"bed", "tsv", "vcf"}:
             raise ValueError(f"Invalid --source value: {specification!r}")
         path = Path(path_text)
+        if kind == "bed":
+            for row in iter_bed(path, errors="replace"):
+                intervals[canonical_chromosome(row.chromosome)].append(
+                    (row.start + 1, row.end)
+                )
+            continue
         for line_number, columns in data_rows(path):
-            if kind == "bed":
-                add_bed_interval(path, line_number, columns, intervals)
-            elif kind == "tsv":
+            if kind == "tsv":
                 add_tsv_target(path, line_number, columns, intervals, variants)
             else:
                 add_vcf_variants(path, line_number, columns, variants)
@@ -224,5 +245,5 @@ def write_projected_vcf(
 ) -> None:
     """Project a VCF path onto exclusion targets for direct library callers."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open_text(cohort_path) as cohort, output_path.open("w", encoding="utf-8") as output:
+    with open_text(cohort_path, errors="replace") as cohort, output_path.open("w", encoding="utf-8") as output:
         project_vcf_records(cohort, output, intervals, variants, str(cohort_path))

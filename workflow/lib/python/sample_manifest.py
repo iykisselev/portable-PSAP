@@ -10,6 +10,7 @@ from types import MappingProxyType
 from typing import Iterable, Mapping
 
 from io_contracts import write_text_atomic
+from sample_metadata import iter_sample_rows, normalize_sample
 
 
 SAMPLE_MANIFEST_COLUMNS = ("family_id", "pid", "sex", "phenotype")
@@ -127,58 +128,20 @@ def configured_sample_index(path: str | Path, metadata_kind: str) -> SampleIndex
     source = Path(path)
 
     try:
-        if metadata_kind == "ped":
-            with source.open("rt", encoding="utf-8", errors="replace", newline="") as handle:
-                for row in csv.reader(handle, delimiter="\t"):
-                    if len(row) < 6:
-                        continue
-                    _append_configured_record(records, seen, row[0], row[1], row[4], row[5])
-        elif metadata_kind == "samples":
-            with source.open("rt", encoding="utf-8", errors="replace", newline="") as handle:
-                for row in csv.DictReader(handle, delimiter="\t"):
-                    _append_configured_record(
-                        records,
-                        seen,
-                        row.get("family_id", ""),
-                        row.get("pid", ""),
-                        row.get("sex", ""),
-                        row.get("phenotype", ""),
-                    )
-        else:
-            raise ValueError(f"Unsupported sample metadata kind: {metadata_kind!r}")
+        for row in iter_sample_rows(
+            source,
+            metadata_kind,
+            errors="replace",
+            on_error=lambda _: None,
+        ):
+            sample = normalize_sample(row)
+            if not sample.is_safe or sample.pid in seen:
+                continue
+            seen.add(sample.pid)
+            records.append(sample.manifest_row())
     except OSError:
         # The validation rule emits the actionable error. An empty planning
         # index keeps Snakemake from expanding an unsafe partial workflow.
         return SampleIndex.from_rows(())
 
     return SampleIndex.from_rows(records)
-
-
-def _append_configured_record(
-    records: list[dict[str, str]],
-    seen: set[str],
-    family_id: str | None,
-    pid: str | None,
-    sex: str | None,
-    phenotype: str | None,
-) -> None:
-    """Append one safe processing record, retaining first source occurrence."""
-    sample_id = (pid or "").strip()
-    label = {"1": "unaffected", "2": "affected"}.get((phenotype or "").strip())
-    if (
-        not sample_id
-        or sample_id in seen
-        or "/" in sample_id
-        or "\\" in sample_id
-        or label is None
-    ):
-        return
-    seen.add(sample_id)
-    records.append(
-        {
-            "family_id": (family_id or "").strip() or "NA",
-            "pid": sample_id,
-            "sex": (sex or "").strip() if (sex or "").strip() in {"1", "2"} else "NA",
-            "phenotype": label,
-        }
-    )
