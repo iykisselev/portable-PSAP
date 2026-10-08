@@ -27,7 +27,10 @@ def main() -> None:
     A sites-only ``bcftools view`` stream avoids reading cohort genotype
     columns. The matched records are written directly as an indexed BGZF VCF.
     """
-    intervals, variants = collect_exclusions(snakemake.params.sources)
+    intervals, variants, indexed_tsv_sources = collect_exclusions(
+        snakemake.params.sources,
+        indexed_tsv_paths=snakemake.params.indexed_tsv_sources,
+    )
     bcftools = require_tool("bcftools")
     bgzip = require_tool("bgzip")
     source_path = Path(snakemake.input.variants)
@@ -50,7 +53,12 @@ def main() -> None:
             assert reader.stdout is not None
             assert writer.stdin is not None
             project_vcf_records(
-                reader.stdout, writer.stdin, intervals, variants, str(source_path)
+                reader.stdout,
+                writer.stdin,
+                intervals,
+                variants,
+                str(source_path),
+                indexed_tsv_paths=indexed_tsv_sources,
             )
         finally:
             if reader.stdout is not None:

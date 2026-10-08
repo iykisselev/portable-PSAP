@@ -1,16 +1,20 @@
 import sys
 import unittest
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import MagicMock, patch
 
 
 SCRIPT_DIR = Path(__file__).parents[1] / "workflow" / "lib" / "python"
 sys.path.insert(0, str(SCRIPT_DIR))
 
+import exclusions  # noqa: E402
 from exclusions import (  # noqa: E402
     collect_exclusions,
     interval_overlaps_variant,
     merged_interval_index,
+    project_vcf_records,
     vcf_record_span,
     write_projected_vcf,
 )
@@ -28,7 +32,7 @@ class ExclusionOverlapTests(unittest.TestCase):
             )
             errors: list[str] = []
             chromosomes = validate_exclusion_tsv(source, "Exclusion TSV", errors)
-            intervals, variants = collect_exclusions([f"tsv:{source}"])
+            intervals, variants, indexed_sources = collect_exclusions([f"tsv:{source}"])
 
         self.assertEqual([], errors)
         self.assertEqual({"1", "MT"}, chromosomes)
@@ -36,6 +40,7 @@ class ExclusionOverlapTests(unittest.TestCase):
         self.assertEqual(
             {("MT", 15, "A", "C"), ("MT", 15, "A", "T")}, variants
         )
+        self.assertEqual((), indexed_sources)
 
     def test_validation_and_staging_reject_the_same_bad_tsv_row(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -47,6 +52,43 @@ class ExclusionOverlapTests(unittest.TestCase):
                 collect_exclusions([f"tsv:{source}"])
 
         self.assertEqual(["Exclusion TSV line 1 has an empty ALT allele"], errors)
+
+    def test_large_indexed_tsv_is_queried_without_building_an_allele_set(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "excluded_alleles.tsv.gz"
+            Path(f"{source}.tbi").touch()
+            intervals, variants, indexed_sources = collect_exclusions(
+                [f"tsv:{source}"], indexed_tsv_paths=[str(source)]
+            )
+            reader = MagicMock()
+            reader.fetch.return_value = iter(["1\t10\tA\tC\tfiltered\n"])
+            tabix = MagicMock()
+            tabix.return_value.__enter__.return_value = reader
+            output = StringIO()
+            with patch.object(exclusions, "pysam", MagicMock(TabixFile=tabix)):
+                project_vcf_records(
+                    [
+                        "##fileformat=VCFv4.3\n",
+                        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n",
+                        "1\t10\t.\tA\tC\t.\tPASS\t.\n",
+                        "1\t11\t.\tA\tG\t.\tPASS\t.\n",
+                    ],
+                    output,
+                    intervals,
+                    variants,
+                    "cohort.vcf",
+                    indexed_tsv_paths=indexed_sources,
+                )
+
+        self.assertFalse(variants)
+        self.assertEqual((source,), indexed_sources)
+        self.assertEqual(
+            "##fileformat=VCFv4.3\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+            "1\t10\t.\tA\tC\t.\tPASS\t.\n",
+            output.getvalue(),
+        )
+        reader.fetch.assert_any_call("1", 9, 10)
 
     def test_deletion_span_overlaps_interval_after_its_position(self) -> None:
         index = merged_interval_index({"1": [(100, 110)]})

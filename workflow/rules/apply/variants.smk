@@ -73,6 +73,13 @@ if EXCLUSION_FILTER_ENABLED:
                 f"{APPLY_RESOURCE_REGISTRY.exclusion_kind_by_id[item]}:"
                 f"{APPLY_RESOURCE_REGISTRY.workflow_exclusions[position]}"
                 for position, item in enumerate(APPLY_RESOURCE_REGISTRY.exclusion_ids)
+            ],
+            indexed_tsv_sources=[
+                resource.staged_data
+                for resource in APPLY_RESOURCE_REGISTRY.resources.values()
+                if resource.origin == "generated_bundle"
+                and resource.scientific_role == "variants_exclude"
+                and resource.kind == "tsv"
             ]
         threads: 1
         resources:

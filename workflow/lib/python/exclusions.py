@@ -6,12 +6,18 @@ from __future__ import annotations
 import bisect
 from collections import defaultdict
 from collections.abc import Iterable
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
 from genomic_contracts import canonical_chromosome
 from io_contracts import iter_bed, open_text
+
+try:
+    import pysam
+except ImportError:  # pragma: no cover - production validation environment supplies pysam
+    pysam = None
 
 
 @dataclass(frozen=True)
@@ -182,9 +188,16 @@ def vcf_record_span(columns: list[str]) -> tuple[int, int]:
     return position, end
 
 
-def collect_exclusions(specifications: list[str]):
+def collect_exclusions(
+    specifications: list[str],
+    *,
+    indexed_tsv_paths: Iterable[str] = (),
+):
+    """Collect ordinary targets and retain selected large TSVs for tabix lookup."""
     intervals: dict[str, list[tuple[int, int]]] = defaultdict(list)
     variants: set[tuple[str, int, str, str]] = set()
+    indexed_paths = {str(Path(path)) for path in indexed_tsv_paths}
+    indexed_tsv_sources: list[Path] = []
     for specification in specifications:
         kind, separator, path_text = specification.partition(":")
         if not separator or kind not in {"bed", "tsv", "vcf"}:
@@ -196,12 +209,60 @@ def collect_exclusions(specifications: list[str]):
                     (row.start + 1, row.end)
                 )
             continue
+        if kind == "tsv" and str(path) in indexed_paths:
+            index = Path(f"{path}.tbi")
+            if not index.is_file():
+                raise ValueError(f"Indexed TSV exclusion has no tabix index: {index}")
+            indexed_tsv_sources.append(path)
+            continue
         for line_number, columns in data_rows(path):
             if kind == "tsv":
                 add_tsv_target(path, line_number, columns, intervals, variants)
             else:
                 add_vcf_variants(path, line_number, columns, variants)
-    return merged_interval_index(intervals), variants
+    return merged_interval_index(intervals), variants, tuple(indexed_tsv_sources)
+
+
+def indexed_tsv_matches_variant(
+    readers,
+    chromosome: str,
+    position: int,
+    record_end: int,
+    reference: str,
+    alternates: Iterable[str],
+) -> bool:
+    """Check indexed TSV exclusions at one VCF record without building a set."""
+    if pysam is None:
+        raise RuntimeError("Indexed TSV exclusions require pysam")
+    canonical = canonical_chromosome(chromosome)
+    alternate_set = set(alternates)
+    for path, reader in readers:
+        try:
+            lines = reader.fetch(chromosome, position - 1, record_end)
+        except ValueError:
+            # This source has no records on the requested contig.
+            continue
+        for line in lines:
+            columns = line.rstrip("\n").split("\t")
+            try:
+                target = parse_exclusion_tsv_row(columns)
+            except ValueError as exc:
+                raise ValueError(f"{path}: indexed TSV row {exc}") from exc
+            if isinstance(target, ExclusionInterval):
+                if (
+                    target.chromosome == canonical
+                    and target.start <= record_end
+                    and target.end >= position
+                ):
+                    return True
+            elif (
+                target.chromosome == canonical
+                and target.position == position
+                and target.reference == reference
+                and alternate_set.intersection(target.alternates)
+            ):
+                return True
+    return False
 
 
 def project_vcf_records(
@@ -210,31 +271,42 @@ def project_vcf_records(
     intervals: dict[str, tuple[list[int], list[int]]],
     variants: set[tuple[str, int, str, str]],
     source_name: str,
+    indexed_tsv_paths: Iterable[Path] = (),
 ) -> None:
     """Write matching records from an already-filtered, sites-only VCF stream."""
-    for line_number, line in enumerate(cohort, start=1):
-        if line.startswith("#"):
-            output.write(line)
-            continue
-        columns = line.rstrip("\n").split("\t")
-        if len(columns) < 5:
-            raise ValueError(
-                f"{source_name}:{line_number}: cohort VCF row has fewer than 5 columns"
+    if indexed_tsv_paths and pysam is None:
+        raise RuntimeError("Indexed TSV exclusions require pysam")
+    with ExitStack() as stack:
+        readers = [
+            (path, stack.enter_context(pysam.TabixFile(str(path))))
+            for path in indexed_tsv_paths
+        ]
+        for line_number, line in enumerate(cohort, start=1):
+            if line.startswith("#"):
+                output.write(line)
+                continue
+            columns = line.rstrip("\n").split("\t")
+            if len(columns) < 5:
+                raise ValueError(
+                    f"{source_name}:{line_number}: cohort VCF row has fewer than 5 columns"
+                )
+            try:
+                position, record_end = vcf_record_span(columns)
+            except ValueError as exc:
+                raise ValueError(f"{source_name}:{line_number}: {exc}") from exc
+            interval_match = interval_overlaps_variant(
+                intervals, columns[0], position, record_end
             )
-        try:
-            position, record_end = vcf_record_span(columns)
-        except ValueError as exc:
-            raise ValueError(f"{source_name}:{line_number}: {exc}") from exc
-        interval_match = interval_overlaps_variant(
-            intervals, columns[0], position, record_end
-        )
-        chromosome = canonical_chromosome(columns[0])
-        variant_match = any(
-            (chromosome, position, columns[3], alternate) in variants
-            for alternate in columns[4].split(",")
-        )
-        if interval_match or variant_match:
-            output.write(line)
+            chromosome = canonical_chromosome(columns[0])
+            variant_match = any(
+                (chromosome, position, columns[3], alternate) in variants
+                for alternate in columns[4].split(",")
+            )
+            indexed_match = indexed_tsv_matches_variant(
+                readers, columns[0], position, record_end, columns[3], columns[4].split(",")
+            ) if readers else False
+            if interval_match or variant_match or indexed_match:
+                output.write(line)
 
 
 def write_projected_vcf(

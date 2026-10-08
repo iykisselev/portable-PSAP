@@ -13,6 +13,10 @@ from bgzf import has_bgzf_eof, is_bgzf
 from genomic_contracts import canonical_chromosome
 from io_contracts import open_text
 
+
+SORT_BUFFER_MIB = 512
+"""Bound external sorting below scheduler cgroups during table staging."""
+
 def source_has_index(index_path: Path | None) -> bool:
     return index_path is not None and index_path.is_file()
 
@@ -148,6 +152,8 @@ def copy_as_bgzip(
                 "--field-separator=\t",
                 "--key=1,1",
                 "--key=2,2n",
+                f"--buffer-size={SORT_BUFFER_MIB}M",
+                f"--temporary-directory={temp_path}",
                 "--output",
                 str(sorted_rows_path),
                 str(rows_path),
