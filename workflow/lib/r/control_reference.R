@@ -11,7 +11,7 @@ make_evidence <- function(variants, row_filter, model) {
 }
 
 derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
-  variants <- fread(path, sep = "\t", header = TRUE, quote = "", data.table = TRUE, showProgress = FALSE)
+  variants <- read_tsv(path)
   require_columns(variants, c("Key", "gt_class"), sprintf("Control annotation table for %s", pid))
   variants[, variant_key := clean_identifier(Key)]
   variants[, gt_class := tolower(clean_identifier(gt_class))]
@@ -19,7 +19,7 @@ derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
   variants[, unit := clean_identifier(unit)]
   invalid <- is.na(variants$variant_key) | is.na(variants$gt_class) | is.na(variants$unit)
   if (any(invalid)) abort("Control %s contains %d row(s) with missing key, genotype class, or unit", pid, sum(invalid))
-  definitions <- DISEASE_MODELS[DISEASE_MODELS$lookup != "hem_chrX", ]
+  definitions <- standard_disease_models()
   evidence <- lapply(seq_len(nrow(definitions)), function(index) {
     definition <- definitions[index, ]
     make_evidence(variants, variants$gt_class == definition$genotype_class, definition$model)
@@ -27,8 +27,8 @@ derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
   if (hemizygote_model && any(variants$gt_class == "hem")) {
     require_columns(variants, "CHROM", sprintf("Hemizygous control annotation table for %s", pid))
     chromosome <- canonical_chromosome(variants$CHROM)
-    hem_definition <- DISEASE_MODELS[DISEASE_MODELS$lookup == "hem_chrX", , drop = FALSE]
-    evidence <- c(evidence, list(make_evidence(variants, variants$gt_class == hem_definition$genotype_class & chromosome == "X", hem_definition$model)))
+    hem_definition <- hem_disease_model()
+    evidence <- c(evidence, list(make_evidence(variants, variants$gt_class == hem_definition$genotype_class & chromosome == hem_definition$required_chromosome, hem_definition$model)))
   }
   evidence <- Filter(Negate(is.null), evidence)
   if (length(evidence) == 0L) return(empty_reference())
@@ -40,7 +40,7 @@ derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
 
 
 read_psap_scores <- function(path, pid) {
-  scores <- fread(path, sep = "\t", header = TRUE, quote = "", data.table = TRUE, showProgress = FALSE)
+  scores <- read_tsv(path)
   require_columns(scores, c("Key", "unit", "Dz.Model", "PSAP"), sprintf("Control PSAP table for %s", pid))
   scores[, unit := clean_identifier(unit)]
   scores[, model := clean_identifier(`Dz.Model`)]
@@ -76,7 +76,7 @@ run_control_reference <- function(config) {
     message("Exact duplicate rows removed: ", before - nrow(reference))
   }
   if (nrow(reference) > 0L) setorderv(reference, c("unit", "model", "variant_key", "pid"), c(1L, 1L, 1L, 1L))
-  fwrite(reference, file = config$output, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, nThread = config$threads)
+  write_tsv(reference, config$output, threads = config$threads)
   message("Unaffected individuals: ", length(config$input))
   message("Control evidence rows written: ", nrow(reference))
   message("Wrote control reference: ", config$output)

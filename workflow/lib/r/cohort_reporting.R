@@ -3,7 +3,7 @@
 read_candidate_tables <- function(paths) {
   required <- c("candidate_id", "pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP")
   tables <- lapply(paths, function(path) {
-    candidates <- fread(path, sep = "\t", header = TRUE, quote = "", data.table = TRUE, showProgress = FALSE)
+    candidates <- read_tsv(path)
     require_columns(candidates, required, paste("Candidate table", path))
     candidates[, required, with = FALSE]
   })
@@ -16,7 +16,7 @@ read_candidate_tables <- function(paths) {
 
 read_controls <- function(path) {
   required <- c("pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP")
-  controls <- fread(path, sep = "\t", header = TRUE, quote = "", data.table = TRUE, showProgress = FALSE)
+  controls <- read_tsv(path)
   require_columns(controls, required, "Control reference")
   controls <- controls[, required, with = FALSE]
   # ``fread`` infers logical columns for a header-only control table.  Keep
@@ -80,15 +80,9 @@ validate_candidates <- function(candidates, controls) {
     model,
     variant_key = vapply(variant_keys, function(keys) keys[[1L]], character(1))
   )]
-  models <- disease_model_names()
-  compatible_models <- rbind(
-    data.table(model = "DOM-het", control_model = models),
-    data.table(
-      model = setdiff(models, "DOM-het"),
-      control_model = setdiff(models, "DOM-het")
-    )
-  )
-  candidate_controls <- compatible_models[candidate_keys, on = "model", allow.cartesian = TRUE]
+  candidate_controls <- compatible_control_model_table()[
+    candidate_keys, on = "model", allow.cartesian = TRUE
+  ]
   hits <- controls[candidate_controls,
     on = .(unit, variant_key, model = control_model),
     nomatch = NULL,
@@ -133,8 +127,8 @@ validate_candidates <- function(candidates, controls) {
 run_cohort_reporting <- function(config) {
   setDTthreads(config$threads)
   report <- validate_candidates(read_candidate_tables(config$candidates), read_controls(config$controls))
-  fwrite(report$detail, file = config$output_candidates, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, nThread = config$threads)
-  fwrite(report$summary, file = config$output_summary, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, nThread = config$threads)
+  write_tsv(report$detail, config$output_candidates, threads = config$threads)
+  write_tsv(report$summary, config$output_summary, threads = config$threads)
   message("Affected candidate rows: ", nrow(report$detail))
   message("Cohort summary rows: ", nrow(report$summary))
 }

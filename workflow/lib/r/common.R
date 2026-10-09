@@ -3,6 +3,27 @@ abort <- function(...) {
 }
 
 
+read_tsv <- function(path, header = TRUE, ...) {
+  fread(
+    path, sep = "\t", header = header, quote = "", data.table = TRUE,
+    showProgress = FALSE, ...
+  )
+}
+
+
+write_tsv <- function(data, path, threads = NULL, ...) {
+  arguments <- c(
+    list(
+      x = data, file = path, sep = "\t", quote = FALSE,
+      row.names = FALSE, col.names = TRUE
+    ),
+    list(...)
+  )
+  if (!is.null(threads)) arguments$nThread <- threads
+  do.call(fwrite, arguments)
+}
+
+
 require_boolean <- function(value, name) {
   if (!is.logical(value) || length(value) != 1L || is.na(value)) {
     display_value <- if (length(value)) paste(as.character(value), collapse = ", ") else "NULL"
@@ -14,9 +35,8 @@ require_boolean <- function(value, name) {
 
 parse_sex <- function(value) {
   normalized <- trimws(as.character(value))
-  missing_values <- c("", "NA", "NaN", ".", "-", "-9", "0")
 
-  if (is.na(normalized) || normalized %in% missing_values) {
+  if (is.na(normalized) || tolower(normalized) %in% PED_MISSING_SEX_TOKENS) {
     return(NA_real_)
   }
 

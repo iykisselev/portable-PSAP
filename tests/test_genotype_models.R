@@ -14,11 +14,23 @@ source(file.path(repo_dir, "workflow", "lib", "r", "disease_models.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "bundle_contracts.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "lookup_contracts.R"))
 stopifnot(is_supported_generated_bundle_contract("generated_bundle_v3"))
-source(file.path(repo_dir, "workflow", "lib", "r", "null_distribution.R"))
+source(file.path(repo_dir, "tests", "r", "null_distribution_oracle.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "psap_scoring.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "candidate_reporting.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "control_reference.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "cohort_reporting.R"))
+
+roundtrip_path <- tempfile(fileext = ".tsv")
+write_tsv(data.table(identifier = "one", value = 1.5), roundtrip_path)
+roundtrip <- read_tsv(roundtrip_path)
+stopifnot(identical(names(roundtrip), c("identifier", "value")), identical(roundtrip$identifier, "one"))
+unlink(roundtrip_path)
+stopifnot(
+    identical(compatible_control_models("DOM-het"), disease_model_names()),
+    identical(compatible_control_models("REC-hom"), "REC-hom"),
+    identical(standard_disease_models()$model, disease_model_names()[1:4]),
+    identical(hem_disease_model()$required_chromosome, "X")
+)
 
 
 expect_error <- function(expression, pattern) {

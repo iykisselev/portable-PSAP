@@ -1,7 +1,7 @@
 # Affected-sample candidate table normalization and deterministic identifiers.
 
 read_candidate_psap <- function(path) {
-  psap <- fread(path, sep = "\t", header = TRUE, quote = "", data.table = TRUE, showProgress = FALSE)
+  psap <- read_tsv(path)
   require_columns(psap, c("Key", "unit", "Dz.Model", "PSAP"), "Affected PSAP table")
   psap[, unit := clean_identifier(unit)]
   psap[, model := clean_identifier(`Dz.Model`)]
@@ -37,7 +37,7 @@ build_candidates <- function(psap, pid, sex, candidate_id_separator = ":", candi
 run_candidate_reporting <- function(config) {
   setDTthreads(config$threads)
   candidates <- build_candidates(read_candidate_psap(config$input), config$pid, config$sex_value, config$candidate_id_separator, config$candidate_id_ordinal_width)
-  fwrite(candidates, file = config$output, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, nThread = config$threads)
+  write_tsv(candidates, config$output, threads = config$threads)
   message("Candidate rows written: ", nrow(candidates))
   message("Wrote affected candidates: ", config$output)
 }

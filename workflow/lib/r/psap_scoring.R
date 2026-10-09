@@ -9,7 +9,7 @@ empty_scoring_output <- function() {
 
 
 read_scoring_variants <- function(path) {
-  variants <- fread(path, sep = "\t", header = TRUE, quote = "", data.table = TRUE, showProgress = FALSE)
+  variants <- read_tsv(path)
   require_columns(variants, c("Key", "CHROM", "CADD_PHRED", "gt_class", "unit"), "PSAP-ready variant table")
   variants[, CADD_PHRED := suppressWarnings(as.numeric(CADD_PHRED))]
   variants
@@ -17,7 +17,7 @@ read_scoring_variants <- function(path) {
 
 
 read_lookup <- function(path, metadata = NULL, role = NULL) {
-  lookup <- fread(path, sep = "\t", header = FALSE, quote = "", colClasses = "character", data.table = TRUE, showProgress = FALSE)
+  lookup <- read_tsv(path, header = FALSE, colClasses = "character")
   if (ncol(lookup) < 2 || nrow(lookup) == 0) {
     abort("PSAP lookup table must contain an ID column and score columns: %s", path)
   }
@@ -112,7 +112,7 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
   variants <- copy(variants)
   variants[, .testing_unit_id := clean_identifier(unit)]
   variants[, gt_class := tolower(trimws(as.character(gt_class)))]
-  definitions <- DISEASE_MODELS[DISEASE_MODELS$lookup != "hem_chrX", ]
+  definitions <- standard_disease_models()
   lookup_names <- unique(definitions$lookup)
   lookups <- setNames(
     lapply(lookup_names, function(name) {
@@ -127,9 +127,9 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
   if (hemizygote_model) {
     hem_variants <- copy(variants)
     hem_variants[, .chromosome := canonical_chromosome(CHROM)]
-    hem_definition <- DISEASE_MODELS[DISEASE_MODELS$lookup == "hem_chrX", , drop = FALSE]
+    hem_definition <- hem_disease_model()
     hem_lookup <- read_prepared_lookup(lookup_source$paths[[hem_definition$lookup]])
-    results <- c(results, list(score_model(hem_variants[.chromosome == "X" & gt_class == "hem"], hem_definition$model, hem_definition$genotype_class, hem_lookup, lookup_source, hem_definition$lookup)))
+    results <- c(results, list(score_model(hem_variants[.chromosome == hem_definition$required_chromosome & gt_class == hem_definition$genotype_class], hem_definition$model, hem_definition$genotype_class, hem_lookup, lookup_source, hem_definition$lookup)))
   }
   results <- Filter(Negate(is.null), results)
   if (length(results) == 0) return(empty_scoring_output())
@@ -147,7 +147,7 @@ run_psap_scoring <- function(config) {
   if (!identical(names(output), SCORING_OUTPUT_COLUMNS)) {
     abort("Internal scoring output schema mismatch: expected %s; found %s", paste(SCORING_OUTPUT_COLUMNS, collapse = ", "), paste(names(output), collapse = ", "))
   }
-  fwrite(output, file = config$output, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE, nThread = config$threads)
+  write_tsv(output, config$output, threads = config$threads)
   message("Candidate rows written: ", nrow(output))
   message("Wrote PSAP results: ", config$output)
 }

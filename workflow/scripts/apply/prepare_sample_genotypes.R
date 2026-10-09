@@ -42,10 +42,7 @@ read_extracted_genotypes <- function(path) {
     ))
   }
 
-  genotypes <- fread(
-    path, sep = "\t", header = FALSE, col.names = columns, quote = "",
-    data.table = TRUE, showProgress = FALSE
-  )
+  genotypes <- read_tsv(path, header = FALSE, col.names = columns)
   if (ncol(genotypes) != length(columns)) {
     abort(
       "Expected seven input columns: %s; found %d",
@@ -73,21 +70,14 @@ deduplicate_by_key <- function(genotypes) {
 }
 
 
-clean_unit_value <- function(value) {
-  value <- trimws(as.character(value))
-  value[is.na(value) | value == "" | value == "." | value == "-"] <- NA_character_
-  value
-}
-
-
 expand_units <- function(genotypes) {
   if (nrow(genotypes) == 0L) {
     genotypes[, unit := character()]
     return(genotypes)
   }
-  pieces <- strsplit(clean_unit_value(genotypes$unit), split = ",", fixed = TRUE)
+  pieces <- strsplit(clean_identifier(genotypes$unit), split = ",", fixed = TRUE)
   expanded <- genotypes[rep.int(seq_len(nrow(genotypes)), lengths(pieces))]
-  expanded[, unit := clean_unit_value(unlist(pieces, use.names = FALSE))]
+  expanded[, unit := clean_identifier(unlist(pieces, use.names = FALSE))]
   unique(expanded[!is.na(unit)], by = c("Key", "unit"))
 }
 
@@ -116,9 +106,9 @@ run_sample_preparation <- function(config) {
   output_columns <- c(
     "Key", "CADD_PHRED", "unit", "CHROM", "POS", "REF", "ALT", "GT", "gt_class"
   )
-  fwrite(
-    annotated[, output_columns, with = FALSE], file = config$output, sep = "\t", quote = FALSE,
-    row.names = FALSE, col.names = TRUE, nThread = config$threads
+  write_tsv(
+    annotated[, output_columns, with = FALSE], config$output,
+    threads = config$threads
   )
   message("Annotated rows written: ", nrow(annotated))
   message("Wrote prepared genotypes: ", config$output)
