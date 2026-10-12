@@ -292,6 +292,29 @@ samples.
 | `minimum_PSAP` | Lowest non-missing PSAP value among the grouped affected candidates. |
 | `validation`, `control_count`, `control_pids` | Aggregated control-evidence fields. A `control_match` takes priority over `ok`, which takes priority over `no_controls`. |
 
+### Optional cohort-summary review annotations
+
+`scripts/annotate_cohort_summary.py` is a standalone post-analysis utility. It
+does not modify workflow outputs: it appends CADD PHRED, a selected population
+AF INFO field, and `gene_name` from a GTF to a copy of `cohort_summary.tsv.gz`.
+It treats `unit` as an Ensembl gene ID (and ignores an optional version suffix).
+All CADD tables and the population VCF must be BGZF-compressed and indexed.
+
+```bash
+python scripts/annotate_cohort_summary.py \
+  results/apply/my-run/cohort/cohort_summary.tsv.gz \
+  results/apply/my-run/cohort/cohort_summary.review.tsv.gz \
+  --cadd-snv reference/cadd_snv.tsv.gz \
+  --cadd-indel reference/cadd_indel.tsv.gz \
+  --population-vcf reference/population.vcf.gz \
+  --af-field AF \
+  --gtf reference/gencode.gtf.gz
+```
+
+The output preserves every input row and adds `gene_name`, `cadd_phred`, and
+`population_af`. A pipe-separated multi-allele candidate signature receives
+comma-separated CADD and AF values in the same order.
+
 ### `control_variants.tsv.gz`
 
 One row for each carried variant/model evidence record from an unaffected
