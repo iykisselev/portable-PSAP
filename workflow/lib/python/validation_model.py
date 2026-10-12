@@ -94,9 +94,13 @@ def validate_model_inputs(
                     "Generated lookup variant classes do not match model.include_indels"
                 )
             if bool(settings["hemizygote"]) != ("hem_chrX" in roles):
-                errors.append("Generated lookup HEM role does not match model.hemizygote")
+                errors.append(
+                    "Generated lookup HEM role does not match model.hemizygote"
+                )
             if metadata.get("assembly") != assembly:
-                errors.append("Generated lookup assembly differs from reference.assembly")
+                errors.append(
+                    "Generated lookup assembly differs from reference.assembly"
+                )
             if metadata.get("testing_unit_type") != unit:
                 errors.append(
                     "Generated lookup testing-unit type differs from model.unit"

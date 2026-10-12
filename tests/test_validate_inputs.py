@@ -17,6 +17,7 @@ from validation import (  # noqa: E402
     read_vcf_header_facts,
     read_ped,
     read_samples_tsv,
+    read_testing_unit_ids,
     validate_cadd_chromosome_names,
     validate_fasta,
     validate_hemizygote_chromosomes,
@@ -33,7 +34,20 @@ from validation_resources import validate_resource_inputs  # noqa: E402
 
 
 class ValidationTests(unittest.TestCase):
-    def test_vcf_facts_use_index_statistics_when_contig_headers_are_absent(self) -> None:
+    def test_testing_unit_id_reader_reports_bad_coordinates_and_keeps_valid_rows(self):
+        with TemporaryDirectory() as temporary:
+            path = Path(temporary) / "units.bed"
+            path.write_text(
+                "track name=units\n1\t0\t3\tGOOD\n1\t5\t2\tBAD\n1\t6\t9\tLATER\n"
+            )
+            errors = []
+            self.assertEqual({"GOOD", "LATER"}, read_testing_unit_ids(path, errors))
+        self.assertEqual(1, len(errors))
+        self.assertIn("BED line 3 must satisfy 0 <= start < end", errors[0])
+
+    def test_vcf_facts_use_index_statistics_when_contig_headers_are_absent(
+        self,
+    ) -> None:
         with TemporaryDirectory() as temp_dir:
             vcf = Path(temp_dir) / "cohort.vcf.gz"
             vcf.write_bytes(b"placeholder")
@@ -50,7 +64,9 @@ class ValidationTests(unittest.TestCase):
             errors: list[str] = []
             with (
                 patch("validation.shutil.which", return_value="bcftools"),
-                patch("validation.subprocess.run", side_effect=(header, statistics)) as run,
+                patch(
+                    "validation.subprocess.run", side_effect=(header, statistics)
+                ) as run,
                 patch("validation.read_vcf_record_contigs") as record_contigs,
             ):
                 facts = read_vcf_header_facts(vcf, errors)
@@ -59,7 +75,9 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(facts.samples, ("sample",))
         self.assertEqual(facts.contigs, frozenset({"1", "X"}))
         self.assertEqual(facts.canonical_map, {"1": "1", "X": "X"})
-        self.assertEqual(run.call_args_list[1].args[0], ["bcftools", "index", "--stats", str(vcf)])
+        self.assertEqual(
+            run.call_args_list[1].args[0], ["bcftools", "index", "--stats", str(vcf)]
+        )
         record_contigs.assert_not_called()
 
     def test_all_unknown_sample_sheet_phenotypes_fail_validation(self) -> None:
@@ -90,8 +108,7 @@ class ValidationTests(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             ped = Path(temp_dir) / "cohort.ped"
             ped.write_text(
-                "F1\tunknown1\t0\t0\t1\t0\n"
-                "F1\tunknown2\t0\t0\t2\t-9\n",
+                "F1\tunknown1\t0\t0\t1\t0\nF1\tunknown2\t0\t0\t2\t-9\n",
                 encoding="utf-8",
             )
             errors: list[str] = []
@@ -135,12 +152,12 @@ class ValidationTests(unittest.TestCase):
 
         self.assertEqual(
             errors,
-            [
-                "HEM chromosome-X model requires chromosome(s) in the input VCF: X"
-            ],
+            ["HEM chromosome-X model requires chromosome(s) in the input VCF: X"],
         )
 
-    def test_sex_chromosomes_are_optional_when_hemizygote_model_is_disabled(self) -> None:
+    def test_sex_chromosomes_are_optional_when_hemizygote_model_is_disabled(
+        self,
+    ) -> None:
         errors: list[str] = []
 
         validate_hemizygote_chromosomes(False, {"1": "1"}, errors)
@@ -198,7 +215,9 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(summary["het"]["overlap_count"], 0)
             self.assertEqual(summary["hom"]["overlap_count"], 0)
             self.assertEqual(len(errors), 2)
-            self.assertTrue(all("zero testing-unit ID overlap" in error for error in errors))
+            self.assertTrue(
+                all("zero testing-unit ID overlap" in error for error in errors)
+            )
 
     def test_fasta_uses_the_declared_index_binding(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -233,7 +252,9 @@ class ValidationTests(unittest.TestCase):
             )
 
             self.assertEqual(errors, [])
-            self.assertFalse(any("no configured index" in warning for warning in warnings))
+            self.assertFalse(
+                any("no configured index" in warning for warning in warnings)
+            )
             self.assertFalse((temp_path / "resource.tsv.tbi").exists())
 
     def test_reference_tables_preserve_comma_paths_and_index_bindings(self) -> None:
@@ -271,7 +292,9 @@ class ValidationTests(unittest.TestCase):
             self.assertEqual(errors, [])
             self.assertEqual(chromosomes["testing_unit"], {"1"})
             self.assertEqual(chromosomes["exclusions"], {"1", "X"})
-            self.assertTrue(any("first,exclusion.bed" in warning for warning in warnings))
+            self.assertTrue(
+                any("first,exclusion.bed" in warning for warning in warnings)
+            )
             self.assertTrue(
                 any(
                     "Exclusion file 1 has no configured index" in warning
@@ -319,7 +342,7 @@ class ValidationTests(unittest.TestCase):
                 cadd_indel=None,
                 unit="gene",
                 include_indels=False,
-        )
+            )
 
         self.assertEqual(validate_tables.call_args.kwargs["exclusions"], exclusions)
         self.assertIs(validate_cadd.call_args.args[2], False)
@@ -351,7 +374,9 @@ class ValidationTests(unittest.TestCase):
             patch("validation_cohort.validate_vcf_samples"),
             patch("validation_cohort.validate_vcf_resource"),
             patch("validation_cohort.validate_fasta"),
-            patch("validation_cohort.validate_normalized_split_vcf") as validate_normalized,
+            patch(
+                "validation_cohort.validate_normalized_split_vcf"
+            ) as validate_normalized,
         ):
             validate_cohort_inputs(
                 metadata_path="samples.tsv",
@@ -380,7 +405,11 @@ class ValidationTests(unittest.TestCase):
                 hemizygote_model=True,
                 include_indels=False,
                 testing_unit_bed="units.bed",
-                lookup_tables={"het": "het.tsv", "hom": "hom.tsv", "hem_chrX": "hem.tsv"},
+                lookup_tables={
+                    "het": "het.tsv",
+                    "hom": "hom.tsv",
+                    "hem_chrX": "hem.tsv",
+                },
                 lookup_contract="external_legacy_v0",
                 lookup_bin_width=None,
                 bundle_certificate=None,
@@ -416,7 +445,11 @@ class ValidationTests(unittest.TestCase):
                 lookup_tables={"het": "het.tsv", "hom": "hom.tsv", "hem_chrX": ""},
                 lookup_contract="generated_bundle_v3",
                 lookup_bin_width=0.1,
-                bundle_certificate={"metadata": "metadata.json", "validation": "validation.json", "marker": "validation.ok"},
+                bundle_certificate={
+                    "metadata": "metadata.json",
+                    "validation": "validation.json",
+                    "marker": "validation.ok",
+                },
                 bundle_components={},
             )
         self.assertIn(
@@ -424,7 +457,9 @@ class ValidationTests(unittest.TestCase):
             report["errors"],
         )
 
-    def test_generated_bundle_without_resolved_bin_width_reports_a_clear_error(self) -> None:
+    def test_generated_bundle_without_resolved_bin_width_reports_a_clear_error(
+        self,
+    ) -> None:
         metadata = {
             "model_assumptions": {"roles": ["het", "hom"], "variant_classes": ["snv"]},
             "assembly": "GRCh38",
@@ -458,10 +493,15 @@ class ValidationTests(unittest.TestCase):
             report["errors"],
         )
         self.assertFalse(
-            any("Could not validate generated lookup bundle contract" in error for error in report["errors"])
+            any(
+                "Could not validate generated lookup bundle contract" in error
+                for error in report["errors"]
+            )
         )
 
-    def test_all_declared_exclusion_components_are_passed_to_certificate_verification(self) -> None:
+    def test_all_declared_exclusion_components_are_passed_to_certificate_verification(
+        self,
+    ) -> None:
         components = certificate_components_with_exclusions(
             {"lookup_het": "het.tsv.gz"},
             ("excluded_alleles.tsv.gz", "additional_exclusions.tsv.gz"),
@@ -482,9 +522,11 @@ class ValidationTests(unittest.TestCase):
             declared_index.write_text("index", encoding="utf-8")
 
             self.assertTrue(resources.source_has_index(declared_index))
-            self.assertFalse(resources.is_conventional_source_index(
-                temp_path / "resource.tsv.gz", declared_index
-            ))
+            self.assertFalse(
+                resources.is_conventional_source_index(
+                    temp_path / "resource.tsv.gz", declared_index
+                )
+            )
 
     def test_staging_reuses_a_complete_indexed_vcf_without_resorting(self) -> None:
         with TemporaryDirectory() as temp_dir:

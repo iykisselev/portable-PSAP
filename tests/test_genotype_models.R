@@ -410,14 +410,20 @@ stopifnot(
 )
 
 joined_control <- attach_psap(
-    data.table(pid = "control", phenotype = "unaffected", sex = 1, unit = "unit-a", model = "DOM-het", variant_key = "1:1:A>G", PSAP = NA_real_),
+    data.table(
+      pid = "control", phenotype = "unaffected", sex = 1, unit = "unit-a",
+      model = "DOM-het", variant_key = "1:1:A>G", PSAP = NA_real_
+    ),
     data.table(unit = "unit-a", model = "DOM-het", variant_key = "1:1:A>G", PSAP = 0.25)
 )
 stopifnot(identical(joined_control$PSAP, 0.25))
 
 report_fixture <- validate_candidates(
     candidate_fixture,
-    data.table(pid = "control", phenotype = "unaffected", sex = 1, unit = "unit-a", model = "DOM-het", variant_key = "1:1:A>G", PSAP = 0.25)
+    data.table(
+      pid = "control", phenotype = "unaffected", sex = 1, unit = "unit-a",
+      model = "DOM-het", variant_key = "1:1:A>G", PSAP = 0.25
+    )
 )
 stopifnot(
     report_fixture$detail[variant_key == "1:1:A>G", validation] == "control_match",

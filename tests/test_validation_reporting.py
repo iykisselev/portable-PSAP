@@ -48,7 +48,9 @@ class ValidationReportingTests(unittest.TestCase):
                 resources,
             )
 
-            write_validation_report(merge_validation_reports([cohort, resources]), merged)
+            write_validation_report(
+                merge_validation_reports([cohort, resources]), merged
+            )
             report = read_validation_report(merged)
             require_validation_success(
                 merged,

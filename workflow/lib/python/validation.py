@@ -8,25 +8,25 @@ import os
 import shutil
 import subprocess
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Sequence
 
 from bgzf import has_bgzf_eof, is_bgzf
 from exclusions import data_rows, parse_exclusion_tsv_row
-from genomic_contracts import canonical_chromosome, read_fai
+from genomic_contracts import (
+    VALIDATION_CONTIGS,
+    canonical_chromosome,
+    contig_sort_key,
+    parse_contig_id,
+    read_fai,
+)
+from bundle_contract import model_roles
 from io_contracts import BedFormatError, is_missing_token, iter_bed, open_text
 from sample_metadata import iter_sample_rows, normalize_sample
 
-CANONICAL_CHROMOSOMES = tuple(str(chromosome) for chromosome in range(1, 23)) + (
-    "X",
-    "Y",
-)
+CANONICAL_CHROMOSOMES = VALIDATION_CONTIGS
 CANONICAL_CHROMOSOME_SET = set(CANONICAL_CHROMOSOMES)
-CHROMOSOME_ORDER = {
-    chromosome: position
-    for position, chromosome in enumerate(CANONICAL_CHROMOSOMES)
-}
 
 
 @dataclass(frozen=True)
@@ -148,15 +148,14 @@ def validate_bed_regions(
 
     data_rows = 0
     chromosomes: set[str] = set()
+
     def report(error: BedFormatError) -> None:
         nonlocal data_rows
         data_rows += 1
         errors.append(f"{description} {error}")
 
     try:
-        for row in iter_bed(
-            path, required_columns, errors="replace", on_error=report
-        ):
+        for row in iter_bed(path, required_columns, errors="replace", on_error=report):
             data_rows += 1
             if require_unit_id and is_missing_token(row.fields[3]):
                 errors.append(
@@ -299,8 +298,7 @@ def validate_vcf_resource(
     data_path = Path(path)
     name = str(data_path).lower()
     if not any(
-        name.endswith(suffix)
-        for suffix in (".vcf", ".vcf.gz", ".vcf.bgz", ".vcf.bgzf")
+        name.endswith(suffix) for suffix in (".vcf", ".vcf.gz", ".vcf.bgz", ".vcf.bgzf")
     ):
         errors.append(f"{description} must be a VCF file: {data_path}")
         return
@@ -450,8 +448,7 @@ class _SampleMetadataAggregation:
         if ignored_sex:
             self.warnings.append(
                 f"{self.sex_label} sex values other than 1 and 2 will not receive "
-                "sex-specific chromosome-X recoding: "
-                + ", ".join(ignored_sex)
+                "sex-specific chromosome-X recoding: " + ", ".join(ignored_sex)
             )
 
         if self.all_sample_ids and not self.sample_ids:
@@ -484,77 +481,63 @@ class _SampleMetadataAggregation:
         }
 
 
-def read_ped(
+@dataclass(frozen=True)
+class SampleMetadataLabels:
+    row_label: str
+    source_label: str
+    summary_label: str
+    duplicate_column: str
+    excluded_sample_label: str
+    sex_label: str
+
+
+SAMPLE_METADATA_LABELS = {
+    "ped": SampleMetadataLabels(
+        "PED", "PED file", "PED file", "PED column 2", "PED", "PED"
+    ),
+    "samples": SampleMetadataLabels(
+        "Sample sheet",
+        "sample sheet",
+        "Sample sheet",
+        "sample sheet pid column",
+        "sample-sheet",
+        "Sample-sheet",
+    ),
+}
+
+
+def read_sample_metadata(
     path: str | Path,
+    kind: str,
     errors: list[str],
     warnings: list[str],
 ) -> dict:
-    if not require_file(path, "PED file", errors):
+    """Aggregate metadata while retaining each format's diagnostic policy."""
+    labels = SAMPLE_METADATA_LABELS[kind]
+    if not require_file(path, labels.source_label, errors):
         return empty_ped_summary()
-
     summary = _SampleMetadataAggregation(
-        row_label="PED",
-        source_label="PED file",
-        summary_label="PED file",
-        duplicate_column="PED column 2",
-        excluded_sample_label="PED",
-        sex_label="PED",
-        errors=errors,
-        warnings=warnings,
+        **asdict(labels), errors=errors, warnings=warnings
     )
     data_rows = 0
+    format_error = False
 
-    try:
-        def report(issue):
-            nonlocal data_rows
+    def report(issue):
+        nonlocal data_rows, format_error
+        format_error = True
+        if kind == "ped":
             data_rows += 1
             errors.append(f"PED line {issue.line_number} {issue}")
-
-        for row in iter_sample_rows(path, "ped", errors="replace", on_error=report):
-            data_rows += 1
-            sample = normalize_sample(row)
-            summary.add_row(
-                row.line_number,
-                sample.family_id,
-                sample.pid,
-                sample.sex,
-                sample.phenotype,
-            )
-    except OSError as exc:
-        errors.append(f"Could not read PED file {path}: {exc}")
-
-    return summary.finalize(data_rows, path)
-
-
-def read_samples_tsv(
-    path: str | Path,
-    errors: list[str],
-    warnings: list[str],
-) -> dict:
-    """Read the schema-validated TSV alternative to PED without changing coding."""
-    if not require_file(path, "sample sheet", errors):
-        return empty_ped_summary()
-
-    summary = _SampleMetadataAggregation(
-        row_label="Sample sheet",
-        source_label="sample sheet",
-        summary_label="Sample sheet",
-        duplicate_column="sample sheet pid column",
-        excluded_sample_label="sample-sheet",
-        sex_label="Sample-sheet",
-        errors=errors,
-        warnings=warnings,
-    )
-    data_rows = 0
-    try:
-        header_error = False
-
-        def report(issue):
-            nonlocal header_error
-            header_error = True
+        else:
             errors.append(f"Sample sheet {issue}")
 
-        for row in iter_sample_rows(path, "samples", on_error=report):
+    try:
+        for row in iter_sample_rows(
+            path,
+            kind,
+            errors="replace" if kind == "ped" else "strict",
+            on_error=report,
+        ):
             data_rows += 1
             sample = normalize_sample(row)
             summary.add_row(
@@ -564,12 +547,19 @@ def read_samples_tsv(
                 sample.sex,
                 sample.phenotype,
             )
-        if header_error:
+        if kind == "samples" and format_error:
             return empty_ped_summary()
     except OSError as exc:
-        errors.append(f"Could not read sample sheet {path}: {exc}")
-
+        errors.append(f"Could not read {labels.source_label} {path}: {exc}")
     return summary.finalize(data_rows, path)
+
+
+def read_ped(path: str | Path, errors: list[str], warnings: list[str]) -> dict:
+    return read_sample_metadata(path, "ped", errors, warnings)
+
+
+def read_samples_tsv(path: str | Path, errors: list[str], warnings: list[str]) -> dict:
+    return read_sample_metadata(path, "samples", errors, warnings)
 
 
 def canonical_chromosome_name(name: str) -> str | None:
@@ -578,7 +568,7 @@ def canonical_chromosome_name(name: str) -> str | None:
 
 
 def chromosome_sort_key(chromosome: str) -> int:
-    return CHROMOSOME_ORDER[chromosome]
+    return contig_sort_key(chromosome)[0]
 
 
 def add_chromosome_name(
@@ -599,15 +589,6 @@ def add_chromosome_name(
             f"{source} uses multiple names for canonical chromosome {canonical}: "
             f"{existing!r} and {name!r}"
         )
-
-
-def parse_contig_id(header_line: str) -> str | None:
-    prefix = "##contig=<ID="
-    if not header_line.startswith(prefix):
-        return None
-
-    contig_id = header_line[len(prefix) :].split(",", 1)[0].split(">", 1)[0]
-    return contig_id.strip() or None
 
 
 def read_vcf_record_contigs(
@@ -734,7 +715,9 @@ def read_fasta_contigs(index_path: str | Path) -> dict[str, str]:
     index_path = Path(index_path)
     if not index_path.is_file():
         return {}
-    return {chromosome: record.name for chromosome, record in read_fai(index_path).items()}
+    return {
+        chromosome: record.name for chromosome, record in read_fai(index_path).items()
+    }
 
 
 def validate_normalized_split_vcf(
@@ -762,12 +745,11 @@ def validate_normalized_split_vcf(
     except ValueError as exc:
         errors.append(f"Reference FASTA index is invalid: {exc}")
         return
-    vcf_by_canonical = {
-        canonical_chromosome(contig): contig for contig in vcf_contigs
-    }
+    vcf_by_canonical = {canonical_chromosome(contig): contig for contig in vcf_contigs}
     shared_contigs = sorted(set(vcf_by_canonical) & set(fasta_contigs))
     unsupported_contigs = sorted(
-        contig for canonical, contig in vcf_by_canonical.items()
+        contig
+        for canonical, contig in vcf_by_canonical.items()
         if canonical not in fasta_contigs
     )
     if unsupported_contigs:
@@ -831,9 +813,7 @@ def validate_lookup_files(
     settings: dict[str, bool],
     errors: list[str],
 ) -> list[str]:
-    required = ["het", "hom"]
-    if settings["hemizygote"]:
-        required.append("hem_chrX")
+    required = required_lookup_names(settings)
 
     checked_paths: list[str] = []
     for name in required:
@@ -850,10 +830,7 @@ def validate_lookup_files(
 
 
 def required_lookup_names(settings: dict[str, bool]) -> list[str]:
-    names = ["het", "hom"]
-    if settings["hemizygote"]:
-        names.append("hem_chrX")
-    return names
+    return list(model_roles(settings["hemizygote"]))
 
 
 def read_testing_unit_ids(
@@ -865,22 +842,15 @@ def read_testing_unit_ids(
 
     identifiers: set[str] = set()
     try:
-        with open_text(path, errors="replace") as handle:
-            for line_number, line in enumerate(handle, start=1):
-                stripped = line.strip()
-                if (
-                    not stripped
-                    or stripped.startswith("#")
-                    or stripped.startswith("track ")
-                    or stripped.startswith("browser ")
-                ):
-                    continue
-                columns = stripped.split("\t")
-                if len(columns) < 4:
-                    continue
-                identifier = columns[3].strip()
-                if not is_missing_token(identifier):
-                    identifiers.add(identifier)
+        for row in iter_bed(
+            path,
+            min_columns=4,
+            errors="replace",
+            on_error=lambda issue: errors.append(f"Testing-unit BED file {issue}"),
+        ):
+            identifier = row.fields[3].strip()
+            if not is_missing_token(identifier):
+                identifiers.add(identifier)
     except OSError as exc:
         errors.append(f"Could not read testing-unit IDs from {path}: {exc}")
     return identifiers
@@ -905,7 +875,9 @@ def read_lookup_unit_ids(
                     continue
                 identifiers.add(identifier)
     except OSError as exc:
-        errors.append(f"Could not read testing-unit IDs from {description}: {path}: {exc}")
+        errors.append(
+            f"Could not read testing-unit IDs from {description}: {path}: {exc}"
+        )
     return identifiers
 
 
@@ -1036,7 +1008,9 @@ def validate_fasta(
         require_file(index_path, "Reference FASTA index", errors)
         if str(path).endswith(".gz"):
             if is_missing_token(gzi_path):
-                errors.append("BGZF FASTA index binding is required for a compressed reference FASTA")
+                errors.append(
+                    "BGZF FASTA index binding is required for a compressed reference FASTA"
+                )
             else:
                 require_file(gzi_path, "BGZF FASTA index", errors)
 
@@ -1053,7 +1027,9 @@ def validate_cadd_resources(
     resources = [("whole_genome_SNVs.tsv.gz", Path(cadd_snv), cadd_snv_index)]
     if include_indels:
         if is_missing_token(cadd_indel):
-            errors.append("CADD indel resource is required when include_indels is enabled")
+            errors.append(
+                "CADD indel resource is required when include_indels is enabled"
+            )
             return {}
         resources.append(("InDels.tsv.gz", Path(cadd_indel), cadd_indel_index))
 
@@ -1103,7 +1079,9 @@ def read_indexed_table_chromosomes(
             errors.append(f"Could not inspect chromosome names in {description}: {exc}")
             return set()
         if result.returncode == 0:
-            names = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+            names = {
+                line.strip() for line in result.stdout.splitlines() if line.strip()
+            }
             if names:
                 return names
 

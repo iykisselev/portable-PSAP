@@ -115,12 +115,24 @@ class SampleMetadataCharacterizationTests(unittest.TestCase):
                         result["all_sample_ids"], ["affected", "unaffected", "unknown"]
                     )
                     self.assertEqual(result["sample_ids"], ["affected", "unaffected"])
-                    self.assertEqual(result["excluded_phenotype_sample_ids"], ["unknown"])
+                    self.assertEqual(
+                        result["excluded_phenotype_sample_ids"], ["unknown"]
+                    )
                     self.assertEqual(
                         result["manifest"],
                         [
-                            {"family_id": "F1", "pid": "affected", "sex": "1", "phenotype": "affected"},
-                            {"family_id": "F1", "pid": "unaffected", "sex": "2", "phenotype": "unaffected"},
+                            {
+                                "family_id": "F1",
+                                "pid": "affected",
+                                "sex": "1",
+                                "phenotype": "affected",
+                            },
+                            {
+                                "family_id": "F1",
+                                "pid": "unaffected",
+                                "sex": "2",
+                                "phenotype": "unaffected",
+                            },
                         ],
                     )
 
@@ -159,7 +171,9 @@ class SampleMetadataCharacterizationTests(unittest.TestCase):
             ],
         )
 
-    def test_format_specific_malformed_rows_and_line_numbers_are_preserved(self) -> None:
+    def test_format_specific_malformed_rows_and_line_numbers_are_preserved(
+        self,
+    ) -> None:
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             short_ped = directory / "short.ped"

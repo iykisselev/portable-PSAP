@@ -95,11 +95,16 @@ def iter_sample_rows(
 
     if metadata_kind == "ped":
         with source.open("rt", encoding="utf-8", errors=errors, newline="") as handle:
-            for line_number, fields in enumerate(csv.reader(handle, delimiter="\t"), start=1):
+            for line_number, fields in enumerate(
+                csv.reader(handle, delimiter="\t"), start=1
+            ):
                 if not fields or all(not value.strip() for value in fields):
                     continue
                 if len(fields) < 6:
-                    report(f"has {len(fields)} columns; at least 6 are required", line_number)
+                    report(
+                        f"has {len(fields)} columns; at least 6 are required",
+                        line_number,
+                    )
                     continue
                 yield SampleRow(line_number, fields[0], fields[1], fields[4], fields[5])
         return
@@ -108,12 +113,16 @@ def iter_sample_rows(
         with source.open("rt", encoding="utf-8", errors=errors, newline="") as handle:
             reader = csv.DictReader(handle, delimiter="\t")
             required = ("family_id", "pid", "sex", "phenotype")
-            missing = [name for name in required if name not in (reader.fieldnames or [])]
+            missing = [
+                name for name in required if name not in (reader.fieldnames or [])
+            ]
             if missing:
                 report("is missing required column(s): " + ", ".join(missing))
                 return
             for line_number, fields in enumerate(reader, start=2):
-                if not fields or not any((value or "").strip() for value in fields.values()):
+                if not fields or not any(
+                    (value or "").strip() for value in fields.values()
+                ):
                     continue
                 yield SampleRow(
                     line_number,

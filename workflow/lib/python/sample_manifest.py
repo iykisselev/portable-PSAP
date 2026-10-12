@@ -67,7 +67,9 @@ class SampleIndex:
         try:
             record = self.by_pid[str(pid)]
         except KeyError as exc:
-            raise ValueError(f"Sample {pid!r} is not uniquely present in the manifest") from exc
+            raise ValueError(
+                f"Sample {pid!r} is not uniquely present in the manifest"
+            ) from exc
         if expected_phenotype is not None and record.phenotype != expected_phenotype:
             raise ValueError(
                 f"Sample {pid!r} has phenotype {record.phenotype!r}; "
@@ -88,10 +90,7 @@ def read_sample_manifest_index(path: str | Path) -> SampleIndex:
                 + ", ".join(sorted(missing))
             )
         return SampleIndex.from_rows(
-            {
-                column: (row.get(column) or "")
-                for column in SAMPLE_MANIFEST_COLUMNS
-            }
+            {column: (row.get(column) or "") for column in SAMPLE_MANIFEST_COLUMNS}
             for row in reader
         )
 

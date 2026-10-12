@@ -47,9 +47,7 @@ def validate_cohort_inputs(
     write_sample_manifest(metadata["manifest"], manifest_path, create_parents=False)
     manifest = read_sample_manifest_index(manifest_path)
     vcf_facts = read_vcf_header_facts(vcf, errors)
-    validate_hemizygote_chromosomes(
-        hemizygote_model, vcf_facts.canonical_map, errors
-    )
+    validate_hemizygote_chromosomes(hemizygote_model, vcf_facts.canonical_map, errors)
     validate_vcf_samples(
         list(vcf_facts.samples),
         [record.pid for record in manifest.records],
@@ -58,9 +56,7 @@ def validate_cohort_inputs(
     )
     validate_vcf_resource(vcf, "Input VCF", errors, warnings, vcf_index)
     validate_fasta(fasta, fasta_index, fasta_gzi, errors)
-    validate_normalized_split_vcf(
-        vcf, fasta, fasta_index, errors, warnings, vcf_facts
-    )
+    validate_normalized_split_vcf(vcf, fasta, fasta_index, errors, warnings, vcf_facts)
     return build_validation_report(
         errors=errors,
         warnings=warnings,
