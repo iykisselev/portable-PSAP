@@ -10,7 +10,10 @@ from generation_bindings import (
     LookupReductionParameters,
 )
 from generation_manifests import bucket_from_manifest
-from generation_probability import aggregate_statistics_vectorized, vectorized_lookup_rows
+from generation_probability import (
+    aggregate_statistics_vectorized,
+    vectorized_lookup_rows,
+)
 from io_contracts import write_tsv_atomic
 
 
@@ -28,11 +31,16 @@ def reduce_partition_statistics(
     lookup_rows, diagnostics = vectorized_lookup_rows(
         statistics, units, params.roles, params.bin_count
     )
-    header = ["testing_unit_id", *[str(value) for value in range(1, params.bin_count + 1)]]
+    header = [
+        "testing_unit_id",
+        *[str(value) for value in range(1, params.bin_count + 1)],
+    ]
     write_tsv_atomic(outputs.lookup_het, header, lookup_rows["het"])
     write_tsv_atomic(outputs.lookup_hom, header, lookup_rows["hom"])
-    if outputs.lookup_hem:
-        write_tsv_atomic(outputs.lookup_hem, header, lookup_rows.get("hem_chrX", []))
+    if outputs.lookup_hem_chrX:
+        write_tsv_atomic(
+            outputs.lookup_hem_chrX, header, lookup_rows.get("hem_chrX", [])
+        )
     write_tsv_atomic(
         outputs.diagnostics,
         [

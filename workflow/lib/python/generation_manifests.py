@@ -41,9 +41,13 @@ def _load_mapping(path: str | Path, label: str) -> dict:
     try:
         value = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise GenerationManifestError(f"Unable to read {label} manifest {path!s}") from exc
+        raise GenerationManifestError(
+            f"Unable to read {label} manifest {path!s}"
+        ) from exc
     if not isinstance(value, dict):
-        raise GenerationManifestError(f"{label.capitalize()} manifest must be a JSON object")
+        raise GenerationManifestError(
+            f"{label.capitalize()} manifest must be a JSON object"
+        )
     return value
 
 
@@ -64,11 +68,15 @@ def _partition_identifier_sort_key(identifier: str) -> tuple[str, int, int]:
     return chromosome, start, end
 
 
-def _read_partition_manifest_uncached(path: str | Path) -> tuple[PartitionManifestEntry, ...]:
+def _read_partition_manifest_uncached(
+    path: str | Path,
+) -> tuple[PartitionManifestEntry, ...]:
     """Read and validate the compact partition-discovery manifest."""
     manifest = _load_mapping(path, "partition")
     if manifest.get("schema_version") != PARTITION_MANIFEST_SCHEMA_VERSION:
-        raise GenerationManifestError("Unsupported generation partition manifest schema")
+        raise GenerationManifestError(
+            "Unsupported generation partition manifest schema"
+        )
     rows = manifest.get("partitions")
     if not isinstance(rows, list):
         raise GenerationManifestError("Partition manifest needs a partitions array")
@@ -88,10 +96,10 @@ def _read_partition_manifest_uncached(path: str | Path) -> tuple[PartitionManife
                 ordinal=int(row["ordinal"]),
             )
         except (KeyError, TypeError, ValueError) as exc:
-            raise GenerationManifestError("Partition manifest has an invalid entry") from exc
-        expected_identifier = (
-            f"{entry.chromosome}_{entry.start:012d}_{entry.end:012d}"
-        )
+            raise GenerationManifestError(
+                "Partition manifest has an invalid entry"
+            ) from exc
+        expected_identifier = f"{entry.chromosome}_{entry.start:012d}_{entry.end:012d}"
         if (
             entry.ordinal != ordinal
             or entry.identifier != expected_identifier
@@ -100,8 +108,14 @@ def _read_partition_manifest_uncached(path: str | Path) -> tuple[PartitionManife
             or entry.identifier in identifiers
         ):
             raise GenerationManifestError("Partition manifest has noncanonical entries")
-        if previous and entry.chromosome == previous.chromosome and entry.start < previous.end:
-            raise GenerationManifestError("Partition manifest contains overlapping windows")
+        if (
+            previous
+            and entry.chromosome == previous.chromosome
+            and entry.start < previous.end
+        ):
+            raise GenerationManifestError(
+                "Partition manifest contains overlapping windows"
+            )
         identifiers.add(entry.identifier)
         entries.append(entry)
         previous = entry
@@ -131,7 +145,9 @@ def _read_bucket_manifest_uncached(path: str | Path) -> tuple[BucketManifestEntr
                 _partition_identifier_sort_key(value) for value in partition_ids
             )
         except (KeyError, TypeError, ValueError) as exc:
-            raise GenerationManifestError("Bucket manifest has an invalid entry") from exc
+            raise GenerationManifestError(
+                "Bucket manifest has an invalid entry"
+            ) from exc
         if (
             entry_ordinal != ordinal
             or identifier != f"{ordinal:05d}"
@@ -170,21 +186,27 @@ def _manifest_cache_key(path: str | Path) -> tuple[str, int | None, int | None]:
 
 @lru_cache(maxsize=8)
 def _cached_partition_manifest(
-    path: str, mtime_ns: int | None, size: int | None,
+    path: str,
+    mtime_ns: int | None,
+    size: int | None,
 ) -> tuple[PartitionManifestEntry, ...]:
     return _read_partition_manifest_uncached(path)
 
 
 @lru_cache(maxsize=8)
 def _cached_bucket_manifest(
-    path: str, mtime_ns: int | None, size: int | None,
+    path: str,
+    mtime_ns: int | None,
+    size: int | None,
 ) -> tuple[BucketManifestEntry, ...]:
     return _read_bucket_manifest_uncached(path)
 
 
 @lru_cache(maxsize=8)
 def _cached_bucket_index(
-    path: str, mtime_ns: int | None, size: int | None,
+    path: str,
+    mtime_ns: int | None,
+    size: int | None,
 ) -> dict[str, BucketManifestEntry]:
     return {
         entry.identifier: entry
@@ -217,4 +239,6 @@ def bucket_from_manifest(path: str | Path, identifier: str) -> BucketManifestEnt
     try:
         return _cached_bucket_index(*_manifest_cache_key(path))[str(identifier)]
     except KeyError as exc:
-        raise GenerationManifestError(f"Unknown generation bucket {identifier!r}") from exc
+        raise GenerationManifestError(
+            f"Unknown generation bucket {identifier!r}"
+        ) from exc

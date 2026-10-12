@@ -67,7 +67,10 @@ def verify_bundle_certificate(
 
     if metadata.get("contract") != contract:
         raise BundleCertificateError("Generated lookup metadata has the wrong contract")
-    if validation.get("status") != "ok" or validation.get("metadata_sha256") != metadata_digest:
+    if (
+        validation.get("status") != "ok"
+        or validation.get("metadata_sha256") != metadata_digest
+    ):
         raise BundleCertificateError(
             "Generated lookup validation does not certify metadata.json"
         )

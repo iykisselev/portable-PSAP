@@ -78,9 +78,13 @@ class GenerationManifestTests(unittest.TestCase):
             self.assertIsInstance(
                 read_partition_manifest(partitions)[0], PartitionManifestEntry
             )
-            self.assertIsInstance(read_genome_partitions(partitions)[0], GenomePartition)
+            self.assertIsInstance(
+                read_genome_partitions(partitions)[0], GenomePartition
+            )
             self.assertEqual(("00000",), bucket_ids(buckets))
-            self.assertEqual(("UNIT_A", "UNIT_B"), bucket_from_manifest(buckets, "00000").unit_ids)
+            self.assertEqual(
+                ("UNIT_A", "UNIT_B"), bucket_from_manifest(buckets, "00000").unit_ids
+            )
             self.assertEqual(
                 ("1_000000000000_000000000010",),
                 bucket_from_manifest(buckets, "00000").partition_ids,
@@ -133,11 +137,14 @@ class GenerationManifestTests(unittest.TestCase):
                 Path(temporary) / "buckets.json",
                 {
                     "schema_version": BUCKET_MANIFEST_SCHEMA_VERSION,
-                    "buckets": [{
-                        "bucket_id": "00000", "ordinal": 0,
-                        "unit_ids": ["UNIT_A"],
-                        "partition_ids": ["1_000000000000_000000000010"],
-                    }],
+                    "buckets": [
+                        {
+                            "bucket_id": "00000",
+                            "ordinal": 0,
+                            "unit_ids": ["UNIT_A"],
+                            "partition_ids": ["1_000000000000_000000000010"],
+                        }
+                    ],
                 },
             )
             with patch.object(
@@ -146,7 +153,9 @@ class GenerationManifestTests(unittest.TestCase):
                 wraps=generation_manifests._read_bucket_manifest_uncached,
             ) as reader:
                 self.assertEqual(("00000",), bucket_ids(path))
-                self.assertEqual("00000", bucket_from_manifest(path, "00000").identifier)
+                self.assertEqual(
+                    "00000", bucket_from_manifest(path, "00000").identifier
+                )
                 self.assertEqual(("00000",), bucket_ids(path))
                 reader.assert_called_once()
 
@@ -155,18 +164,23 @@ class GenerationManifestTests(unittest.TestCase):
                     path,
                     {
                         "schema_version": BUCKET_MANIFEST_SCHEMA_VERSION,
-                        "buckets": [{
-                            "bucket_id": "00000", "ordinal": 0,
-                            "unit_ids": ["UNIT_B"],
-                            "partition_ids": ["1_000000000000_000000000010"],
-                        }],
+                        "buckets": [
+                            {
+                                "bucket_id": "00000",
+                                "ordinal": 0,
+                                "unit_ids": ["UNIT_B"],
+                                "partition_ids": ["1_000000000000_000000000010"],
+                            }
+                        ],
                     },
                 )
                 os.utime(
                     path,
                     ns=(previous.st_atime_ns, previous.st_mtime_ns + 1_000_000_000),
                 )
-                self.assertEqual(("UNIT_B",), bucket_from_manifest(path, "00000").unit_ids)
+                self.assertEqual(
+                    ("UNIT_B",), bucket_from_manifest(path, "00000").unit_ids
+                )
                 self.assertEqual(2, reader.call_count)
 
     def test_partition_manifest_is_validated_once_per_published_version(self) -> None:
@@ -175,10 +189,15 @@ class GenerationManifestTests(unittest.TestCase):
                 Path(temporary) / "partitions.json",
                 {
                     "schema_version": PARTITION_MANIFEST_SCHEMA_VERSION,
-                    "partitions": [{
-                        "partition_id": "1_000000000000_000000000010",
-                        "chromosome": "1", "start": 0, "end": 10, "ordinal": 0,
-                    }],
+                    "partitions": [
+                        {
+                            "partition_id": "1_000000000000_000000000010",
+                            "chromosome": "1",
+                            "start": 0,
+                            "end": 10,
+                            "ordinal": 0,
+                        }
+                    ],
                 },
             )
             with patch.object(
@@ -233,32 +252,38 @@ class GenerationManifestTests(unittest.TestCase):
                     ("X_000000000020_000000000030", "X", 20, 30),
                 ],
                 [
-                    (partition.identifier, partition.chromosome, partition.start, partition.end)
+                    (
+                        partition.identifier,
+                        partition.chromosome,
+                        partition.start,
+                        partition.end,
+                    )
                     for partition in partitions
                 ],
             )
 
     def test_indel_halo_schedules_only_the_boundary_owner_partition(self) -> None:
+        self.assertEqual(
+            [("A", "1", 0, 3), ("B", "1", 0, 3)],
+            indel_candidate_owner_intervals([("A", "1", 1, 3), ("B", "1", 1, 3)], 3),
+        )
         partitions = [
             GenomePartition("1_000000000000_000000000010", "1", 0, 10, 0),
             GenomePartition("1_000000000010_000000000020", "1", 10, 20, 1),
             GenomePartition("1_000000000020_000000000030", "1", 20, 30, 2),
         ]
         callable_intervals = [("UNIT_A", "1", 10, 12)]
-        # Attach the source unit after keeping the simple genomic helper free
-        # of workflow bucket identifiers.
-        owners = [
-            ("UNIT_A", chromosome, start, end)
-            for chromosome, start, end in indel_candidate_owner_intervals(
-                [("1", 10, 12)], max_reference_length=3
-            )
-        ]
+        owners = indel_candidate_owner_intervals(
+            callable_intervals, max_reference_length=3
+        )
         self.assertEqual(owners, [("UNIT_A", "1", 8, 12)])
         self.assertEqual(
-            {0: (
-                "1_000000000000_000000000010",
-                "1_000000000010_000000000020",
-            )},
+            {
+                0: (
+                    "1_000000000000_000000000010",
+                    "1_000000000010_000000000020",
+                )
+            },
             sparse_bucket_partitions(
                 partitions,
                 callable_intervals,
@@ -276,9 +301,12 @@ class GenerationManifestTests(unittest.TestCase):
                 fasta_index,
                 [("1", 10, 12)],
                 10,
-                candidate_owner_intervals=indel_candidate_owner_intervals(
-                    [("1", 10, 12)], max_reference_length=3
-                ),
+                candidate_owner_intervals=[
+                    (chromosome, start, end)
+                    for _, chromosome, start, end in indel_candidate_owner_intervals(
+                        [("UNIT_A", "1", 10, 12)], max_reference_length=3
+                    )
+                ],
             )
         self.assertEqual(
             ["1_000000000000_000000000010", "1_000000000010_000000000020"],

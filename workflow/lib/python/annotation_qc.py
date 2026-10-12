@@ -15,7 +15,12 @@ REQUIRED_COLUMNS = ("CHROM", "POS", "REF", "ALT", "CADD_PHRED", "unit")
 
 
 def is_snv(ref: str, alt: str) -> bool:
-    return len(ref) == 1 and len(alt) == 1 and ref.upper() in "ACGT" and alt.upper() in "ACGT"
+    return (
+        len(ref) == 1
+        and len(alt) == 1
+        and ref.upper() in "ACGT"
+        and alt.upper() in "ACGT"
+    )
 
 
 def has_value(value: str) -> bool:
@@ -37,10 +42,14 @@ def summarize_annotations(path: str | Path, include_indels: bool) -> dict:
     }
 
     try:
-        with gzip.open(path, "rt", encoding="utf-8", errors="replace", newline="") as handle:
+        with gzip.open(
+            path, "rt", encoding="utf-8", errors="replace", newline=""
+        ) as handle:
             reader = csv.DictReader(handle, delimiter="\t")
             missing_columns = [
-                column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])
+                column
+                for column in REQUIRED_COLUMNS
+                if column not in (reader.fieldnames or [])
             ]
             if missing_columns:
                 errors.append(

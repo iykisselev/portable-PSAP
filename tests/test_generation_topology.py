@@ -76,7 +76,7 @@ class GenerationTopologyTests(unittest.TestCase):
         )
         self.assertEqual(
             str(plan.generation.bundle_dir / "lookup_hem_chrX.tsv.gz"),
-            context.bundle_outputs()["lookup_hem"],
+            context.bundle_outputs()["lookup_hem_chrX"],
         )
         self.assertNotIn("validation", context.bundle_outputs())
         self.assertEqual(
@@ -96,12 +96,16 @@ class GenerationTopologyTests(unittest.TestCase):
     def test_rule_context_keeps_optional_hem_output_named_when_disabled(self) -> None:
         configuration = merge(
             load_yaml(ROOT / "config" / "config.yaml"),
-            load_yaml(ROOT / "tests" / "null_distribution" / "generate_no_hem.run.yaml"),
+            load_yaml(
+                ROOT / "tests" / "null_distribution" / "generate_no_hem.run.yaml"
+            ),
         )
-        context = GenerationRuleContext.from_workflow_plan(build_workflow_plan(configuration))
+        context = GenerationRuleContext.from_workflow_plan(
+            build_workflow_plan(configuration)
+        )
 
         self.assertFalse(context.hem_enabled)
-        self.assertEqual([], context.bundle_outputs()["lookup_hem"])
+        self.assertEqual([], context.bundle_outputs()["lookup_hem_chrX"])
         self.assertNotIn("marker", context.bundle_outputs())
 
 

@@ -56,9 +56,14 @@ class TextAndFaiContractTests(unittest.TestCase):
         errors: list[str] = []
         self.assertEqual(
             [(5, 7)],
-            [(row.start, row.end) for row in iter_bed(bed, on_error=lambda exc: errors.append(str(exc)))],
+            [
+                (row.start, row.end)
+                for row in iter_bed(bed, on_error=lambda exc: errors.append(str(exc)))
+            ],
         )
-        self.assertEqual(["BED line 1 must satisfy 0 <= start < end; received 4, 2"], errors)
+        self.assertEqual(
+            ["BED line 1 must satisfy 0 <= start < end; received 4, 2"], errors
+        )
         with self.assertRaises(BedFormatError):
             list(iter_bed(bed))
 
@@ -67,7 +72,15 @@ class TextAndFaiContractTests(unittest.TestCase):
         fai.write_text("chr1\t10\t4\t5\t6\nchrM\t3\t20\t3\t4\n", encoding="utf-8")
         records = read_fai(fai)
         self.assertEqual("chr1", records["1"].name)
-        self.assertEqual((10, 4, 5, 6), (records["1"].length, records["1"].offset, records["1"].line_bases, records["1"].line_bytes))
+        self.assertEqual(
+            (10, 4, 5, 6),
+            (
+                records["1"].length,
+                records["1"].offset,
+                records["1"].line_bases,
+                records["1"].line_bytes,
+            ),
+        )
         self.assertEqual("chrM", records["MT"].name)
 
     def test_fai_reader_rejects_incomplete_and_alias_duplicate_records(self) -> None:

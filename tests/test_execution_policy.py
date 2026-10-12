@@ -73,7 +73,9 @@ class ExecutionPolicyTests(unittest.TestCase):
         declared_rule_names = set()
         for rule_file in (ROOT / "workflow" / "rules").rglob("*.smk"):
             for line in rule_file.read_text(encoding="utf-8").splitlines():
-                match = re.match(r"\s*(?:rule|checkpoint) ([A-Za-z_][A-Za-z0-9_]*):", line)
+                match = re.match(
+                    r"\s*(?:rule|checkpoint) ([A-Za-z_][A-Za-z0-9_]*):", line
+                )
                 if match:
                     declared_rule_names.add(match.group(1))
         self.assertEqual(

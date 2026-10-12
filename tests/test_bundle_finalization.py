@@ -35,6 +35,7 @@ def gzip_rows(path: str) -> list[list[str]]:
     with gzip.open(path, "rt", newline="", encoding="utf-8") as handle:
         return list(csv.reader(handle, delimiter="\t"))[1:]
 
+
 class BundleFinalizationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.units = [
@@ -99,7 +100,9 @@ class BundleFinalizationTests(unittest.TestCase):
             {
                 "testing_unit_id": unit,
                 "role": role,
-                "status": "zero_event_mass" if (unit, role) == ("X_UNIT", "hem_chrX") else "ok",
+                "status": "zero_event_mass"
+                if (unit, role) == ("X_UNIT", "hem_chrX")
+                else "ok",
                 "event_mass": "0" if (unit, role) == ("X_UNIT", "hem_chrX") else "0.25",
             }
             for unit in ("AUTO", "X_UNIT")
@@ -117,12 +120,21 @@ class BundleFinalizationTests(unittest.TestCase):
             pl.DataFrame(
                 {
                     "variant_class": ["snv", "snv", "snv", "indel", "indel"],
-                    "allele_state": ["observed", "absent", "rejected", "observed", "rejected"],
+                    "allele_state": [
+                        "observed",
+                        "absent",
+                        "rejected",
+                        "observed",
+                        "rejected",
+                    ],
                 }
             ).write_parquet(states)
             pl.DataFrame(
                 {
-                    "CHROM": ["1"], "POS": [3], "REF": ["AA"], "ALT": ["A"],
+                    "CHROM": ["1"],
+                    "POS": [3],
+                    "REF": ["AA"],
+                    "ALT": ["A"],
                     "rejection_reason": ["crosses_mask_boundary"],
                 }
             ).write_parquet(audit)
@@ -139,44 +151,71 @@ class BundleFinalizationTests(unittest.TestCase):
         with TemporaryDirectory() as temporary:
             states = Path(temporary) / "states.parquet"
             audit = Path(temporary) / "audit.parquet"
-            pl.DataFrame({
-                "CHROM": ["1"], "POS": [1], "REF": ["A"], "ALT": ["C"],
-                "allele_state": ["invalid"], "state_reason": ["bad_af"],
-                "af_zero_imputed_tags": [None], "variant_class": ["snv"],
-            }).write_parquet(states)
-            pl.DataFrame(schema={
-                "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String,
-                "ALT": pl.String, "rejection_reason": pl.String,
-            }).write_parquet(audit)
+            pl.DataFrame(
+                {
+                    "CHROM": ["1"],
+                    "POS": [1],
+                    "REF": ["A"],
+                    "ALT": ["C"],
+                    "allele_state": ["invalid"],
+                    "state_reason": ["bad_af"],
+                    "af_zero_imputed_tags": [None],
+                    "variant_class": ["snv"],
+                }
+            ).write_parquet(states)
+            pl.DataFrame(
+                schema={
+                    "CHROM": pl.String,
+                    "POS": pl.Int64,
+                    "REF": pl.String,
+                    "ALT": pl.String,
+                    "rejection_reason": pl.String,
+                }
+            ).write_parquet(audit)
             with self.assertRaisesRegex(ValueError, "Unsupported allele state"):
                 write_finalization_allele_artifacts(
-                    [states], [audit], allele_outputs(Path(temporary)),
+                    [states],
+                    [audit],
+                    allele_outputs(Path(temporary)),
                     include_variant_class_counts=True,
                 )
 
-    def test_finalization_preserves_partition_order_across_sequential_state_scans(self) -> None:
+    def test_finalization_preserves_partition_order_across_sequential_state_scans(
+        self,
+    ) -> None:
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             first, second = directory / "first.parquet", directory / "second.parquet"
             audit = directory / "audit.parquet"
             schema = {
-                "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String,
-                "ALT": pl.String, "allele_state": pl.String,
-                "state_reason": pl.String, "af_zero_imputed_tags": pl.String,
+                "CHROM": pl.String,
+                "POS": pl.Int64,
+                "REF": pl.String,
+                "ALT": pl.String,
+                "allele_state": pl.String,
+                "state_reason": pl.String,
+                "af_zero_imputed_tags": pl.String,
                 "variant_class": pl.String,
             }
             pl.DataFrame(
                 [("1", 2, "A", "C", "rejected", "first", None, "snv")],
-                schema=schema, orient="row",
+                schema=schema,
+                orient="row",
             ).write_parquet(first)
             pl.DataFrame(
                 [("1", 5, "G", "T", "rejected", "second", "AF", "snv")],
-                schema=schema, orient="row",
+                schema=schema,
+                orient="row",
             ).write_parquet(second)
-            pl.DataFrame(schema={
-                "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String,
-                "ALT": pl.String, "rejection_reason": pl.String,
-            }).write_parquet(audit)
+            pl.DataFrame(
+                schema={
+                    "CHROM": pl.String,
+                    "POS": pl.Int64,
+                    "REF": pl.String,
+                    "ALT": pl.String,
+                    "rejection_reason": pl.String,
+                }
+            ).write_parquet(audit)
 
             outputs = allele_outputs(directory)
             write_finalization_allele_artifacts(
@@ -192,15 +231,19 @@ class BundleFinalizationTests(unittest.TestCase):
                 gzip_rows(outputs.population_af_zero_imputations),
             )
 
-    def test_finalization_collects_public_allele_rows_and_v3_counts_with_native_state_scans(self) -> None:
+    def test_finalization_collects_public_allele_rows_and_v3_counts_with_native_state_scans(
+        self,
+    ) -> None:
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             states = directory / "states.parquet"
             audit = directory / "audit.parquet"
             pl.DataFrame(
                 {
-                    "CHROM": ["1", "1", "X"], "POS": [1, 2, 3],
-                    "REF": ["A", "C", "G"], "ALT": ["T", "G", "GA"],
+                    "CHROM": ["1", "1", "X"],
+                    "POS": [1, 2, 3],
+                    "REF": ["A", "C", "G"],
+                    "ALT": ["T", "G", "GA"],
                     "allele_state": ["observed", "rejected", "absent"],
                     "state_reason": ["present", "filtered", "not_present"],
                     "af_zero_imputed_tags": [None, "AF", "AF_FEMALE"],
@@ -209,7 +252,10 @@ class BundleFinalizationTests(unittest.TestCase):
             ).write_parquet(states)
             pl.DataFrame(
                 {
-                    "CHROM": ["X"], "POS": [4], "REF": ["AA"], "ALT": ["A"],
+                    "CHROM": ["X"],
+                    "POS": [4],
+                    "REF": ["AA"],
+                    "ALT": ["A"],
                     "rejection_reason": ["crosses_mask_boundary"],
                 }
             ).write_parquet(audit)
@@ -220,7 +266,10 @@ class BundleFinalizationTests(unittest.TestCase):
             )
 
             self.assertEqual(
-                [["1", "2", "C", "G", "filtered"], ["X", "4", "AA", "A", "crosses_mask_boundary"]],
+                [
+                    ["1", "2", "C", "G", "filtered"],
+                    ["X", "4", "AA", "A", "crosses_mask_boundary"],
+                ],
                 gzip_rows(outputs.excluded_alleles),
             )
             self.assertEqual(

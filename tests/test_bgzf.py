@@ -23,7 +23,9 @@ class BgzfTests(unittest.TestCase):
     def test_detects_a_complete_bgzf_extra_field_and_eof_block(self) -> None:
         with TemporaryDirectory() as temporary:
             path = Path(temporary) / "complete.bgz"
-            path.write_bytes(gzip_header_with_extra(b"BC\x02\x00\x00\x00") + BGZF_EOF_BLOCK)
+            path.write_bytes(
+                gzip_header_with_extra(b"BC\x02\x00\x00\x00") + BGZF_EOF_BLOCK
+            )
             self.assertTrue(is_bgzf(path))
             self.assertTrue(has_bgzf_eof(path))
 

@@ -128,7 +128,9 @@ class WorkflowPlanTests(unittest.TestCase):
         plan = build_workflow_plan(manifest)
 
         assert plan.generation is not None
-        self.assertEqual("tests/smoke/data/cadd_indel.tsv", plan.generation.score_indel.data)
+        self.assertEqual(
+            "tests/smoke/data/cadd_indel.tsv", plan.generation.score_indel.data
+        )
         self.assertEqual(
             "tests/null_distribution/mutation_rates.tsv",
             plan.generation.mutation_rate_indel.data,
@@ -140,7 +142,9 @@ class WorkflowPlanTests(unittest.TestCase):
         self.assertEqual(50, settings.indel_max_reference_length)
         self.assertEqual(50, settings.indel_max_alternate_length)
 
-    def test_generation_rejects_indel_variant_class_before_execution_is_ready(self) -> None:
+    def test_generation_rejects_indel_variant_class_before_execution_is_ready(
+        self,
+    ) -> None:
         manifest = self.manifest("tests/null_distribution/generate.run.yaml")
         manifest["generation_settings"]["variant_classes"] = ["snv", "indel"]
         with self.assertRaisesRegex(WorkflowPlanError, "variant_classes must be"):
@@ -157,7 +161,9 @@ class WorkflowPlanTests(unittest.TestCase):
         plan = build_workflow_plan(manifest)
 
         assert plan.generation is not None
-        self.assertEqual("tests/smoke/data/cadd_indel.tsv", plan.generation.score_indel.data)
+        self.assertEqual(
+            "tests/smoke/data/cadd_indel.tsv", plan.generation.score_indel.data
+        )
 
     def test_full_plan_uses_v3_lookup_contract_for_combined_generation(self) -> None:
         manifest = self.manifest("tests/null_distribution/full.run.yaml")
@@ -170,7 +176,9 @@ class WorkflowPlanTests(unittest.TestCase):
         plan = build_workflow_plan(manifest)
 
         assert plan.apply is not None
-        self.assertEqual(INDEL_GENERATED_BUNDLE_CONTRACT, plan.apply.lookup_source.contract)
+        self.assertEqual(
+            INDEL_GENERATED_BUNDLE_CONTRACT, plan.apply.lookup_source.contract
+        )
 
     def test_mutation_rate_policy_resolves_its_declared_binding(self) -> None:
         plan = build_workflow_plan(
@@ -204,30 +212,51 @@ class WorkflowPlanTests(unittest.TestCase):
             for missing in ("population", "scores", "mutation"):
                 with self.subTest(mode=mode, missing=missing):
                     manifest = self.manifest(f"tests/null_distribution/{mode}.run.yaml")
-                    manifest["generation"]["execution"].pop("allow_unindexed_fixture_inputs")
+                    manifest["generation"]["execution"].pop(
+                        "allow_unindexed_fixture_inputs"
+                    )
                     population = manifest["generation"]["population_vcf"]
-                    scores = (manifest["generation"]["score_snv"] if mode == "generate"
-                              else manifest["bindings"]["reference"]["cadd"]["snv"])
-                    mutation = {"data": "/production/rates.tsv.gz", "index": "/production/rates.tsv.gz.csi"}
+                    scores = (
+                        manifest["generation"]["score_snv"]
+                        if mode == "generate"
+                        else manifest["bindings"]["reference"]["cadd"]["snv"]
+                    )
+                    mutation = {
+                        "data": "/production/rates.tsv.gz",
+                        "index": "/production/rates.tsv.gz.csi",
+                    }
                     manifest["generation"]["mutation_rate"] = mutation
                     manifest["generation"]["unobserved_policy"] = "mutation_rate"
                     population["index"] = "/production/population.vcf.gz.tbi"
                     scores["index"] = "/production/scores.tsv.gz.csi"
-                    resources = {"population": population, "scores": scores, "mutation": mutation}
+                    resources = {
+                        "population": population,
+                        "scores": scores,
+                        "mutation": mutation,
+                    }
                     # Indexed resources need not exist at plan construction time.
                     build_workflow_plan(manifest)
                     resources[missing]["index"] = None
-                    key = {"population": "generation.population_vcf", "mutation": "generation.mutation_rate",
-                           "scores": "generation.score_snv" if mode == "generate" else "bindings.reference.cadd.snv"}[missing]
+                    key = {
+                        "population": "generation.population_vcf",
+                        "mutation": "generation.mutation_rate",
+                        "scores": "generation.score_snv"
+                        if mode == "generate"
+                        else "bindings.reference.cadd.snv",
+                    }[missing]
                     with self.assertRaises(WorkflowPlanError) as raised:
                         build_workflow_plan(manifest)
                     self.assertIn(f"{key}.index is required", str(raised.exception))
-                    self.assertIn("each partition scans the entire file", str(raised.exception))
+                    self.assertIn(
+                        "each partition scans the entire file", str(raised.exception)
+                    )
 
     def test_fixture_exception_never_allows_unindexed_compressed_inputs(self) -> None:
         manifest = self.manifest("tests/null_distribution/generate.run.yaml")
         manifest["generation"]["population_vcf"]["data"] = "/production/gnomad.vcf.gz"
-        with self.assertRaisesRegex(WorkflowPlanError, "generation.population_vcf.index is required"):
+        with self.assertRaisesRegex(
+            WorkflowPlanError, "generation.population_vcf.index is required"
+        ):
             build_workflow_plan(manifest)
 
     def test_fixture_exception_requires_boolean_not_truthy_text(self) -> None:
@@ -266,7 +295,10 @@ class WorkflowPlanTests(unittest.TestCase):
         plan = build_workflow_plan(manifest)
 
         assert plan.apply is not None
-        resolved = {item.identifier: item.binding.data for item in plan.apply.effective_exclusions}
+        resolved = {
+            item.identifier: item.binding.data
+            for item in plan.apply.effective_exclusions
+        }
         self.assertEqual(
             {
                 "encode-hg38-blacklist-v2": "tests/smoke/data/exclude_full_span.bed",
@@ -275,10 +307,14 @@ class WorkflowPlanTests(unittest.TestCase):
             resolved,
         )
 
-    def test_exclusion_identifier_mismatches_fail_before_resource_registry(self) -> None:
+    def test_exclusion_identifier_mismatches_fail_before_resource_registry(
+        self,
+    ) -> None:
         missing = self.manifest("tests/smoke/run.yaml")
         del missing["bindings"]["reference"]["exclusions"]["encode-hg38-blacklist-v2"]
-        with self.assertRaisesRegex(WorkflowPlanError, "missing active bindings.*encode-hg38-blacklist-v2"):
+        with self.assertRaisesRegex(
+            WorkflowPlanError, "missing active bindings.*encode-hg38-blacklist-v2"
+        ):
             build_workflow_plan(missing)
 
         unknown = self.manifest("tests/smoke/run.yaml")
@@ -286,12 +322,18 @@ class WorkflowPlanTests(unittest.TestCase):
             "data": "unexpected.bed",
             "index": None,
         }
-        with self.assertRaisesRegex(WorkflowPlanError, "no scientific metadata.*unexpected"):
+        with self.assertRaisesRegex(
+            WorkflowPlanError, "no scientific metadata.*unexpected"
+        ):
             build_workflow_plan(unknown)
 
-    def test_disabled_scientific_exclusion_does_not_require_or_stage_a_binding(self) -> None:
+    def test_disabled_scientific_exclusion_does_not_require_or_stage_a_binding(
+        self,
+    ) -> None:
         manifest = self.manifest("tests/smoke/run.yaml")
-        manifest["reference"]["exclusions"]["encode-hg38-blacklist-v2"]["enabled"] = False
+        manifest["reference"]["exclusions"]["encode-hg38-blacklist-v2"]["enabled"] = (
+            False
+        )
 
         plan = build_workflow_plan(manifest)
 
@@ -301,11 +343,11 @@ class WorkflowPlanTests(unittest.TestCase):
             tuple(item.identifier for item in plan.apply.effective_exclusions),
         )
 
-    def test_generation_execution_defaults_remain_available_to_direct_callers(self) -> None:
+    def test_generation_execution_defaults_remain_available_to_direct_callers(
+        self,
+    ) -> None:
         manifest = self.manifest("tests/null_distribution/generate.run.yaml")
-        manifest["generation"]["execution"] = {
-            "allow_unindexed_fixture_inputs": True
-        }
+        manifest["generation"]["execution"] = {"allow_unindexed_fixture_inputs": True}
 
         plan = build_workflow_plan(manifest)
 
@@ -318,7 +360,9 @@ class WorkflowPlanTests(unittest.TestCase):
         manifest = self.manifest("tests/smoke/run.yaml")
         manifest["bindings"]["reference"]["mistyped_resource"] = {}
 
-        with self.assertRaisesRegex(WorkflowPlanError, "Additional properties are not allowed"):
+        with self.assertRaisesRegex(
+            WorkflowPlanError, "Additional properties are not allowed"
+        ):
             build_workflow_plan(manifest)
 
     def test_legacy_exclusion_lists_explain_the_migration(self) -> None:
@@ -330,7 +374,9 @@ class WorkflowPlanTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkflowPlanError, "mapping keyed by exclusion ID"):
             build_workflow_plan(manifest)
 
-    def test_legacy_normalization_warns_without_changing_the_source_mapping(self) -> None:
+    def test_legacy_normalization_warns_without_changing_the_source_mapping(
+        self,
+    ) -> None:
         manifest = self.manifest("tests/smoke/run.yaml")
         del manifest["workflow"]
         original = copy.deepcopy(manifest)
@@ -364,7 +410,11 @@ class WorkflowPlanTests(unittest.TestCase):
 
     def test_generate_rejects_apply_inputs(self) -> None:
         manifest = self.manifest("tests/null_distribution/generate.run.yaml")
-        manifest["inputs"] = {"vcf": {"data": "cohort.vcf", "index": None}, "ped": "cohort.ped", "samples": None}
+        manifest["inputs"] = {
+            "vcf": {"data": "cohort.vcf", "index": None},
+            "ped": "cohort.ped",
+            "samples": None,
+        }
         self.assert_rejected(manifest)
 
     def test_generation_rejects_indel_enabled_model(self) -> None:
@@ -384,7 +434,9 @@ class WorkflowPlanTests(unittest.TestCase):
 
     def test_full_rejects_a_second_shared_resource_binding_set(self) -> None:
         manifest = self.manifest("tests/null_distribution/full.run.yaml")
-        manifest["generation"]["score_snv"] = manifest["bindings"]["reference"]["cadd"]["snv"]
+        manifest["generation"]["score_snv"] = manifest["bindings"]["reference"]["cadd"][
+            "snv"
+        ]
         self.assert_rejected(manifest)
 
     def test_full_rejects_external_lookup_source(self) -> None:
@@ -407,7 +459,9 @@ class WorkflowPlanTests(unittest.TestCase):
         del manifest["bindings"]["reference"]["lookup_source"]["tables"]["hem_chrX"]
         build_workflow_plan(manifest)
 
-    def test_bundle_lookup_source_requires_every_certified_scope_component(self) -> None:
+    def test_bundle_lookup_source_requires_every_certified_scope_component(
+        self,
+    ) -> None:
         manifest = self.manifest("tests/smoke/run.yaml")
         manifest["model"]["hemizygote"] = False
         manifest["model"]["include_indels"] = False

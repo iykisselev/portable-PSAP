@@ -22,7 +22,10 @@ class GenomePartition:
 
 def read_fasta_index(path: str | Path) -> dict[str, tuple[str, int]]:
     """Compatibility view of the shared FAI records for partitioning."""
-    return {chromosome: (record.name, record.length) for chromosome, record in read_fai(path).items()}
+    return {
+        chromosome: (record.name, record.length)
+        for chromosome, record in read_fai(path).items()
+    }
 
 
 def build_partitions(
@@ -48,7 +51,10 @@ def build_partitions(
     chromosomes = {chromosome for chromosome, _, _ in candidate_intervals}
     missing = sorted(chromosomes - set(fasta_contigs))
     if missing:
-        raise ValueError("Testing-unit contigs are absent from the FASTA index: " + ", ".join(missing))
+        raise ValueError(
+            "Testing-unit contigs are absent from the FASTA index: "
+            + ", ".join(missing)
+        )
 
     selected_windows: dict[str, set[int]] = {}
     for chromosome, interval_start, interval_end in candidate_intervals:
@@ -86,9 +92,9 @@ def build_partitions(
 
 
 def indel_candidate_owner_intervals(
-    testing_unit_intervals: list[tuple[str, int, int]],
+    testing_unit_intervals: list[tuple[str, str, int, int]],
     max_reference_length: int,
-) -> list[tuple[str, int, int]]:
+) -> list[tuple[str, str, int, int]]:
     """Expand unit intervals leftward for indel anchor-owner discovery.
 
     An indel with a REF of at most ``max_reference_length`` can overlap a unit
@@ -99,8 +105,8 @@ def indel_candidate_owner_intervals(
     if max_reference_length < 1:
         raise ValueError("Indel maximum reference length must be positive")
     return [
-        (chromosome, max(0, start - max_reference_length + 1), end)
-        for chromosome, start, end in testing_unit_intervals
+        (unit_id, chromosome, max(0, start - max_reference_length + 1), end)
+        for unit_id, chromosome, start, end in testing_unit_intervals
     ]
 
 

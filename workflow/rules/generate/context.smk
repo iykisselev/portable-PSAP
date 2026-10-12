@@ -1,6 +1,6 @@
 """Shared paths and wildcard helpers for generation rules."""
 
-from generation_context import GenerationRuleContext, as_inputs
+from generation_context import GenerationRuleContext
 from generation_manifests import (
     bucket_from_manifest,
     bucket_ids,
@@ -8,26 +8,8 @@ from generation_manifests import (
     read_bucket_manifest,
 )
 
-
 GENERATION_CONTEXT = GenerationRuleContext.from_workflow_plan(WORKFLOW_PLAN)
 GENERATION_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "generate"
-
-
-def generation_index(resource_binding):
-    return as_inputs(resource_binding)
-
-
-def optional_binding(binding, *, enabled=True):
-    """Return optional data/index Snakemake bindings without placeholder paths."""
-    if not enabled or binding is None or not binding.data:
-        return [], []
-    return [binding.data], ([binding.index] if binding.index else [])
-
-
-SCORE_INDEL, SCORE_INDEL_INDEX = optional_binding(
-    GENERATION_CONTEXT.plan.score_indel,
-    enabled=WORKFLOW_PLAN.model.include_indels,
-)
 
 
 def hem_artifact(value):
@@ -35,23 +17,10 @@ def hem_artifact(value):
     return value if GENERATION_CONTEXT.hem_enabled else []
 
 
-def generation_mutation_rate_data():
-    return GENERATION_CONTEXT.mutation_rate_data()
-
-
-def generation_mutation_rate_index():
-    return GENERATION_CONTEXT.mutation_rate_index()
-
-
-def generation_exclusion_data():
-    return GENERATION_CONTEXT.exclusion_data()
-
-
 def generation_scope_artifact(wildcards, artifact_name):
     """Return one scope file after the scope checkpoint has completed."""
     scope_checkpoint = checkpoints.prepare_generation_scope.get()
-    output_name = {"effective_mask": "mask"}.get(artifact_name, artifact_name)
-    return str(getattr(scope_checkpoint.output, output_name))
+    return str(getattr(scope_checkpoint.output, artifact_name))
 
 
 def generation_partition_ids(wildcards):
@@ -74,7 +43,7 @@ def generation_partition_artifacts(wildcards, artifact_name):
 
 def generation_bucket_artifacts(wildcards, artifact_name):
     """Return the requested lookup file for every discovered unit bucket."""
-    if artifact_name == "lookup_hem" and not GENERATION_CONTEXT.hem_enabled:
+    if artifact_name == "lookup_hem_chrX" and not GENERATION_CONTEXT.hem_enabled:
         return []
     return [
         GENERATION_CONTEXT.bucket_artifact(bucket_id, artifact_name)
@@ -108,9 +77,14 @@ def generation_statistics_artifacts(wildcards):
 def generation_outputs(wildcards):
     """Return recoverable outputs of one generation run after certification."""
     outputs = []
-    for artifact_name in ("allele_states", "allele_membership", "allele_scores", "candidate_audit"):
+    for artifact_name in (
+        "allele_states",
+        "allele_membership",
+        "allele_scores",
+        "candidate_audit",
+    ):
         outputs.extend(generation_partition_artifacts(wildcards, artifact_name))
     outputs.extend(generation_statistics_artifacts(wildcards))
-    for artifact_name in ("lookup_het", "lookup_hom", "lookup_hem", "diagnostics"):
+    for artifact_name in ("lookup_het", "lookup_hom", "lookup_hem_chrX", "diagnostics"):
         outputs.extend(generation_bucket_artifacts(wildcards, artifact_name))
     return outputs

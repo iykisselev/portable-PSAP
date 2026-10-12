@@ -24,9 +24,31 @@ from genomic_contracts import (  # noqa: E402
     variant_class,
 )
 from validation import canonical_chromosome_name  # noqa: E402
+from bundle_contract import model_roles  # noqa: E402
 
 
 class GenomicContractTests(unittest.TestCase):
+    def test_r_and_python_select_the_same_enabled_roles(self):
+        rscript = shutil.which("Rscript")
+        if rscript is None:
+            self.skipTest("Rscript is unavailable")
+        expression = 'source(commandArgs(TRUE)[1]); cat(paste(model_roles(FALSE), collapse=","), "\\n", paste(model_roles(TRUE), collapse=","), sep="")'
+        result = subprocess.run(
+            [
+                rscript,
+                "-e",
+                expression,
+                str(ROOT / "workflow/lib/r/bundle_contracts.R"),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(
+            [",".join(model_roles(False)), ",".join(model_roles(True))],
+            result.stdout.splitlines(),
+        )
+
     def test_python_canonical_aliases_and_allele_keys(self) -> None:
         aliases = [" chr1 ", "CHR1", "x", "chrX", "M", "chrMT"]
         self.assertEqual(
@@ -75,10 +97,16 @@ class GenomicContractTests(unittest.TestCase):
             "cat('\\n', canonical_allele_key('chrM', 7, 'a', 't'), sep='')"
         )
         result = subprocess.run(
-            [rscript, "-e", expression], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
+            [rscript, "-e", expression],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertEqual(result.stdout.splitlines(), ["1", "1", "X", "X", "MT", "MT", "MT:7:A:T"])
+        self.assertEqual(
+            result.stdout.splitlines(), ["1", "1", "X", "X", "MT", "MT", "MT:7:A:T"]
+        )
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import warnings
 
 import polars as pl
@@ -32,6 +33,7 @@ from generation_prep import (
 )
 from generation_probability import unit_bucket_frame
 from generation_resource_policy import check_unindexed_fixture
+from genomic_contracts import GENERATION_CONTIGS
 from io_contracts import write_json_atomic, write_parquet_atomic
 
 
@@ -81,32 +83,53 @@ def sparse_bucket_partitions(
     }
 
 
-def prepare_generation_scope(
-    inputs: GenerationScopeInputs,
-    outputs: GenerationScopeOutputs,
-    params: GenerationScopeParameters,
+UnitInterval = tuple[str, str, int, int]
+
+
+@dataclass(frozen=True)
+class ScopeMasks:
+    units_by_id: dict[str, list[tuple[str, int, int]]]
+    supported_scope: dict[str, list[tuple[int, int]]]
+    calibration_mask: dict[str, list[tuple[int, int]]]
+
+
+@dataclass(frozen=True)
+class ScopeTables:
+    units: pl.DataFrame
+    unit_intervals: pl.DataFrame
+    callable_intervals: list[UnitInterval]
+    eligible_intervals: list[UnitInterval]
+
+
+def _validate_scope_inputs(
+    inputs: GenerationScopeInputs, params: GenerationScopeParameters
 ) -> None:
-    """Prepare the shared scope once so partition jobs only read their slice."""
     # Check the fixture exception before reading resources or scheduling partitions.
     for path, index in (
         (inputs.population_vcf, inputs.population_vcf_index),
         (inputs.score_snv, inputs.score_snv_index),
         (inputs.mutation_rate, inputs.mutation_rate_index),
-        (inputs.score_indel if params.include_indels else None, inputs.score_indel_index),
+        (
+            inputs.score_indel if params.include_indels else None,
+            inputs.score_indel_index,
+        ),
         (inputs.mutation_rate_indel, inputs.mutation_rate_indel_index),
     ):
         if path is not None and index is None:
             check_unindexed_fixture(path)
     validate_population_af_headers(inputs.population_vcf, dict(params.af_tags))
+
+
+def _scope_masks(inputs: GenerationScopeInputs) -> ScopeMasks:
     units_by_id = read_bed_units(inputs.testing_units)
     par_intervals = read_intervals(inputs.par_regions)
     excluded_intervals = read_intervals(inputs.exclusion) if inputs.exclusion else {}
-    for exclusion_path in inputs.exclusions.values():
+    for exclusion_path in inputs.exclusions:
         for chromosome, intervals in read_intervals(exclusion_path).items():
             excluded_intervals.setdefault(chromosome, []).extend(intervals)
 
     fasta_index = read_fasta_index(inputs.fasta_fai)
-    supported_chromosomes = {str(value) for value in range(1, 23)} | {"X"}
+    supported_chromosomes = set(GENERATION_CONTIGS)
     unit_chromosomes = {intervals[0][0] for intervals in units_by_id.values()}
     unsupported_unit_chromosomes = unit_chromosomes - supported_chromosomes
     if unsupported_unit_chromosomes:
@@ -131,6 +154,15 @@ def prepare_generation_scope(
         par_intervals,
     )
     calibration_mask = effective_calibration_mask(excluded_intervals, supported_scope)
+    return ScopeMasks(units_by_id, supported_scope, calibration_mask)
+
+
+def _unit_intervals(
+    masks: ScopeMasks, params: GenerationScopeParameters
+) -> ScopeTables:
+    units_by_id = masks.units_by_id
+    supported_scope = masks.supported_scope
+    calibration_mask = masks.calibration_mask
     supported_scope_starts = {
         chromosome: [start for start, _ in intervals]
         for chromosome, intervals in supported_scope.items()
@@ -173,52 +205,108 @@ def prepare_generation_scope(
         orient="row",
     )
     eligible_unit_ids = set(
-        unit_retention_frame.filter(pl.col("status") == "eligible")["testing_unit_id"].to_list()
+        unit_retention_frame.filter(pl.col("status") == "eligible")[
+            "testing_unit_id"
+        ].to_list()
     )
     eligible_callable_unit_intervals = [
         (unit_id, chromosome, start, end)
         for unit_id, chromosome, start, end in callable_unit_intervals
         if unit_id in eligible_unit_ids
     ]
-    indel_owner_intervals: list[tuple[str, str, int, int]] = []
-    if params.include_indels:
-        if inputs.score_indel is None:
-            raise ValueError("Indel generation requires generation.score_indel")
-        if params.indel_max_reference_length < 1:
-            raise ValueError("Indel maximum reference length must be positive")
-        indel_owner_intervals = [
-            (unit_id, chromosome, start, end)
-            for (unit_id, chromosome, _, _), (chromosome, start, end) in zip(
-                eligible_callable_unit_intervals,
-                indel_candidate_owner_intervals(
-                    [
-                        (chromosome, start, end)
-                        for _, chromosome, start, end in eligible_callable_unit_intervals
-                    ],
-                    params.indel_max_reference_length,
-                ),
-            )
-        ]
-    genome_partitions = build_partitions(
-        inputs.fasta_fai,
-        [
-            (chromosome, start, end)
-            for _, chromosome, start, end in eligible_callable_unit_intervals
-        ],
-        int(params.partition_size),
-        candidate_owner_intervals=[
-            (chromosome, start, end)
-            for _, chromosome, start, end in indel_owner_intervals
-        ],
-    )
-    write_parquet_atomic(unit_retention_frame, outputs.units, params.compression)
     unit_intervals_frame = pl.DataFrame(
         unit_intervals,
         schema=["testing_unit_id", "CHROM", "START", "END"],
         orient="row",
     ).sort("CHROM", "START", "END", "testing_unit_id")
+    return ScopeTables(
+        unit_retention_frame,
+        unit_intervals_frame,
+        callable_unit_intervals,
+        eligible_callable_unit_intervals,
+    )
+
+
+def _partition_manifest(
+    genome_partitions: list[GenomePartition], params: GenerationScopeParameters
+) -> dict:
+    return {
+        "schema_version": PARTITION_MANIFEST_SCHEMA_VERSION,
+        "partition_size_bp": int(params.partition_size),
+        "partitions": [
+            {
+                "partition_id": partition.identifier,
+                "chromosome": partition.chromosome,
+                "start": partition.start,
+                "end": partition.end,
+                "ordinal": partition.ordinal,
+            }
+            for partition in genome_partitions
+        ],
+    }
+
+
+def _bucket_manifest(
+    scope: ScopeTables,
+    genome_partitions: list[GenomePartition],
+    indel_owner_intervals: list[UnitInterval],
+    params: GenerationScopeParameters,
+) -> dict:
+    unit_retention_frame = scope.units
+    unit_intervals_frame = scope.unit_intervals
+    callable_unit_intervals = scope.callable_intervals
+    bucket_assignments = unit_bucket_frame(
+        unit_retention_frame, int(params.unit_bucket_size), unit_intervals_frame
+    )
+    bucket_by_unit = {
+        str(unit_id): int(bucket_id)
+        for unit_id, bucket_id in bucket_assignments.iter_rows()
+    }
+    unit_ids_by_bucket: dict[int, list[str]] = {}
+    for unit_id, bucket_id in bucket_by_unit.items():
+        unit_ids_by_bucket.setdefault(int(bucket_id), []).append(str(unit_id))
+    partition_ids_by_bucket = sparse_bucket_partitions(
+        genome_partitions,
+        callable_unit_intervals,
+        bucket_by_unit,
+        int(params.partition_size),
+        candidate_owner_intervals=indel_owner_intervals
+        if params.include_indels
+        else None,
+    )
+    return {
+        "schema_version": BUCKET_MANIFEST_SCHEMA_VERSION,
+        "unit_bucket_size": int(params.unit_bucket_size),
+        "buckets": [
+            {
+                "bucket_id": f"{ordinal:05d}",
+                "ordinal": ordinal,
+                "unit_count": len(unit_ids),
+                # Keep manifest identifiers lexically sorted even though
+                # assignment itself follows genomic order.
+                "unit_ids": sorted(unit_ids),
+                "partition_ids": list(partition_ids_by_bucket[ordinal]),
+            }
+            for ordinal, unit_ids in sorted(unit_ids_by_bucket.items())
+        ],
+    }
+
+
+def _write_scope_tables(
+    scope: ScopeTables,
+    masks: ScopeMasks,
+    outputs: GenerationScopeOutputs,
+    params: GenerationScopeParameters,
+) -> None:
+    unit_retention_frame = scope.units
+    unit_intervals_frame = scope.unit_intervals
+    callable_unit_intervals = scope.callable_intervals
+    calibration_mask = masks.calibration_mask
+    write_parquet_atomic(unit_retention_frame, outputs.units, params.compression)
     write_parquet_atomic(
-        unit_intervals_frame, outputs.unit_intervals, params.compression,
+        unit_intervals_frame,
+        outputs.unit_intervals,
+        params.compression,
         row_group_size=16_384,
     )
     write_parquet_atomic(
@@ -241,60 +329,47 @@ def prepare_generation_scope(
             schema=["CHROM", "START", "END", "mask_state"],
             orient="row",
         ).sort("CHROM", "START", "END"),
-        outputs.mask,
+        outputs.effective_mask,
         params.compression,
         row_group_size=16_384,
     )
-    write_json_atomic(
-        outputs.partitions,
-        {
-            "schema_version": PARTITION_MANIFEST_SCHEMA_VERSION,
-            "partition_size_bp": int(params.partition_size),
-            "partitions": [
-                {
-                    "partition_id": partition.identifier,
-                    "chromosome": partition.chromosome,
-                    "start": partition.start,
-                    "end": partition.end,
-                    "ordinal": partition.ordinal,
-                }
-                for partition in genome_partitions
-            ],
-        },
-    )
-    bucket_assignments = unit_bucket_frame(
-        unit_retention_frame, int(params.unit_bucket_size), unit_intervals_frame
-    )
-    bucket_by_unit = {
-        str(unit_id): int(bucket_id)
-        for unit_id, bucket_id in bucket_assignments.iter_rows()
-    }
-    unit_ids_by_bucket: dict[int, list[str]] = {}
-    for unit_id, bucket_id in bucket_by_unit.items():
-        unit_ids_by_bucket.setdefault(int(bucket_id), []).append(str(unit_id))
-    partition_ids_by_bucket = sparse_bucket_partitions(
-        genome_partitions,
-        callable_unit_intervals,
-        bucket_by_unit,
+
+
+def prepare_generation_scope(
+    inputs: GenerationScopeInputs,
+    outputs: GenerationScopeOutputs,
+    params: GenerationScopeParameters,
+) -> None:
+    """Prepare masks, retention tables and sparse manifests for partition jobs."""
+    _validate_scope_inputs(inputs, params)
+    masks = _scope_masks(inputs)
+    scope = _unit_intervals(masks, params)
+    eligible_callable_unit_intervals = scope.eligible_intervals
+    indel_owner_intervals: list[UnitInterval] = []
+    if params.include_indels:
+        if inputs.score_indel is None:
+            raise ValueError("Indel generation requires generation.score_indel")
+        indel_owner_intervals = indel_candidate_owner_intervals(
+            eligible_callable_unit_intervals,
+            params.indel_max_reference_length,
+        )
+    genome_partitions = build_partitions(
+        inputs.fasta_fai,
+        [
+            (chromosome, start, end)
+            for _, chromosome, start, end in eligible_callable_unit_intervals
+        ],
         int(params.partition_size),
-        candidate_owner_intervals=indel_owner_intervals if params.include_indels else None,
+        candidate_owner_intervals=[
+            (chromosome, start, end)
+            for _, chromosome, start, end in indel_owner_intervals
+        ],
+    )
+    _write_scope_tables(scope, masks, outputs, params)
+    write_json_atomic(
+        outputs.partitions, _partition_manifest(genome_partitions, params)
     )
     write_json_atomic(
         outputs.buckets,
-        {
-            "schema_version": BUCKET_MANIFEST_SCHEMA_VERSION,
-            "unit_bucket_size": int(params.unit_bucket_size),
-            "buckets": [
-                {
-                    "bucket_id": f"{ordinal:05d}",
-                    "ordinal": ordinal,
-                    "unit_count": len(unit_ids),
-                    # Keep manifest identifiers lexically sorted even though
-                    # assignment itself follows genomic order.
-                    "unit_ids": sorted(unit_ids),
-                    "partition_ids": list(partition_ids_by_bucket[ordinal]),
-                }
-                for ordinal, unit_ids in sorted(unit_ids_by_bucket.items())
-            ],
-        },
+        _bucket_manifest(scope, genome_partitions, indel_owner_intervals, params),
     )

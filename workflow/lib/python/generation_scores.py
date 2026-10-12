@@ -13,7 +13,13 @@ from generation_prep import intersect_intervals
 
 
 ALLELE_COLUMNS = ["CHROM", "POS", "REF", "ALT"]
-SCORE_SCHEMA = {"CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String, "score": pl.Float64}
+SCORE_SCHEMA = {
+    "CHROM": pl.String,
+    "POS": pl.Int64,
+    "REF": pl.String,
+    "ALT": pl.String,
+    "score": pl.Float64,
+}
 
 
 def score_rows(
@@ -31,7 +37,11 @@ def score_rows(
     read the same score row twice. Genuine duplicate source rows are preserved
     for the partition's validation check.
     """
-    regions = intersect_intervals([(start, end)], intervals) if intervals is not None else [(start, end)]
+    regions = (
+        intersect_intervals([(start, end)], intervals)
+        if intervals is not None
+        else [(start, end)]
+    )
     if not regions:
         return pl.DataFrame(schema=SCORE_SCHEMA)
     region_starts = [region_start for region_start, _ in regions]
@@ -54,7 +64,15 @@ def score_rows(
         score = float(fields[5])
         if not math.isfinite(score):
             raise ValueError(f"Score resource has a non-finite score for {key!r}")
-        records.append({"CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3], "score": score})
+        records.append(
+            {
+                "CHROM": key[0],
+                "POS": key[1],
+                "REF": key[2],
+                "ALT": key[3],
+                "score": score,
+            }
+        )
     return pl.DataFrame(
         records,
         schema=SCORE_SCHEMA,
@@ -72,8 +90,18 @@ def mutation_rate_rows(
     intervals: list[tuple[int, int]] | None = None,
 ) -> pl.DataFrame:
     """Read mutation rates in a window, optionally only at candidate intervals."""
-    regions = intersect_intervals([(start, end)], intervals) if intervals is not None else [(start, end)]
-    schema = {"CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String, "mu": pl.Float64}
+    regions = (
+        intersect_intervals([(start, end)], intervals)
+        if intervals is not None
+        else [(start, end)]
+    )
+    schema = {
+        "CHROM": pl.String,
+        "POS": pl.Int64,
+        "REF": pl.String,
+        "ALT": pl.String,
+        "mu": pl.Float64,
+    }
     if not regions:
         return pl.DataFrame(schema=schema)
     region_starts = [region_start for region_start, _ in regions]
@@ -93,7 +121,9 @@ def mutation_rate_rows(
         rate = float(fields[4])
         if not math.isfinite(rate) or not 0 <= rate <= 1:
             raise ValueError(f"Mutation-rate resource has invalid mu for {key!r}")
-        records.append({"CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3], "mu": rate})
+        records.append(
+            {"CHROM": key[0], "POS": key[1], "REF": key[2], "ALT": key[3], "mu": rate}
+        )
     return pl.DataFrame(
         records,
         schema=schema,

@@ -30,14 +30,19 @@ class WorkflowDagBaselineTests(unittest.TestCase):
 
     def test_fresh_mode_dags_match_the_recorded_baseline(self) -> None:
         for mode, expected in self.baseline.items():
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory(
-                prefix=f"portable-psap-{mode}-dag-"
-            ) as temporary_dir:
+            with (
+                self.subTest(mode=mode),
+                tempfile.TemporaryDirectory(
+                    prefix=f"portable-psap-{mode}-dag-"
+                ) as temporary_dir,
+            ):
                 outdir = Path(temporary_dir) / "output"
                 result = run_workflow(expected["manifest"], outdir, dry_run=True)
                 output = command_output(result)
                 self.assertEqual(0, result.returncode, output[-6000:])
-                self.assertEqual(expected["initial_dry_run_jobs"], initial_job_count(result))
+                self.assertEqual(
+                    expected["initial_dry_run_jobs"], initial_job_count(result)
+                )
 
                 resolved_output = ""
                 checkpoint_target = expected.get("checkpoint_target")
@@ -47,9 +52,7 @@ class WorkflowDagBaselineTests(unittest.TestCase):
                     )
                     scope_output = command_output(scope)
                     self.assertEqual(0, scope.returncode, scope_output[-6000:])
-                    resolved = run_workflow(
-                        expected["manifest"], outdir, dry_run=True
-                    )
+                    resolved = run_workflow(expected["manifest"], outdir, dry_run=True)
                     resolved_output = command_output(resolved)
                     self.assertEqual(0, resolved.returncode, resolved_output[-6000:])
                     self.assertEqual(
@@ -80,9 +83,12 @@ class WorkflowDagBaselineTests(unittest.TestCase):
             ("tests/null_distribution/full.run.yaml", "full_results"),
         )
         for manifest, target in aliases:
-            with self.subTest(target=target), tempfile.TemporaryDirectory(
-                prefix=f"portable-psap-{target}-"
-            ) as temporary_dir:
+            with (
+                self.subTest(target=target),
+                tempfile.TemporaryDirectory(
+                    prefix=f"portable-psap-{target}-"
+                ) as temporary_dir,
+            ):
                 result = run_workflow(
                     manifest,
                     Path(temporary_dir) / "output",
@@ -93,16 +99,24 @@ class WorkflowDagBaselineTests(unittest.TestCase):
                 self.assertNotEqual(0, result.returncode, output[-6000:])
                 self.assertIn(f"No rule to produce {target}", output)
 
-    def test_missing_enabled_indel_resource_reaches_validation_instead_of_dag_failure(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="portable-psap-missing-indel-") as temporary_dir:
+    def test_missing_enabled_indel_resource_reaches_validation_instead_of_dag_failure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="portable-psap-missing-indel-"
+        ) as temporary_dir:
             root = Path(temporary_dir)
-            manifest = yaml.safe_load((ROOT / "tests" / "smoke" / "run.yaml").read_text())
+            manifest = yaml.safe_load(
+                (ROOT / "tests" / "smoke" / "run.yaml").read_text()
+            )
             manifest["bindings"]["reference"]["cadd"]["indel"] = {
                 "data": None,
                 "index": None,
             }
             manifest_path = root / "missing-indel.yaml"
-            manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+            manifest_path.write_text(
+                yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8"
+            )
             result = run_workflow(manifest_path, root / "output", dry_run=True)
             output = command_output(result)
             self.assertEqual(0, result.returncode, output[-6000:])

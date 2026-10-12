@@ -1,5 +1,9 @@
 # Canonical genomic identifiers shared with workflow/lib/python/genomic_contracts.py.
 
+AUTOSOMES <- as.character(1:22)
+GENERATION_CONTIGS <- c(AUTOSOMES, "X")
+VALIDATION_CONTIGS <- c(GENERATION_CONTIGS, "Y")
+
 canonical_chromosome <- function(chromosome) {
   value <- trimws(as.character(chromosome))
   value <- sub("^chr", "", value, ignore.case = TRUE)

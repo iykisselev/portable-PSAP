@@ -76,10 +76,15 @@ def subtract_intervals(
     remaining: list[tuple[int, int]] = []
     exclusion_index = 0
     for start, end in merge_intervals(intervals):
-        while exclusion_index < len(exclusions) and exclusions[exclusion_index][1] <= start:
+        while (
+            exclusion_index < len(exclusions)
+            and exclusions[exclusion_index][1] <= start
+        ):
             exclusion_index += 1
         position = start
-        while exclusion_index < len(exclusions) and exclusions[exclusion_index][0] < end:
+        while (
+            exclusion_index < len(exclusions) and exclusions[exclusion_index][0] < end
+        ):
             excluded_start, excluded_end = exclusions[exclusion_index]
             if excluded_start > position:
                 remaining.append((position, excluded_start))
@@ -151,7 +156,9 @@ def overlap_sorted(
     return pieces
 
 
-def overlap_length(intervals: list[tuple[int, int]], regions: list[tuple[int, int]]) -> int:
+def overlap_length(
+    intervals: list[tuple[int, int]], regions: list[tuple[int, int]]
+) -> int:
     """Return covered bases for arbitrary interval collections."""
     merged_regions = merge_intervals(regions)
     return sum(
@@ -218,6 +225,8 @@ def retention_rows(
         elif retained == 0:
             status = "fully_excluded"
         else:
-            status = "eligible" if fraction >= minimum else "retained_fraction_below_minimum"
+            status = (
+                "eligible" if fraction >= minimum else "retained_fraction_below_minimum"
+            )
         rows.append((unit, chrom, total, retained, fraction, status))
     return rows

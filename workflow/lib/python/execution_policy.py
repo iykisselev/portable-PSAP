@@ -16,7 +16,10 @@ from typing import Callable, Iterable, Mapping
 
 @dataclass(frozen=True)
 class ExecutionPolicy:
-    """Baseline memory/runtime plus whole-GiB input scaling coefficients."""
+    """Scheduler mem_mb requests and runtime minutes; input scaling uses GiB.
+
+    Existing allocation values are retained independently of byte-unit naming.
+    """
 
     baseline_mem_mb: int
     baseline_runtime_minutes: int
@@ -79,86 +82,130 @@ TABLE_RESOURCE_POLICY_NAMES: Mapping[str, str] = MappingProxyType(
 
 EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
     {
-        "prepare_generation_scope": ExecutionPolicy(4096, 120),
-        "prepare_generation_partition": ExecutionPolicy(16384, 360),
-        "calculate_partition_null_distribution": ExecutionPolicy(16384, 240),
-        "reduce_null_distribution_bucket": ExecutionPolicy(4096, 120),
-        "finalize_null_distribution_bundle": ExecutionPolicy(8192, 120),
-        "validate_null_distribution_bundle": ExecutionPolicy(1024, 120),
-        "validate_cohort": ExecutionPolicy(4096, 30),
-        "validate_resources": ExecutionPolicy(4096, 30),
-        "validate_model": ExecutionPolicy(512, 10),
-        "merge_validation": ExecutionPolicy(512, 5),
-        "require_valid_inputs": ExecutionPolicy(512, 5),
-        "split_genotypes": ExecutionPolicy(4096, 120),
-        "extract_gt": ExecutionPolicy(4096, 120),
-        "prepare_sample_genotypes": ExecutionPolicy(16000, 180),
+        "prepare_generation_scope": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=120
+        ),
+        "prepare_generation_partition": ExecutionPolicy(
+            baseline_mem_mb=16384, baseline_runtime_minutes=360
+        ),
+        "calculate_partition_null_distribution": ExecutionPolicy(
+            baseline_mem_mb=16384, baseline_runtime_minutes=240
+        ),
+        "reduce_null_distribution_bucket": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=120
+        ),
+        "finalize_null_distribution_bundle": ExecutionPolicy(
+            baseline_mem_mb=8192, baseline_runtime_minutes=120
+        ),
+        "validate_null_distribution_bundle": ExecutionPolicy(
+            baseline_mem_mb=1024, baseline_runtime_minutes=120
+        ),
+        "validate_cohort": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=30
+        ),
+        "validate_resources": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=30
+        ),
+        "validate_model": ExecutionPolicy(
+            baseline_mem_mb=512, baseline_runtime_minutes=10
+        ),
+        "merge_validation": ExecutionPolicy(
+            baseline_mem_mb=512, baseline_runtime_minutes=5
+        ),
+        "require_valid_inputs": ExecutionPolicy(
+            baseline_mem_mb=512, baseline_runtime_minutes=5
+        ),
+        "split_genotypes": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=120
+        ),
+        "extract_gt": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=120
+        ),
+        "prepare_sample_genotypes": ExecutionPolicy(
+            baseline_mem_mb=16000, baseline_runtime_minutes=180
+        ),
         "annotate_variants": ExecutionPolicy(
-            32000,
-            720,
-            512,
-            30,
+            baseline_mem_mb=32000,
+            baseline_runtime_minutes=720,
+            mem_mb_per_gib=512,
+            runtime_minutes_per_gib=30,
             scale_with_attempt=True,
         ),
-        "summarize_annotations": ExecutionPolicy(1024, 30),
-        "require_valid_annotations": ExecutionPolicy(512, 5),
-        "prepare_lookups": ExecutionPolicy(16000, 180),
-        "filter_calibration_regions": ExecutionPolicy(4096, 180),
-        "filter_excluded_records": ExecutionPolicy(4096, 180),
-        "build_sample_candidates": ExecutionPolicy(4096, 60),
+        "summarize_annotations": ExecutionPolicy(
+            baseline_mem_mb=1024, baseline_runtime_minutes=30
+        ),
+        "require_valid_annotations": ExecutionPolicy(
+            baseline_mem_mb=512, baseline_runtime_minutes=5
+        ),
+        "prepare_lookups": ExecutionPolicy(
+            baseline_mem_mb=16000, baseline_runtime_minutes=180
+        ),
+        "filter_calibration_regions": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=180
+        ),
+        "filter_excluded_records": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=180
+        ),
+        "build_sample_candidates": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=60
+        ),
         "build_control_reference": ExecutionPolicy(
-            16000,
-            360,
-            256,
-            20,
+            baseline_mem_mb=16000,
+            baseline_runtime_minutes=360,
+            mem_mb_per_gib=256,
+            runtime_minutes_per_gib=20,
             scale_with_attempt=True,
         ),
         "build_cohort_report": ExecutionPolicy(
-            16000,
-            360,
-            256,
-            20,
+            baseline_mem_mb=16000,
+            baseline_runtime_minutes=360,
+            mem_mb_per_gib=256,
+            runtime_minutes_per_gib=20,
             scale_with_attempt=True,
         ),
         "prepare_vcf_resource": ExecutionPolicy(
-            4096,
-            180,
+            baseline_mem_mb=4096,
+            baseline_runtime_minutes=180,
             scale_with_attempt=True,
         ),
-        "combine_exclusions": ExecutionPolicy(12000, 180),
-        "apply_psap": ExecutionPolicy(16000, 360),
+        "combine_exclusions": ExecutionPolicy(
+            baseline_mem_mb=12000, baseline_runtime_minutes=180
+        ),
+        "apply_psap": ExecutionPolicy(
+            baseline_mem_mb=16000, baseline_runtime_minutes=360
+        ),
         "stage_calibration_regions": ExecutionPolicy(
-            2048,
-            60,
+            baseline_mem_mb=2048,
+            baseline_runtime_minutes=60,
             scale_with_attempt=True,
         ),
         "stage_testing_units": ExecutionPolicy(
-            2048,
-            60,
+            baseline_mem_mb=2048,
+            baseline_runtime_minutes=60,
             scale_with_attempt=True,
         ),
         "stage_cadd_snv": ExecutionPolicy(
-            2048,
-            360,
-            256,
-            20,
+            baseline_mem_mb=2048,
+            baseline_runtime_minutes=360,
+            mem_mb_per_gib=256,
+            runtime_minutes_per_gib=20,
             scale_with_attempt=True,
         ),
         "stage_cadd_indel": ExecutionPolicy(
-            2048,
-            360,
-            256,
-            20,
+            baseline_mem_mb=2048,
+            baseline_runtime_minutes=360,
+            mem_mb_per_gib=256,
+            runtime_minutes_per_gib=20,
             scale_with_attempt=True,
         ),
         "stage_variants_exclude": ExecutionPolicy(
-            4096,
-            180,
+            baseline_mem_mb=4096,
+            baseline_runtime_minutes=180,
             scale_with_attempt=True,
         ),
         "stage_par_regions": ExecutionPolicy(
-            4096,
-            180,
+            baseline_mem_mb=4096,
+            baseline_runtime_minutes=180,
             scale_with_attempt=True,
         ),
     }
@@ -224,7 +271,9 @@ def resource_mem_mb(name: str, input_files: Iterable[object], attempt: int) -> i
     )
 
 
-def resource_runtime_minutes(name: str, input_files: Iterable[object], attempt: int) -> int:
+def resource_runtime_minutes(
+    name: str, input_files: Iterable[object], attempt: int
+) -> int:
     """Return wall time requested for one logical execution policy."""
     policy = execution_policy(name)
     return scaled_value(

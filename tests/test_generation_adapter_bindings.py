@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "workflow" / "shared"))
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from _library import BindingError, bind  # noqa: E402
+from apply_bindings import CohortValidationInputs, PreparationInputs  # noqa: E402
 from generation_bindings import (  # noqa: E402
     BundleFinalizationParameters,
     GenerationScopeInputs,
@@ -23,7 +24,31 @@ from generation_bindings import (  # noqa: E402
 
 
 class GenerationAdapterBindingTests(unittest.TestCase):
-    def test_scope_binding_normalizes_paths_optionals_mappings_and_scalars(self) -> None:
+    def test_apply_inputs_decode_optional_paths_and_require_core_fields(self):
+        preparation = bind(
+            PreparationInputs, SimpleNamespace(source="resource.vcf", source_index=[])
+        )
+        self.assertIsNone(preparation.source_index)
+        self.assertIsNone(preparation.cohort)
+        cohort = bind(
+            CohortValidationInputs,
+            SimpleNamespace(
+                metadata="cohort.ped",
+                vcf="cohort.vcf",
+                vcf_index=["custom.tbi"],
+                fasta="reference.fa",
+                fasta_index="reference.fa.fai",
+                fasta_gzi=[],
+            ),
+        )
+        self.assertEqual("custom.tbi", cohort.vcf_index)
+        self.assertIsNone(cohort.fasta_gzi)
+        with self.assertRaisesRegex(BindingError, "source"):
+            bind(PreparationInputs, SimpleNamespace(source_index=[]))
+
+    def test_scope_binding_normalizes_paths_optionals_mappings_and_scalars(
+        self,
+    ) -> None:
         inputs = bind(
             GenerationScopeInputs,
             SimpleNamespace(
@@ -34,7 +59,7 @@ class GenerationAdapterBindingTests(unittest.TestCase):
                 exclusion=[],
                 testing_units="units.bed",
                 par_regions="par.bed",
-                exclusions={"low_complexity": Path("low-complexity.bed")},
+                exclusions=[Path("low-complexity.bed"), "blacklist.bed"],
                 fasta="reference.fa",
                 fasta_fai="reference.fa.fai",
                 mutation_rate=[],
@@ -58,7 +83,7 @@ class GenerationAdapterBindingTests(unittest.TestCase):
         self.assertEqual("population.vcf.gz.tbi", inputs.population_vcf_index)
         self.assertIsNone(inputs.score_snv_index)
         self.assertIsNone(inputs.exclusion)
-        self.assertEqual({"low_complexity": "low-complexity.bed"}, inputs.exclusions)
+        self.assertEqual(("low-complexity.bed", "blacklist.bed"), inputs.exclusions)
         self.assertEqual(0.75, parameters.minimum_retained_fraction)
         self.assertEqual(5_000_000, parameters.partition_size)
         self.assertFalse(parameters.include_indels)
@@ -77,13 +102,13 @@ class GenerationAdapterBindingTests(unittest.TestCase):
             SimpleNamespace(
                 lookup_het="het.parquet",
                 lookup_hom="hom.parquet",
-                lookup_hem=[],
+                lookup_hem_chrX=[],
                 diagnostics="diagnostics.parquet",
             ),
         )
 
         self.assertEqual(("one.parquet", "two.parquet"), inputs.partition_statistics)
-        self.assertIsNone(outputs.lookup_hem)
+        self.assertIsNone(outputs.lookup_hem_chrX)
 
     def test_mapping_and_tuple_parameters_are_typed(self) -> None:
         parameters = bind(
@@ -102,7 +127,14 @@ class GenerationAdapterBindingTests(unittest.TestCase):
                 x_mutation_rate_policy="mean",
                 hemizygote="true",
                 variant_classes=[Path("snv"), "indel"],
-                resource_identities={"fasta": {"identity": Path("GRCh38"), "path": Path("reference.fa")}},
+                resource_identities={
+                    "fasta": {"identity": Path("GRCh38"), "path": Path("reference.fa")}
+                },
+                indel_candidate_universe="score_resource",
+                indel_membership="reference_span_overlap",
+                indel_mask_policy="reference_span_contained",
+                indel_max_reference_length=50,
+                indel_max_alternate_length=50,
             ),
         )
 
@@ -113,7 +145,19 @@ class GenerationAdapterBindingTests(unittest.TestCase):
             parameters.resource_identities,
         )
         self.assertTrue(parameters.hemizygote)
-        self.assertEqual(1, parameters.indel_max_reference_length)
+        self.assertEqual(50, parameters.indel_max_reference_length)
+
+    def test_missing_indel_limit_fails_at_boundary(self) -> None:
+        parameters = SimpleNamespace(
+            minimum_retained_fraction=0.5,
+            partition_size=10,
+            unit_bucket_size=10,
+            compression="zstd",
+            af_tags={"overall": "AF"},
+            include_indels=True,
+        )
+        with self.assertRaisesRegex(BindingError, "indel_max_reference_length"):
+            bind(GenerationScopeParameters, parameters)
 
     def test_missing_required_binding_is_clear(self) -> None:
         with self.assertRaisesRegex(

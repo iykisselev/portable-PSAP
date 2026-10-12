@@ -22,13 +22,15 @@ from bundle_contract import (
     INDEL_GENERATED_BUNDLE_CONTRACT,
     INDEL_GENERATED_BUNDLE_SCHEMA_VERSION,
     VALIDATION_ARTIFACT_FILENAMES,
+    GENERATED_ROLES,
+    model_roles,
 )
 from io_contracts import GzipTsvAtomicWriter, write_gzip_tsv_atomic, write_json_atomic
 
 
 def applicable_roles(unit_row, hemizygote: bool) -> tuple[str, ...]:
     """Return roles needed to score a testing unit under the X-only HEM contract."""
-    return ("het", "hom", "hem_chrX") if hemizygote and unit_row["CHROM"] == "X" else ("het", "hom")
+    return model_roles(hemizygote and unit_row["CHROM"] == "X")
 
 
 def classify_units(units, diagnostics, hemizygote: bool = False):
@@ -41,22 +43,30 @@ def classify_units(units, diagnostics, hemizygote: bool = False):
         unit, role, status = row["testing_unit_id"], row["role"], row["status"]
         if unit not in unit_status:
             raise ValueError(f"Distribution diagnostics contain unknown unit {unit!r}")
-        if role not in {"het", "hom", "hem_chrX"}:
-            raise ValueError(f"Distribution diagnostics contain unsupported role {role!r}")
+        if role not in GENERATED_ROLES:
+            raise ValueError(
+                f"Distribution diagnostics contain unsupported role {role!r}"
+            )
         if role in by_unit[unit]:
             raise ValueError(f"Duplicate distribution diagnostic for {unit}/{role}")
         try:
             event_mass = float(row["event_mass"])
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"Invalid event mass for {unit}/{role}") from exc
-        if status == "ok" and (not math.isfinite(event_mass) or not 0 < event_mass <= 1):
+        if status == "ok" and (
+            not math.isfinite(event_mass) or not 0 < event_mass <= 1
+        ):
             raise ValueError(f"Invalid positive event mass for {unit}/{role}")
         if status == "zero_event_mass" and event_mass != 0:
-            raise ValueError(f"Zero-event diagnostic has nonzero mass for {unit}/{role}")
+            raise ValueError(
+                f"Zero-event diagnostic has nonzero mass for {unit}/{role}"
+            )
         if status == "numerical_failure":
             raise ValueError(f"Numerical distribution failure for {unit}/{role}")
         if status not in {"ok", "zero_event_mass", "numerical_failure"}:
-            raise ValueError(f"Unsupported distribution status {status!r} for {unit}/{role}")
+            raise ValueError(
+                f"Unsupported distribution status {status!r} for {unit}/{role}"
+            )
         by_unit[unit][role] = status
     eligible, excluded = [], []
     for row in units:
@@ -67,7 +77,9 @@ def classify_units(units, diagnostics, hemizygote: bool = False):
         roles = applicable_roles(row, hemizygote)
         missing = [role for role in roles if role not in by_unit[unit]]
         if missing:
-            raise ValueError(f"Missing distribution diagnostic for {unit}: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing distribution diagnostic for {unit}: {', '.join(missing)}"
+            )
         zero = [role for role in roles if by_unit[unit][role] == "zero_event_mass"]
         if zero:
             excluded.append((unit, "zero_event_mass_" + "_".join(zero)))
@@ -106,7 +118,7 @@ def parquet_rows(paths, columns: list[str]):
         parquet = pq.ParquetFile(path)
         for batch in parquet.iter_batches(columns=columns, batch_size=8192):
             values = batch.to_pydict()
-            yield from zip(*(values[column] for column in columns))
+            yield from zip(*(values[column] for column in columns), strict=True)
 
 
 def parquet_frames(paths, columns: list[str]):
@@ -121,7 +133,9 @@ def parquet_frames(paths, columns: list[str]):
 
 def masked_bed_rows(path: str | Path, allowed_units):
     """Stream canonical masked intervals, never the raw pre-PAR testing BED."""
-    for chromosome, start, end, unit in parquet_rows([path], ["CHROM", "START", "END", "testing_unit_id"]):
+    for chromosome, start, end, unit in parquet_rows(
+        [path], ["CHROM", "START", "END", "testing_unit_id"]
+    ):
         if unit in allowed_units:
             yield chromosome, start, end, unit
 
@@ -136,17 +150,24 @@ def candidate_audit_rows(paths):
 
 def _empty_variant_class_counts() -> dict[str, dict[str, int]]:
     return {
-        variant_class: {name: 0 for name in ("retained", "rejected", "observed", "absent")}
+        variant_class: {
+            name: 0 for name in ("retained", "rejected", "observed", "absent")
+        }
         for variant_class in ("snv", "indel")
     }
 
 
 def _update_variant_class_counts(
-    counts: dict[str, dict[str, int]], variant_class: str, state: str, amount: int = 1,
+    counts: dict[str, dict[str, int]],
+    variant_class: str,
+    state: str,
+    amount: int = 1,
 ) -> None:
     """Add one grouped population-state count to the v3 metadata counts."""
     if variant_class not in counts:
-        raise ValueError(f"Unsupported variant class in allele states: {variant_class!r}")
+        raise ValueError(
+            f"Unsupported variant class in allele states: {variant_class!r}"
+        )
     if state in {"observed", "absent"}:
         counts[variant_class]["retained"] += amount
         counts[variant_class][state] += amount
@@ -156,7 +177,9 @@ def _update_variant_class_counts(
         raise ValueError(f"Unsupported allele state in bundle finalization: {state!r}")
 
 
-def _variant_class_counts_from_frame(count_frame: pl.DataFrame) -> dict[str, dict[str, int]]:
+def _variant_class_counts_from_frame(
+    count_frame: pl.DataFrame,
+) -> dict[str, dict[str, int]]:
     """Build public v3 counts from a compact grouped state-count frame."""
     counts = _empty_variant_class_counts()
     for variant_class, state, amount in count_frame.iter_rows():
@@ -183,7 +206,9 @@ def variant_class_counts(state_paths, audit_paths) -> dict[str, dict[str, int]]:
             .len()
             .collect(engine="streaming")
         )
-        _merge_variant_class_counts(counts, _variant_class_counts_from_frame(count_frame))
+        _merge_variant_class_counts(
+            counts, _variant_class_counts_from_frame(count_frame)
+        )
     for _ in candidate_audit_rows(audit_paths):
         counts["indel"]["rejected"] += 1
     return counts
@@ -212,7 +237,12 @@ def write_finalization_allele_artifacts(
     """
     counts = _empty_variant_class_counts() if include_variant_class_counts else None
     state_columns = [
-        "CHROM", "POS", "REF", "ALT", "allele_state", "state_reason",
+        "CHROM",
+        "POS",
+        "REF",
+        "ALT",
+        "allele_state",
+        "state_reason",
         "af_zero_imputed_tags",
     ]
     if counts is not None:
@@ -283,25 +313,56 @@ def finalize_generated_bundle(
     """Build a certified public bundle from bounded generation artifacts."""
     combined_indel_bundle = params.variant_classes == ("snv", "indel")
     if params.variant_classes not in {("snv",), ("snv", "indel")}:
-        raise ValueError(f"Unsupported generated variant classes: {params.variant_classes!r}")
+        raise ValueError(
+            f"Unsupported generated variant classes: {params.variant_classes!r}"
+        )
     units = pl.read_parquet(inputs.units).to_dicts()
-    eligible, excluded = classify_units(units, list(diagnostics_rows(inputs.diagnostics)), hemizygote=params.hemizygote)
+    eligible, excluded = classify_units(
+        units, list(diagnostics_rows(inputs.diagnostics)), hemizygote=params.hemizygote
+    )
     eligible_set = set(eligible)
-    eligible_x_units = {row["testing_unit_id"] for row in units if row["CHROM"] == "X" and row["testing_unit_id"] in eligible_set}
+    eligible_x_units = {
+        row["testing_unit_id"]
+        for row in units
+        if row["CHROM"] == "X" and row["testing_unit_id"] in eligible_set
+    }
     if params.hemizygote and not eligible_x_units:
-        raise ValueError("HEM generation requested, but no chromosome-X testing unit survived the HET/HOM/HEM eligibility contract")
-    header = ["testing_unit_id", *[str(value) for value in range(1, params.bin_count + 1)]]
-    _, lookup_het = write_gzip_tsv_atomic(outputs.lookup_het, header, lookup_rows(inputs.lookup_het, eligible_set))
-    _, lookup_hom = write_gzip_tsv_atomic(outputs.lookup_hom, header, lookup_rows(inputs.lookup_hom, eligible_set))
-    lookup_hem = None
+        raise ValueError(
+            "HEM generation requested, but no chromosome-X testing unit survived the HET/HOM/HEM eligibility contract"
+        )
+    header = [
+        "testing_unit_id",
+        *[str(value) for value in range(1, params.bin_count + 1)],
+    ]
+    _, lookup_het = write_gzip_tsv_atomic(
+        outputs.lookup_het, header, lookup_rows(inputs.lookup_het, eligible_set)
+    )
+    _, lookup_hom = write_gzip_tsv_atomic(
+        outputs.lookup_hom, header, lookup_rows(inputs.lookup_hom, eligible_set)
+    )
+    lookup_hem_chrX = None
     if params.hemizygote:
-        hem_count, lookup_hem = write_gzip_tsv_atomic(outputs.lookup_hem, header, lookup_rows(inputs.lookup_hem, eligible_x_units))
+        hem_count, lookup_hem_chrX = write_gzip_tsv_atomic(
+            outputs.lookup_hem_chrX,
+            header,
+            lookup_rows(inputs.lookup_hem_chrX, eligible_x_units),
+        )
         if hem_count != len(eligible_x_units):
-            raise ValueError("HEM lookup rows do not exactly cover surviving chromosome-X testing units")
-    _, excluded_units = write_gzip_tsv_atomic(outputs.excluded_units, ["testing_unit_id", "exclusion_reason"], excluded)
-    _, eligible_bed = write_gzip_tsv_atomic(outputs.eligible_bed, ["#CHROM", "START", "END", "testing_unit_id"], masked_bed_rows(inputs.masked_unit_intervals, eligible_set))
+            raise ValueError(
+                "HEM lookup rows do not exactly cover surviving chromosome-X testing units"
+            )
+    _, excluded_units = write_gzip_tsv_atomic(
+        outputs.excluded_units, ["testing_unit_id", "exclusion_reason"], excluded
+    )
+    _, eligible_bed = write_gzip_tsv_atomic(
+        outputs.eligible_bed,
+        ["#CHROM", "START", "END", "testing_unit_id"],
+        masked_bed_rows(inputs.masked_unit_intervals, eligible_set),
+    )
     calibration_count, calibration_regions = write_gzip_tsv_atomic(
-        outputs.calibration_regions, ["#CHROM", "START", "END", "source"], parquet_rows([inputs.effective_mask], ["CHROM", "START", "END", "mask_state"])
+        outputs.calibration_regions,
+        ["#CHROM", "START", "END", "source"],
+        parquet_rows([inputs.effective_mask], ["CHROM", "START", "END", "mask_state"]),
     )
     (
         rejected_count,
@@ -317,16 +378,18 @@ def finalize_generated_bundle(
         include_variant_class_counts=combined_indel_bundle,
     )
     components = {
-        "lookup_het": lookup_het, "lookup_hom": lookup_hom,
-        "eligible_testing_units": eligible_bed, "calibration_regions": calibration_regions,
+        "lookup_het": lookup_het,
+        "lookup_hom": lookup_hom,
+        "eligible_testing_units": eligible_bed,
+        "calibration_regions": calibration_regions,
         "excluded_alleles": excluded_alleles,
         "candidate_audit": candidate_audit,
         "population_af_zero_imputations": population_af_zero_imputations,
         "excluded_units": excluded_units,
     }
     if params.hemizygote:
-        assert lookup_hem is not None
-        components["lookup_hem_chrX"] = lookup_hem
+        assert lookup_hem_chrX is not None
+        components["lookup_hem_chrX"] = lookup_hem_chrX
     metadata = {
         "schema_version": (
             INDEL_GENERATED_BUNDLE_SCHEMA_VERSION
@@ -342,23 +405,40 @@ def finalize_generated_bundle(
         "contig_convention": CANONICAL_CONTIG_CONVENTION,
         "testing_unit_type": params.testing_unit_type,
         "af_info_tags": dict(params.af_tags),
-        "binning": {"algorithm": FIXED_WIDTH_BINNING_ALGORITHM, "score_max": params.score_max, "bin_width": params.bin_width, "bin_count": params.bin_count, "maximum_in_final_bin": True},
+        "binning": {
+            "algorithm": FIXED_WIDTH_BINNING_ALGORITHM,
+            "score_max": params.score_max,
+            "bin_width": params.bin_width,
+            "bin_count": params.bin_count,
+            "maximum_in_final_bin": True,
+        },
         "model_assumptions": {
             "minimum_retained_fraction": params.minimum_retained_fraction,
             "retention_denominator": "supported_non_PAR_unit_bases_before_interval_exclusions",
-            "roles": ["het", "hom"] + (["hem_chrX"] if params.hemizygote else []),
-            "variant_classes": list(params.variant_classes), "unobserved_policy": params.policy,
-            "mutation_conversion": params.conversion if params.policy == "mutation_rate" else None,
-            "allele_events_independent": True, "par_policy": "excluded_before_event_assignment",
+            "roles": list(model_roles(params.hemizygote)),
+            "variant_classes": list(params.variant_classes),
+            "unobserved_policy": params.policy,
+            "mutation_conversion": params.conversion
+            if params.policy == "mutation_rate"
+            else None,
+            "allele_events_independent": True,
+            "par_policy": "excluded_before_event_assignment",
             "hemizygote_role": "hem_chrX" if params.hemizygote else None,
-            "x_chromosome": {"af_policy": params.x_af_policy, "mutation_rate_policy": params.x_mutation_rate_policy, "hemizygote_scope": "non_PAR_chrX_only"},
+            "x_chromosome": {
+                "af_policy": params.x_af_policy,
+                "mutation_rate_policy": params.x_mutation_rate_policy,
+                "hemizygote_scope": "non_PAR_chrX_only",
+            },
         },
         "counts": {
-            "eligible_units": len(eligible), "excluded_units": len(excluded),
-            "excluded_alleles": rejected_count, "calibration_intervals": calibration_count,
+            "eligible_units": len(eligible),
+            "excluded_units": len(excluded),
+            "excluded_alleles": rejected_count,
+            "calibration_intervals": calibration_count,
             "population_af_zero_imputations": zero_imputation_count,
         },
-        "resource_identities": dict(params.resource_identities), "components": components,
+        "resource_identities": dict(params.resource_identities),
+        "components": components,
         "validation_artifacts": dict(VALIDATION_ARTIFACT_FILENAMES),
     }
     if combined_indel_bundle:

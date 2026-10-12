@@ -33,7 +33,9 @@ def selected_partition_rows(path: str, candidate_keys: pl.DataFrame) -> pl.DataF
     )
 
 
-def candidate_intervals(events: pl.DataFrame, variant_class: str) -> list[tuple[int, int]]:
+def candidate_intervals(
+    events: pl.DataFrame, variant_class: str
+) -> list[tuple[int, int]]:
     """Return merged-source-compatible one-base intervals for candidate alleles."""
     return [
         (int(position) - 1, int(position))
@@ -87,8 +89,11 @@ def calculate_partition_statistics(
     if params.unobserved_policy == "mutation_rate":
         snv_intervals = candidate_intervals(events, "snv")
         rates = mutation_rate_rows(
-            inputs.mutation_rate, inputs.mutation_rate_index,
-            partition.chromosome, partition.start, partition.end,
+            inputs.mutation_rate,
+            inputs.mutation_rate_index,
+            partition.chromosome,
+            partition.start,
+            partition.end,
             intervals=snv_intervals,
         )
         events = events.join(rates, on=ALLELE_COLUMNS, how="left")
@@ -104,16 +109,26 @@ def calculate_partition_statistics(
             ).rename({"mu": "mu_indel"})
             events = events.join(indel_rates, on=ALLELE_COLUMNS, how="left")
         else:
-            events = events.with_columns(pl.lit(None, dtype=pl.Float64).alias("mu_indel"))
+            events = events.with_columns(
+                pl.lit(None, dtype=pl.Float64).alias("mu_indel")
+            )
     events = assign_effective_frequencies(
         events,
         unobserved_policy=params.unobserved_policy,
         x_af_policy=params.x_af_policy,
         x_mutation_rate_policy=params.x_mutation_rate_policy,
+        roles=params.roles,
     )
     role_events = role_event_frames(events, params.roles)
     statistics = pl.concat(
-        [statistics_for_role(role_events[role], role, params.score_max, params.bin_width) for role in params.roles],
+        [
+            statistics_for_role(
+                role_events[role], role, params.score_max, params.bin_width
+            )
+            for role in params.roles
+        ],
         how="vertical",
     )
-    write_parquet_atomic(statistics.drop("unit_bucket"), outputs.statistics, params.compression)
+    write_parquet_atomic(
+        statistics.drop("unit_bucket"), outputs.statistics, params.compression
+    )

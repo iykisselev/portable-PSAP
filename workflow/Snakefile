@@ -5,38 +5,46 @@ from snakemake.utils import min_version
 
 WORKFLOW_PYTHON_DIR = Path(workflow.basedir) / "lib" / "python"
 sys.path.insert(0, str(WORKFLOW_PYTHON_DIR))
-from workflow_plan import build_workflow_plan, normalize_run_config
+from workflow_plan import build_workflow_plan
 
 min_version("8.0")
+
 
 # The versioned scientific defaults live in config/config.yaml. Each run adds
 # its site-specific paths and settings through --configfile.
 configfile: str(Path(workflow.basedir).parent / "config" / "config.yaml")
 
+
 # Older run manifests did not name a workflow mode. Normalize a copy so they
 # still work, while leaving Snakemake's original configuration untouched.
-WORKFLOW_PLAN = build_workflow_plan(normalize_run_config(config))
+WORKFLOW_PLAN = build_workflow_plan(config)
 WORKFLOW_MODE = WORKFLOW_PLAN.mode
+
 
 # All modes use the same deployment settings, so load them once before choosing
 # the mode-specific rules below.
 include: "rules/deployment.smk"
 include: "rules/execution_resources.smk"
 
+
 if WORKFLOW_MODE in {"generate", "full"}:
+
     include: "rules/generate/context.smk"
     include: "rules/generate/prepare.smk"
     include: "rules/generate/calculate.smk"
     include: "rules/generate/finalize.smk"
 
+
 if WORKFLOW_MODE == "generate":
+
     rule all:
+        default_target: True
         input:
             marker=rules.validate_null_distribution_bundle.output.marker,
-            generation=generation_outputs
-        default_target: True
+            generation=generation_outputs,
 
 elif WORKFLOW_MODE in {"apply", "full"}:
+
     include: "rules/apply/paths.smk"
     include: "rules/apply/lookup_inputs.smk"
     include: "rules/apply/sample_discovery.smk"
@@ -45,7 +53,14 @@ elif WORKFLOW_MODE in {"apply", "full"}:
 
     # These checks read small reports and finish quickly, so running them locally
     # avoids scheduler overhead. Compute-heavy jobs still go to the scheduler.
-    localrules: validate_cohort, validate_resources, validate_model, merge_validation, require_valid_inputs, summarize_annotations, require_valid_annotations
+    localrules:
+        validate_cohort,
+        validate_resources,
+        validate_model,
+        merge_validation,
+        require_valid_inputs,
+        summarize_annotations,
+        require_valid_annotations,
 
     include: "rules/apply/validate.smk"
     include: "rules/apply/prepare.smk"
@@ -56,21 +71,24 @@ elif WORKFLOW_MODE in {"apply", "full"}:
     include: "rules/apply/cohort.smk"
 
     if WORKFLOW_MODE == "apply":
+
         rule all:
-            input:
-                str(COHORT_DIR / "cohort_candidates.tsv.gz"),
-                str(COHORT_DIR / "cohort_summary.tsv.gz"),
-                str(COHORT_DIR / "control_variants.tsv.gz")
             default_target: True
+            input:
+                COHORT_OUTPUTS["cohort_candidates"],
+                COHORT_OUTPUTS["cohort_summary"],
+                COHORT_OUTPUTS["control_variants"],
+
     else:
+
         rule all:
+            default_target: True
             input:
                 marker=rules.validate_null_distribution_bundle.output.marker,
-                cohort_candidates=str(COHORT_DIR / "cohort_candidates.tsv.gz"),
-                cohort_summary=str(COHORT_DIR / "cohort_summary.tsv.gz"),
-                control_variants=str(COHORT_DIR / "control_variants.tsv.gz"),
-                generation=generation_outputs
-            default_target: True
+                cohort_candidates=COHORT_OUTPUTS["cohort_candidates"],
+                cohort_summary=COHORT_OUTPUTS["cohort_summary"],
+                control_variants=COHORT_OUTPUTS["control_variants"],
+                generation=generation_outputs,
 
 else:
     raise ValueError(f"Unsupported workflow mode: {WORKFLOW_MODE!r}")

@@ -14,6 +14,26 @@ from pathlib import Path
 
 DNA_ALLELES = frozenset({"A", "C", "G", "T"})
 VARIANT_CLASSES = frozenset({"snv", "indel", "unsupported"})
+AUTOSOMES = tuple(str(value) for value in range(1, 23))
+GENERATION_CONTIGS = AUTOSOMES + ("X",)
+VALIDATION_CONTIGS = GENERATION_CONTIGS + ("Y",)
+CONTIG_ORDER = {
+    name: ordinal for ordinal, name in enumerate((*VALIDATION_CONTIGS, "MT"))
+}
+
+
+def contig_sort_key(chromosome: str) -> tuple[int, str]:
+    canonical = canonical_chromosome(chromosome)
+    return CONTIG_ORDER.get(canonical, len(CONTIG_ORDER)), canonical
+
+
+def parse_contig_id(header_line: str) -> str | None:
+    """Read the declared VCF contig ID without changing its source spelling."""
+    prefix = "##contig=<ID="
+    if not header_line.startswith(prefix):
+        return None
+    identifier = header_line[len(prefix) :].split(",", 1)[0].split(">", 1)[0]
+    return identifier.strip() or None
 
 
 class AlleleContractError(ValueError):
@@ -50,13 +70,17 @@ def read_fai(path: str | Path) -> dict[str, FaiRecord]:
             try:
                 length, offset, line_bases, line_bytes = map(int, fields[1:5])
             except ValueError as exc:
-                raise ValueError(f"FAI line {line_number} has non-integer layout values") from exc
+                raise ValueError(
+                    f"FAI line {line_number} has non-integer layout values"
+                ) from exc
             if length <= 0 or offset < 0 or line_bases <= 0 or line_bytes < line_bases:
                 raise ValueError(f"FAI line {line_number} has an invalid contig layout")
             chromosome = canonical_chromosome(name)
             if chromosome in records:
                 raise ValueError(f"FAI has duplicate canonical contig {chromosome!r}")
-            records[chromosome] = FaiRecord(name, length, offset, line_bases, line_bytes)
+            records[chromosome] = FaiRecord(
+                name, length, offset, line_bases, line_bytes
+            )
     return records
 
 

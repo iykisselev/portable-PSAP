@@ -29,7 +29,9 @@ def merge(base: dict, override: dict) -> dict:
 
 class StageEightContracts(unittest.TestCase):
     def test_every_supported_mode_has_a_current_example_plan(self) -> None:
-        science = yaml.safe_load((ROOT / "config" / "config.yaml").read_text(encoding="utf-8"))
+        science = yaml.safe_load(
+            (ROOT / "config" / "config.yaml").read_text(encoding="utf-8")
+        )
         examples = {
             "apply": ROOT / "runs" / "apply.example.yaml",
             "generate": ROOT / "runs" / "generate.example.yaml",
@@ -37,7 +39,9 @@ class StageEightContracts(unittest.TestCase):
         }
         for mode, path in examples.items():
             with self.subTest(mode=mode):
-                plan = build_workflow_plan(merge(science, yaml.safe_load(path.read_text(encoding="utf-8"))))
+                plan = build_workflow_plan(
+                    merge(science, yaml.safe_load(path.read_text(encoding="utf-8")))
+                )
                 self.assertEqual(mode, plan.mode)
 
 

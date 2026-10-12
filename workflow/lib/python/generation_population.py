@@ -21,9 +21,16 @@ except ImportError:  # The fixture reader supports plain, unindexed text files.
 
 
 POPULATION_SCHEMA = {
-    "CHROM": pl.String, "POS": pl.Int64, "REF": pl.String, "ALT": pl.String,
-    "allele_state": pl.String, "af": pl.Float64, "af_overall": pl.Float64,
-    "af_female": pl.Float64, "af_male": pl.Float64, "state_reason": pl.String,
+    "CHROM": pl.String,
+    "POS": pl.Int64,
+    "REF": pl.String,
+    "ALT": pl.String,
+    "allele_state": pl.String,
+    "af": pl.Float64,
+    "af_overall": pl.Float64,
+    "af_female": pl.Float64,
+    "af_male": pl.Float64,
+    "state_reason": pl.String,
     "af_zero_imputed_tags": pl.String,
 }
 
@@ -50,13 +57,17 @@ def indexed_lines(
         return
     if index:
         if pysam is None:
-            raise RuntimeError("Indexed generation resources require pysam in the generation environment")
+            raise RuntimeError(
+                "Indexed generation resources require pysam in the generation environment"
+            )
         with pysam.TabixFile(str(path), index=str(index)) as reader:
             names = {canonical_chromosome(name): name for name in reader.contigs}
             source_chromosome = names.get(chromosome)
             if source_chromosome is not None:
                 for region_start, region_end in regions:
-                    for raw in reader.fetch(source_chromosome, region_start, region_end):
+                    for raw in reader.fetch(
+                        source_chromosome, region_start, region_end
+                    ):
                         fields = raw.split("\t", 2)
                         try:
                             position = int(fields[1])
@@ -115,7 +126,10 @@ def population_info_definitions(
             if raw.startswith("##INFO=<ID="):
                 fields = dict(
                     field.split("=", 1)
-                    for field in raw.rstrip("\n").removeprefix("##INFO=<").removesuffix(">").split(",")
+                    for field in raw.rstrip("\n")
+                    .removeprefix("##INFO=<")
+                    .removesuffix(">")
+                    .split(",")
                     if "=" in field
                 )
                 info_tag = fields.get("ID")
@@ -137,7 +151,9 @@ def population_info_definitions(
             if raw.startswith("#CHROM"):
                 break
     missing = sorted(remaining)[0]
-    raise ValueError(f"Population VCF has no INFO header for configured tag {missing!r}")
+    raise ValueError(
+        f"Population VCF has no INFO header for configured tag {missing!r}"
+    )
 
 
 def population_info_definition(path: str | Path, info_tag: str) -> tuple[str, str]:
@@ -161,7 +177,7 @@ def selected_info_values(info: str, tags: Iterable[str]) -> dict[str, str]:
             continue
         value_start = hit + len(marker)
         value_end = padded.find(";", value_start)
-        values[tag] = padded[value_start:value_end if value_end >= 0 else None]
+        values[tag] = padded[value_start : value_end if value_end >= 0 else None]
     return values
 
 
@@ -186,17 +202,25 @@ def selected_af_values(
     elif number == "1" and len(alternates) == 1 and len(values) == 1:
         selected = values
     elif number == "1" and len(alternates) > 1:
-        raise ValueError(f"Population VCF has scalar selected AF on a multiallelic record at {location}")
+        raise ValueError(
+            f"Population VCF has scalar selected AF on a multiallelic record at {location}"
+        )
     else:
-        raise ValueError(f"Population VCF has invalid selected AF cardinality at {location}")
+        raise ValueError(
+            f"Population VCF has invalid selected AF cardinality at {location}"
+        )
     parsed: list[float] = []
     for value in selected:
         try:
             frequency = float(value)
         except ValueError as exc:
-            raise ValueError(f"Population VCF has nonnumeric selected AF at {location}") from exc
+            raise ValueError(
+                f"Population VCF has nonnumeric selected AF at {location}"
+            ) from exc
         if not math.isfinite(frequency) or not 0 <= frequency <= 1:
-            raise ValueError(f"Population VCF has invalid selected AF outside [0, 1] at {location}")
+            raise ValueError(
+                f"Population VCF has invalid selected AF outside [0, 1] at {location}"
+            )
         parsed.append(frequency)
     return parsed
 
@@ -241,17 +265,23 @@ def population_rows(
     configured_tags = {"overall": af_tags["overall"]}
     if x_af_policy == "sex_specific":
         if not af_tags.get("female"):
-            raise ValueError("sex_specific X policy requires generation.af_source.female")
+            raise ValueError(
+                "sex_specific X policy requires generation.af_source.female"
+            )
         configured_tags["female"] = af_tags["female"]
         if hemizygote:
             if not af_tags.get("male"):
-                raise ValueError("HEM generation with sex_specific X policy requires generation.af_source.male")
+                raise ValueError(
+                    "HEM generation with sex_specific X policy requires generation.af_source.male"
+                )
             configured_tags["male"] = af_tags["male"]
     tag_definitions = population_info_definitions(path, set(configured_tags.values()))
     definitions = {role: tag_definitions[tag] for role, tag in configured_tags.items()}
     columns: dict[str, list[object]] = {name: [] for name in POPULATION_SCHEMA}
     imputed_records: list[tuple[str, int, tuple[str, ...]]] = []
-    interval_starts = [region_start for region_start, _ in intervals] if intervals is not None else []
+    interval_starts = (
+        [region_start for region_start, _ in intervals] if intervals is not None else []
+    )
 
     def in_requested_intervals(position: int) -> bool:
         if intervals is None:
@@ -281,9 +311,15 @@ def population_rows(
             else:
                 columns["af"].append(af_values["overall"][alternate_index])
                 columns["af_overall"].append(af_values["overall"][alternate_index])
-                columns["af_female"].append(af_values.get("female", [None] * len(keys))[alternate_index])
-                columns["af_male"].append(af_values.get("male", [None] * len(keys))[alternate_index])
-                columns["af_zero_imputed_tags"].append(",".join(imputed_tags) if imputed_tags else None)
+                columns["af_female"].append(
+                    af_values.get("female", [None] * len(keys))[alternate_index]
+                )
+                columns["af_male"].append(
+                    af_values.get("male", [None] * len(keys))[alternate_index]
+                )
+                columns["af_zero_imputed_tags"].append(
+                    ",".join(imputed_tags) if imputed_tags else None
+                )
             columns["state_reason"].append(state_reason)
 
     for raw in indexed_lines(path, index, chromosome, start, end, intervals=intervals):
@@ -300,8 +336,16 @@ def population_rows(
             or not in_requested_intervals(position)
         ):
             continue
-        reference, alternates, filter_value, info = fields[3], fields[4].split(","), fields[6], fields[7]
-        keys = [allele_key(record_chromosome, position, reference, alternate) for alternate in alternates]
+        reference, alternates, filter_value, info = (
+            fields[3],
+            fields[4].split(","),
+            fields[6],
+            fields[7],
+        )
+        keys = [
+            allele_key(record_chromosome, position, reference, alternate)
+            for alternate in alternates
+        ]
         if filter_value != "PASS":
             append_rows(keys, "rejected", "non_pass_filter")
             continue
@@ -316,15 +360,21 @@ def population_rows(
         try:
             selected_with_provenance = {
                 role: selected_af_values_or_zero(
-                    values_by_tag, configured_tags[role], definitions[role][0],
-                    alternates, record_chromosome, position,
+                    values_by_tag,
+                    configured_tags[role],
+                    definitions[role][0],
+                    alternates,
+                    record_chromosome,
+                    position,
                 )
                 for role in required_roles
             }
         except ValueError as exc:
             append_rows(keys, "invalid", str(exc))
             continue
-        selected = {role: values for role, (values, _) in selected_with_provenance.items()}
+        selected = {
+            role: values for role, (values, _) in selected_with_provenance.items()
+        }
         invalid_sum_roles = [
             role for role, values in selected.items() if sum(values) > 1 + 1e-12
         ]

@@ -58,12 +58,19 @@ INDEL_REJECTION_SCHEMA = {
     "rejection_reason": pl.String,
 }
 
+
 class IndelCandidateError(ValueError):
     """Raised when an owner-partition indel catalog row is not usable."""
 
 
-def _candidate_error(message: str, *, line_number: int | None = None) -> IndelCandidateError:
-    prefix = f"Indel score resource line {line_number}: " if line_number else "Indel score resource: "
+def _candidate_error(
+    message: str, *, line_number: int | None = None
+) -> IndelCandidateError:
+    prefix = (
+        f"Indel score resource line {line_number}: "
+        if line_number
+        else "Indel score resource: "
+    )
     return IndelCandidateError(prefix + message)
 
 
@@ -109,9 +116,13 @@ def indel_score_rows(
                 line_number=line_number,
             )
         if not is_minimal_allele(key[2], key[3]):
-            raise _candidate_error(f"{key_text} is not minimal", line_number=line_number)
+            raise _candidate_error(
+                f"{key_text} is not minimal", line_number=line_number
+            )
         if not is_left_aligned_allele(key[1], key[2], key[3]):
-            raise _candidate_error(f"{key_text} is not left-aligned", line_number=line_number)
+            raise _candidate_error(
+                f"{key_text} is not left-aligned", line_number=line_number
+            )
         span_start, span_end = reference_span(key[1], key[2])
         try:
             observed_reference = reference.fetch(key[0], span_start, span_end)
@@ -128,9 +139,13 @@ def indel_score_rows(
         try:
             score = float(fields[5])
         except ValueError as exc:
-            raise _candidate_error(f"{key_text} has a nonnumeric score", line_number=line_number) from exc
+            raise _candidate_error(
+                f"{key_text} has a nonnumeric score", line_number=line_number
+            ) from exc
         if not math.isfinite(score):
-            raise _candidate_error(f"{key_text} has a non-finite score", line_number=line_number)
+            raise _candidate_error(
+                f"{key_text} has a non-finite score", line_number=line_number
+            )
         records.append(
             {
                 "CHROM": key[0],
@@ -176,7 +191,9 @@ def indel_candidate_memberships(
         span_start = int(candidate["SPAN_START"])
         span_end = int(candidate["SPAN_END"])
         if (span_start, span_end) != reference_span(key[1], key[2]):
-            raise ValueError("Indel candidate has a reference span inconsistent with POS and REF")
+            raise ValueError(
+                "Indel candidate has a reference span inconsistent with POS and REF"
+            )
         audit_row = {
             "CHROM": key[0],
             "POS": key[1],
@@ -185,8 +202,16 @@ def indel_candidate_memberships(
             "SPAN_START": span_start,
             "SPAN_END": span_end,
         }
-        if not any(mask_start <= span_start and span_end <= mask_end for mask_start, mask_end in mask):
-            rejected.append({**audit_row, "rejection_reason": "span_not_contained_in_calibration_mask"})
+        if not any(
+            mask_start <= span_start and span_end <= mask_end
+            for mask_start, mask_end in mask
+        ):
+            rejected.append(
+                {
+                    **audit_row,
+                    "rejection_reason": "span_not_contained_in_calibration_mask",
+                }
+            )
             continue
         matched_units = [
             unit_id
@@ -194,7 +219,9 @@ def indel_candidate_memberships(
             if span_start < unit_end and span_end > unit_start
         ]
         if not matched_units:
-            rejected.append({**audit_row, "rejection_reason": "no_eligible_testing_unit_overlap"})
+            rejected.append(
+                {**audit_row, "rejection_reason": "no_eligible_testing_unit_overlap"}
+            )
             continue
         for unit_id in matched_units:
             memberships.append(

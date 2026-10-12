@@ -37,10 +37,16 @@ def validate_configuration(config: Mapping[str, Any]) -> None:
     resolver = jsonschema.RefResolver(
         base_uri=SCHEMA_PATH.resolve().as_uri(),
         referrer=schema,
-        store={path.resolve().as_uri(): schemas[name] for name, path in schema_paths.items()},
+        store={
+            path.resolve().as_uri(): schemas[name]
+            for name, path in schema_paths.items()
+        },
     )
     validator = jsonschema.Draft202012Validator(schema, resolver=resolver)
-    def leaf_errors(error: jsonschema.ValidationError) -> list[jsonschema.ValidationError]:
+
+    def leaf_errors(
+        error: jsonschema.ValidationError,
+    ) -> list[jsonschema.ValidationError]:
         if not error.context:
             return [error]
         return [leaf for child in error.context for leaf in leaf_errors(child)]

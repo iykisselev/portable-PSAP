@@ -40,14 +40,22 @@ class GenerationIndelTests(unittest.TestCase):
         self.resource = Path(temporary.name) / "indels.tsv"
         self.reference = InMemoryReference("CAGTAC")
 
-    def test_reader_uses_owner_window_and_preserves_duplicate_catalog_rows(self) -> None:
+    def test_reader_uses_owner_window_and_preserves_duplicate_catalog_rows(
+        self,
+    ) -> None:
         self.resource.write_text(
             "chr1\t2\tA\tAT\t0\t15\n1\t2\tA\tAT\t0\t15\n1\t7\tC\tCA\t0\t21\n",
             encoding="utf-8",
         )
         rows = indel_score_rows(
-            self.resource, None, "1", 0, 6, self.reference,
-            max_reference_length=3, max_alternate_length=3,
+            self.resource,
+            None,
+            "1",
+            0,
+            6,
+            self.reference,
+            max_reference_length=3,
+            max_alternate_length=3,
         )
         self.assertEqual(INDEL_SCORE_SCHEMA, rows.schema)
         self.assertEqual([2, 2], rows["POS"].to_list())
@@ -56,8 +64,14 @@ class GenerationIndelTests(unittest.TestCase):
         self.resource.write_text("1\t2\tA\tG\t0\t15\n", encoding="utf-8")
         with self.assertRaisesRegex(IndelCandidateError, "not a length-changing"):
             indel_score_rows(
-                self.resource, None, "1", 0, 6, self.reference,
-                max_reference_length=3, max_alternate_length=3,
+                self.resource,
+                None,
+                "1",
+                0,
+                6,
+                self.reference,
+                max_reference_length=3,
+                max_alternate_length=3,
             )
 
     def test_membership_uses_full_ref_span_and_unit_overlap(self) -> None:
@@ -67,12 +81,17 @@ class GenerationIndelTests(unittest.TestCase):
             orient="row",
         )
         memberships, rejected = indel_candidate_memberships(
-            candidates, mask=[(8, 13)], unit_intervals=[("unit-a", 10, 11), ("unit-b", 11, 13)],
+            candidates,
+            mask=[(8, 13)],
+            unit_intervals=[("unit-a", 10, 11), ("unit-b", 11, 13)],
         )
         self.assertEqual(INDEL_MEMBERSHIP_SCHEMA, memberships.schema)
         self.assertEqual({"unit-a", "unit-b"}, set(memberships["testing_unit_id"]))
         self.assertEqual(INDEL_REJECTION_SCHEMA, rejected.schema)
-        self.assertEqual(["span_not_contained_in_calibration_mask"], rejected["rejection_reason"].to_list())
+        self.assertEqual(
+            ["span_not_contained_in_calibration_mask"],
+            rejected["rejection_reason"].to_list(),
+        )
 
 
 if __name__ == "__main__":

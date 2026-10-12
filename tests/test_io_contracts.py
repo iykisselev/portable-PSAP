@@ -37,9 +37,13 @@ class IOContractTests(unittest.TestCase):
     def test_gzip_component_is_deterministic_and_has_a_complete_inventory(self) -> None:
         with TemporaryDirectory() as temporary:
             path = Path(temporary) / "component.tsv.gz"
-            count, first = write_gzip_tsv_atomic(path, ["id", "value"], [("a", 1), ("b", 2)])
+            count, first = write_gzip_tsv_atomic(
+                path, ["id", "value"], [("a", 1), ("b", 2)]
+            )
             first_bytes = path.read_bytes()
-            _, second = write_gzip_tsv_atomic(path, ["id", "value"], [("a", 1), ("b", 2)])
+            _, second = write_gzip_tsv_atomic(
+                path, ["id", "value"], [("a", 1), ("b", 2)]
+            )
             self.assertEqual(count, 2)
             self.assertEqual(first_bytes, path.read_bytes())
             self.assertEqual(first, second)

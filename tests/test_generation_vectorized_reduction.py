@@ -25,12 +25,20 @@ from oracles import distribution, merge_statistics  # noqa: E402
 
 
 STATISTICS_COLUMNS = [
-    "testing_unit_id", "role", "bin", "certain_count", "log_none_sum",
-    "event_count", "snv_event_count", "indel_event_count",
+    "testing_unit_id",
+    "role",
+    "bin",
+    "certain_count",
+    "log_none_sum",
+    "event_count",
+    "snv_event_count",
+    "indel_event_count",
 ]
 
 
-def reference_rows(paths: list[Path], units: list[str], roles: tuple[str, ...], bin_count: int):
+def reference_rows(
+    paths: list[Path], units: list[str], roles: tuple[str, ...], bin_count: int
+):
     """Render the pre-vectorization reduction for property comparison."""
     grouped = merge_statistics(paths)
     lookups: dict[str, dict[str, list[float]]] = defaultdict(dict)
@@ -42,18 +50,26 @@ def reference_rows(paths: list[Path], units: list[str], roles: tuple[str, ...], 
                 {bin_number: entry[:3] for bin_number, entry in values.items()},
                 bin_count,
             )
-            diagnostics.append((
-                unit, role, event_mass, status, event_count,
-                sum(entry[3] for entry in values.values()),
-                sum(entry[4] for entry in values.values()),
-            ))
+            diagnostics.append(
+                (
+                    unit,
+                    role,
+                    event_mass,
+                    status,
+                    event_count,
+                    sum(entry[3] for entry in values.values()),
+                    sum(entry[4] for entry in values.values()),
+                )
+            )
             if survival is not None:
                 lookups[role][unit] = survival
     return lookups, diagnostics
 
 
 class VectorizedReductionTests(unittest.TestCase):
-    def test_seeded_random_partition_statistics_match_the_reference_within_one_ulp(self) -> None:
+    def test_seeded_random_partition_statistics_match_the_reference_within_one_ulp(
+        self,
+    ) -> None:
         units = [f"UNIT_{index:02d}" for index in range(6)]
         roles = ("het", "hom", "hem_chrX")
         bin_count = 17
@@ -80,13 +96,22 @@ class VectorizedReductionTests(unittest.TestCase):
                                         for _ in range(event_count)
                                     )
                                 )
-                                rows.append((
-                                    unit, role, bin_number, certain_count,
-                                    log_none_sum, event_count, snv_event_count,
-                                    event_count - snv_event_count,
-                                ))
+                                rows.append(
+                                    (
+                                        unit,
+                                        role,
+                                        bin_number,
+                                        certain_count,
+                                        log_none_sum,
+                                        event_count,
+                                        snv_event_count,
+                                        event_count - snv_event_count,
+                                    )
+                                )
                     path = directory / f"seed-{seed}-shard-{shard}.parquet"
-                    pl.DataFrame(rows, schema=STATISTICS_COLUMNS, orient="row").write_parquet(path)
+                    pl.DataFrame(
+                        rows, schema=STATISTICS_COLUMNS, orient="row"
+                    ).write_parquet(path)
                     paths.append(path)
 
                 expected_lookups, expected_diagnostics = reference_rows(
@@ -95,7 +120,9 @@ class VectorizedReductionTests(unittest.TestCase):
                 actual_lookups, actual_diagnostics = vectorized_lookup_rows(
                     aggregate_statistics_vectorized(paths), units, roles, bin_count
                 )
-                for expected, actual in zip(expected_diagnostics, actual_diagnostics, strict=True):
+                for expected, actual in zip(
+                    expected_diagnostics, actual_diagnostics, strict=True
+                ):
                     self.assertEqual(expected[:2], actual[:2])
                     self.assertEqual(expected[3:], actual[3:])
                     self.assertLessEqual(
@@ -103,7 +130,9 @@ class VectorizedReductionTests(unittest.TestCase):
                         max(math.ulp(expected[2]), math.ulp(actual[2])),
                     )
                 for role in roles:
-                    actual_by_unit = {str(row[0]): row[1:] for row in actual_lookups[role]}
+                    actual_by_unit = {
+                        str(row[0]): row[1:] for row in actual_lookups[role]
+                    }
                     self.assertEqual(set(expected_lookups[role]), set(actual_by_unit))
                     for unit, expected_survival in expected_lookups[role].items():
                         for expected, actual in zip(

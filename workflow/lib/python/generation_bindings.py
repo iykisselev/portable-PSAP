@@ -8,7 +8,7 @@ explicit instead of relying on anonymous attribute bags.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
@@ -25,7 +25,7 @@ class GenerationScopeInputs:
     exclusion: PathLike | None
     testing_units: PathLike
     par_regions: PathLike
-    exclusions: Mapping[str, PathLike]
+    exclusions: tuple[PathLike, ...]
     fasta: PathLike
     fasta_fai: PathLike
     mutation_rate: PathLike | None
@@ -43,7 +43,7 @@ class GenerationScopeOutputs:
     units: PathLike
     unit_intervals: PathLike
     masked_unit_intervals: PathLike
-    mask: PathLike
+    effective_mask: PathLike
 
 
 @dataclass(frozen=True)
@@ -52,9 +52,9 @@ class GenerationScopeParameters:
     partition_size: int
     unit_bucket_size: int
     compression: str
-    af_tags: Mapping[str, str] = field(default_factory=dict)
-    include_indels: bool = False
-    indel_max_reference_length: int = 1
+    af_tags: Mapping[str, str]
+    include_indels: bool
+    indel_max_reference_length: int
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,7 @@ class GenerationPartitionInputs:
     partitions: PathLike
     units: PathLike
     unit_intervals: PathLike
-    mask: PathLike
+    effective_mask: PathLike
     population_vcf: PathLike
     population_vcf_index: PathLike | None
     score_snv: PathLike
@@ -87,9 +87,9 @@ class GenerationPartitionParameters:
     x_af_policy: str
     hemizygote: bool
     compression: str
-    include_indels: bool = False
-    indel_max_reference_length: int = 1
-    indel_max_alternate_length: int = 1
+    include_indels: bool
+    indel_max_reference_length: int
+    indel_max_alternate_length: int
 
 
 @dataclass(frozen=True)
@@ -131,7 +131,7 @@ class LookupReductionInputs:
 class LookupReductionOutputs:
     lookup_het: PathLike
     lookup_hom: PathLike
-    lookup_hem: PathLike | None
+    lookup_hem_chrX: PathLike | None
     diagnostics: PathLike
 
 
@@ -145,7 +145,7 @@ class LookupReductionParameters:
 class BundleFinalizationInputs:
     lookup_het: tuple[PathLike, ...]
     lookup_hom: tuple[PathLike, ...]
-    lookup_hem: tuple[PathLike, ...]
+    lookup_hem_chrX: tuple[PathLike, ...]
     diagnostics: tuple[PathLike, ...]
     units: PathLike
     masked_unit_intervals: PathLike
@@ -158,7 +158,7 @@ class BundleFinalizationInputs:
 class BundleFinalizationOutputs:
     lookup_het: PathLike
     lookup_hom: PathLike
-    lookup_hem: PathLike | None
+    lookup_hem_chrX: PathLike | None
     eligible_bed: PathLike
     calibration_regions: PathLike
     excluded_alleles: PathLike
@@ -184,18 +184,18 @@ class BundleFinalizationParameters:
     hemizygote: bool
     variant_classes: tuple[str, ...]
     resource_identities: Mapping[str, Mapping[str, str]]
-    indel_candidate_universe: str = "score_resource"
-    indel_membership: str = "reference_span_overlap"
-    indel_mask_policy: str = "reference_span_contained"
-    indel_max_reference_length: int = 1
-    indel_max_alternate_length: int = 1
+    indel_candidate_universe: str
+    indel_membership: str
+    indel_mask_policy: str
+    indel_max_reference_length: int
+    indel_max_alternate_length: int
 
 
 @dataclass(frozen=True)
 class BundleValidationInputs:
     lookup_het: PathLike
     lookup_hom: PathLike
-    lookup_hem: PathLike | None
+    lookup_hem_chrX: PathLike | None
     eligible_bed: PathLike
     calibration_regions: PathLike
     excluded_alleles: PathLike

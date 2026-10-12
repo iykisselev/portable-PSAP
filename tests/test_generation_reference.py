@@ -31,7 +31,9 @@ class StaticReference:
 
 
 class GenerationReferenceTests(unittest.TestCase):
-    def test_memberships_are_columnar_but_preserve_base_and_alternate_order(self) -> None:
+    def test_memberships_are_columnar_but_preserve_base_and_alternate_order(
+        self,
+    ) -> None:
         rows = membership_rows(
             GenomePartition("1_000000000000_000000000005", "1", 0, 5, 0),
             mask=[(0, 5)],
@@ -41,14 +43,25 @@ class GenerationReferenceTests(unittest.TestCase):
 
         expected = pl.DataFrame(
             [
-                ("unit", "1", 1, "A", "C"), ("unit", "1", 1, "A", "G"), ("unit", "1", 1, "A", "T"),
-                ("unit", "1", 2, "C", "A"), ("unit", "1", 2, "C", "G"), ("unit", "1", 2, "C", "T"),
-                ("unit", "1", 3, "G", "A"), ("unit", "1", 3, "G", "C"), ("unit", "1", 3, "G", "T"),
-                ("unit", "1", 4, "T", "A"), ("unit", "1", 4, "T", "C"), ("unit", "1", 4, "T", "G"),
+                ("unit", "1", 1, "A", "C"),
+                ("unit", "1", 1, "A", "G"),
+                ("unit", "1", 1, "A", "T"),
+                ("unit", "1", 2, "C", "A"),
+                ("unit", "1", 2, "C", "G"),
+                ("unit", "1", 2, "C", "T"),
+                ("unit", "1", 3, "G", "A"),
+                ("unit", "1", 3, "G", "C"),
+                ("unit", "1", 3, "G", "T"),
+                ("unit", "1", 4, "T", "A"),
+                ("unit", "1", 4, "T", "C"),
+                ("unit", "1", 4, "T", "G"),
             ],
             schema={
-                "testing_unit_id": pl.String, "CHROM": pl.String, "POS": pl.Int64,
-                "REF": pl.String, "ALT": pl.String,
+                "testing_unit_id": pl.String,
+                "CHROM": pl.String,
+                "POS": pl.Int64,
+                "REF": pl.String,
+                "ALT": pl.String,
             },
             orient="row",
         )

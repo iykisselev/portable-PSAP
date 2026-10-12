@@ -32,7 +32,12 @@ class GenerationProbabilityTests(unittest.TestCase):
         self.assertAlmostEqual(event_mass, 0.4424)
         assert survival is not None
         self.assertAlmostEqual(survival[4], 0.32 / 0.4424)
-        self.assertTrue(all(left >= right for left, right in zip(survival, survival[1:])))
+        self.assertTrue(
+            all(
+                left >= right
+                for left, right in zip(survival, survival[1:], strict=False)
+            )
+        )
 
     def test_event_models_preserve_probability_bounds_and_hem_identity(self) -> None:
         values = pl.DataFrame({"effective_af": [0.0, 0.2, 0.5, 1.0]}).select(

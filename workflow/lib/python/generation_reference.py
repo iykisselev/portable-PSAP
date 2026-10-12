@@ -28,12 +28,14 @@ _BASE_CODES = np.full(256, -1, dtype=np.int8)
 _BASE_CODES[[ord("A"), ord("C"), ord("G"), ord("T")]] = np.arange(4, dtype=np.int8)
 _BASES = np.array(["A", "C", "G", "T"])
 # Rows are ordered exactly as ``for alternate in 'ACGT'`` after excluding REF.
-_ALTERNATES = np.array([
-    ["C", "G", "T"],
-    ["A", "G", "T"],
-    ["A", "C", "T"],
-    ["A", "C", "G"],
-])
+_ALTERNATES = np.array(
+    [
+        ["C", "G", "T"],
+        ["A", "G", "T"],
+        ["A", "C", "T"],
+        ["A", "C", "G"],
+    ]
+)
 
 
 class ReferenceReader:
@@ -49,7 +51,9 @@ class ReferenceReader:
         """Fetch one bounded half-open interval with canonical chromosome names."""
         record = self.contigs[chromosome]
         if start < 0 or end > record.length or start > end:
-            raise ValueError(f"Reference request is outside {chromosome!r}: {start}-{end}")
+            raise ValueError(
+                f"Reference request is outside {chromosome!r}: {start}-{end}"
+            )
         if self.reader is not None:
             return self.reader.fetch(record.name, start, end).upper()
 
@@ -59,7 +63,11 @@ class ReferenceReader:
             while position < end:
                 within_line = position % record.line_bases
                 take = min(end - position, record.line_bases - within_line)
-                handle.seek(record.offset + (position // record.line_bases) * record.line_bytes + within_line)
+                handle.seek(
+                    record.offset
+                    + (position // record.line_bases) * record.line_bytes
+                    + within_line
+                )
                 sequence.append(handle.read(take))
                 position += take
         return b"".join(sequence).decode("ascii").upper()
@@ -122,12 +130,16 @@ def membership_rows(
                     },
                     schema={"POS": pl.Int64, "REF": pl.String, "ALT": pl.String},
                     strict=False,
-                ).with_columns(
+                )
+                .with_columns(
                     pl.lit(unit).alias("testing_unit_id"),
                     pl.lit(partition.chromosome).alias("CHROM"),
-                ).select(*MEMBERSHIP_SCHEMA)
+                )
+                .select(*MEMBERSHIP_SCHEMA)
             )
     if not frames:
         return pl.DataFrame(schema=MEMBERSHIP_SCHEMA)
     memberships = pl.concat(frames, how="vertical")
-    return memberships.unique(maintain_order=True) if needs_deduplication else memberships
+    return (
+        memberships.unique(maintain_order=True) if needs_deduplication else memberships
+    )

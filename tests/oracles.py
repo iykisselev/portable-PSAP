@@ -44,14 +44,24 @@ def merge_statistics(
     accumulated: dict[tuple[str, str, int], list[float | int]] = {}
     for path in files:
         for (
-            unit, role, bin_number, certain_count, log_none_sum, event_count,
-            snv_event_count, indel_event_count,
+            unit,
+            role,
+            bin_number,
+            certain_count,
+            log_none_sum,
+            event_count,
+            snv_event_count,
+            indel_event_count,
         ) in pl.read_parquet(path).iter_rows():
             key = (unit, role, bin_number)
             if key not in accumulated:
                 accumulated[key] = [
-                    certain_count, log_none_sum, 0.0, event_count,
-                    snv_event_count, indel_event_count,
+                    certain_count,
+                    log_none_sum,
+                    0.0,
+                    event_count,
+                    snv_event_count,
+                    indel_event_count,
                 ]
                 continue
             current = accumulated[key]
@@ -63,17 +73,26 @@ def merge_statistics(
             current[3] += event_count
             current[4] += snv_event_count
             current[5] += indel_event_count
-    grouped: dict[
-        tuple[str, str], dict[int, tuple[int, float, int, int, int]]
-    ] = defaultdict(dict)
+    grouped: dict[tuple[str, str], dict[int, tuple[int, float, int, int, int]]] = (
+        defaultdict(dict)
+    )
     for (
-        unit, role, bin_number,
+        unit,
+        role,
+        bin_number,
     ), (
-        certain_count, log_none_sum, _, event_count, snv_event_count,
+        certain_count,
+        log_none_sum,
+        _,
+        event_count,
+        snv_event_count,
         indel_event_count,
     ) in accumulated.items():
         grouped[(unit, role)][bin_number] = (
-            int(certain_count), float(log_none_sum), int(event_count),
-            int(snv_event_count), int(indel_event_count),
+            int(certain_count),
+            float(log_none_sum),
+            int(event_count),
+            int(snv_event_count),
+            int(indel_event_count),
         )
     return grouped

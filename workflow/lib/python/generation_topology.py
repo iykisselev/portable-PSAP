@@ -7,7 +7,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
 
-from bundle_contract import fixed_width_bin_count
+from bundle_contract import fixed_width_bin_count, model_roles
 from workflow_plan import (
     GenerationPlan,
     GenerationSettings,
@@ -72,6 +72,6 @@ def build_generation_execution_layout(
         statistics_dir=statistics_dir,
         lookup_bucket_dir=lookup_bucket_dir,
         bin_count=bin_count,
-        roles=("het", "hom") + (("hem_chrX",) if model.hemizygote else ()),
+        roles=model_roles(model.hemizygote),
         bundle_paths=generated_bundle_paths(plan.bundle_dir),
     )

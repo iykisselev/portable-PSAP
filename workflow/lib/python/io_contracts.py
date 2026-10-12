@@ -66,7 +66,9 @@ def open_text(
     if require_gzip and not compressed:
         raise ValueError(f"Expected a gzip-compressed text file: {resource}")
     if compressed:
-        return gzip.open(resource, "rt", encoding="utf-8", errors=errors, newline=newline)
+        return gzip.open(
+            resource, "rt", encoding="utf-8", errors=errors, newline=newline
+        )
     return resource.open("rt", encoding="utf-8", errors=errors, newline=newline)
 
 
@@ -97,7 +99,9 @@ def iter_bed(
                     )
                 chromosome = fields[0].strip()
                 if not chromosome:
-                    raise BedFormatError(f"BED line {line_number} has an empty chromosome")
+                    raise BedFormatError(
+                        f"BED line {line_number} has an empty chromosome"
+                    )
                 try:
                     start, end = int(fields[1]), int(fields[2])
                 except ValueError as exc:
@@ -136,7 +140,9 @@ def write_json_atomic(path: str | Path, value: object) -> None:
     """Write a stable JSON document only after its complete content is ready."""
     destination = Path(path)
     temporary = _temporary_path(destination)
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     os.replace(temporary, destination)
 
 
@@ -262,7 +268,9 @@ def write_gzip_tsv_atomic(
     return writer.count, writer.inventory
 
 
-def component_inventory(path: str | Path, sha256: str | None = None) -> dict[str, object]:
+def component_inventory(
+    path: str | Path, sha256: str | None = None
+) -> dict[str, object]:
     """Return the filename, compressed size, and SHA-256 used in bundle metadata."""
     component = Path(path)
     return {

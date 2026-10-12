@@ -99,9 +99,7 @@ def planned_job_count(result: subprocess.CompletedProcess[str]) -> int:
 
 def completed_step_count(result: subprocess.CompletedProcess[str]) -> int:
     """Read the completed-step total from a successful execution transcript."""
-    steps = re.findall(
-        r"(\d+) of \1 steps \(100%\) done", command_output(result)
-    )
+    steps = re.findall(r"(\d+) of \1 steps \(100%\) done", command_output(result))
     if not steps:
         raise ValueError("Snakemake did not emit a completed-step total")
     return int(steps[-1])

@@ -30,11 +30,16 @@ def check_generation_index_binding(
 def check_unindexed_fixture(path: str | Path) -> None:
     """Bound the fixture fallback before opening a sequential resource stream."""
     resource = Path(path)
-    if resource.suffix.lower() in COMPRESSED_SUFFIXES or resource.stat().st_size > MAX_UNINDEXED_FIXTURE_BYTES:
+    if (
+        resource.suffix.lower() in COMPRESSED_SUFFIXES
+        or resource.stat().st_size > MAX_UNINDEXED_FIXTURE_BYTES
+    ):
         raise ValueError(
             f"Generation resource {resource!s} requires an explicit .tbi or .csi index. "
             "The unindexed fallback is limited to uncompressed fixtures up to 1 MiB."
         )
     with resource.open("rb") as handle:
         if handle.read(2) == b"\x1f\x8b":
-            raise ValueError(f"Compressed generation resource {resource!s} requires an explicit .tbi or .csi index.")
+            raise ValueError(
+                f"Compressed generation resource {resource!s} requires an explicit .tbi or .csi index."
+            )

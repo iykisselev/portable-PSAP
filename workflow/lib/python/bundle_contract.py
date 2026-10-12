@@ -19,7 +19,11 @@ CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION = 2
 INDEL_GENERATED_BUNDLE_CONTRACT = "generated_bundle_v3"
 INDEL_GENERATED_BUNDLE_SCHEMA_VERSION = 3
 SUPPORTED_GENERATED_BUNDLE_CONTRACTS = frozenset(
-    {"generated_bundle_v1", CURRENT_GENERATED_BUNDLE_CONTRACT, INDEL_GENERATED_BUNDLE_CONTRACT}
+    {
+        "generated_bundle_v1",
+        CURRENT_GENERATED_BUNDLE_CONTRACT,
+        INDEL_GENERATED_BUNDLE_CONTRACT,
+    }
 )
 FIXED_WIDTH_BINNING_ALGORITHM = "fixed_width_decimal_v1"
 CANONICAL_CONTIG_CONVENTION = "canonical_without_chr_prefix"
@@ -30,7 +34,7 @@ BUNDLE_COMPONENT_FILENAMES: Mapping[str, str] = MappingProxyType(
     {
         "lookup_het": "lookup_het.tsv.gz",
         "lookup_hom": "lookup_hom.tsv.gz",
-        "lookup_hem": "lookup_hem_chrX.tsv.gz",
+        "lookup_hem_chrX": "lookup_hem_chrX.tsv.gz",
         "eligible_bed": "eligible_testing_units.bed.gz",
         "calibration_regions": "calibration_regions.bed.gz",
         "excluded_alleles": "excluded_alleles.tsv.gz",
@@ -56,6 +60,11 @@ HEM_COMPONENT = "lookup_hem_chrX"
 GENERATED_ROLES = ("het", "hom", "hem_chrX")
 
 
+def model_roles(hemizygote: bool) -> tuple[str, ...]:
+    """Return enabled lookup roles in the published contract order."""
+    return GENERATED_ROLES if hemizygote else GENERATED_ROLES[:2]
+
+
 class BundleContractError(ValueError):
     """Raised when a bundle cannot be read or upgraded under this release."""
 
@@ -73,8 +82,15 @@ def fixed_width_bin_count(score_max: float, bin_width: float) -> int:
         maximum = float(score_max)
         width = float(bin_width)
     except (TypeError, ValueError) as exc:
-        raise ValueError("score_max and bin_width must be positive finite numbers") from exc
-    if not math.isfinite(maximum) or maximum <= 0 or not math.isfinite(width) or width <= 0:
+        raise ValueError(
+            "score_max and bin_width must be positive finite numbers"
+        ) from exc
+    if (
+        not math.isfinite(maximum)
+        or maximum <= 0
+        or not math.isfinite(width)
+        or width <= 0
+    ):
         raise ValueError("score_max and bin_width must be positive finite numbers")
     scaled = maximum / width
     if not math.isfinite(scaled):

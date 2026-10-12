@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import math
 import sys
+from pathlib import Path
 
 import numpy as np
 import polars as pl
 
 from bundle_contract import fixed_width_bin_count
+from genomic_contracts import CONTIG_ORDER
 
 
 def fixed_width_bin_expression(score_max: float, bin_width: float) -> pl.Expr:
@@ -19,8 +21,12 @@ def fixed_width_bin_expression(score_max: float, bin_width: float) -> pl.Expr:
     score = pl.col("score").clip(0, score_max)
     scaled = score / bin_width
     nearest = scaled.round(0)
-    tolerance = sys.float_info.epsilon * 64 * pl.max_horizontal(pl.lit(1.0), scaled.abs())
-    corrected = pl.when((scaled - nearest).abs() <= tolerance).then(nearest).otherwise(scaled)
+    tolerance = (
+        sys.float_info.epsilon * 64 * pl.max_horizontal(pl.lit(1.0), scaled.abs())
+    )
+    corrected = (
+        pl.when((scaled - nearest).abs() <= tolerance).then(nearest).otherwise(scaled)
+    )
     return corrected.floor().cast(pl.Int64).add(1).clip(1, bin_count).alias("bin")
 
 
@@ -54,31 +60,62 @@ def unit_bucket_frame(
         raise ValueError("Eligible testing units require genomic intervals")
     # Scope preparation accepts only canonical autosomes and chrX, so numeric
     # contig order followed by X is stable across platforms and input BED order.
-    return ordered.with_columns(
-        pl.col("_chromosome").cast(pl.Int64, strict=False).fill_null(23).alias("_chromosome_order")
-    ).sort("_chromosome_order", "_first_start", "testing_unit_id").select("testing_unit_id").with_row_index("unit_ordinal").with_columns(
-        (pl.col("unit_ordinal") // bucket_size).cast(pl.Int64).alias("unit_bucket")
-    ).drop("unit_ordinal")
+    return (
+        ordered.with_columns(
+            pl.col("_chromosome")
+            .cast(pl.String)
+            .replace_strict(CONTIG_ORDER)
+            .alias("_chromosome_order")
+        )
+        .sort("_chromosome_order", "_first_start", "testing_unit_id")
+        .select("testing_unit_id")
+        .with_row_index("unit_ordinal")
+        .with_columns(
+            (pl.col("unit_ordinal") // bucket_size).cast(pl.Int64).alias("unit_bucket")
+        )
+        .drop("unit_ordinal")
+    )
 
 
-def statistics_for_role(events: pl.DataFrame, role: str, score_max: float, bin_width: float) -> pl.DataFrame:
+def statistics_for_role(
+    events: pl.DataFrame, role: str, score_max: float, bin_width: float
+) -> pl.DataFrame:
     """Emit additive no-event statistics once per unit, role, and score bin."""
     probability = role_probability_expression(role)
     return (
-        events.with_columns(probability.alias("q"), fixed_width_bin_expression(score_max, bin_width))
+        events.with_columns(
+            probability.alias("q"), fixed_width_bin_expression(score_max, bin_width)
+        )
         .filter(pl.col("q") > 0)
         .group_by("testing_unit_id", "unit_bucket", "bin")
         .agg(
             (pl.col("q") == 1).cast(pl.Int64).sum().alias("certain_count"),
-            pl.when(pl.col("q") < 1).then((-pl.col("q")).log1p()).otherwise(pl.lit(0.0)).sum().alias("log_none_sum"),
+            pl.when(pl.col("q") < 1)
+            .then((-pl.col("q")).log1p())
+            .otherwise(pl.lit(0.0))
+            .sum()
+            .alias("log_none_sum"),
             pl.len().alias("event_count"),
-            (pl.col("variant_class") == "snv").cast(pl.Int64).sum().alias("snv_event_count"),
-            (pl.col("variant_class") == "indel").cast(pl.Int64).sum().alias("indel_event_count"),
+            (pl.col("variant_class") == "snv")
+            .cast(pl.Int64)
+            .sum()
+            .alias("snv_event_count"),
+            (pl.col("variant_class") == "indel")
+            .cast(pl.Int64)
+            .sum()
+            .alias("indel_event_count"),
         )
         .with_columns(pl.lit(role).alias("role"))
         .select(
-            "testing_unit_id", "unit_bucket", "role", "bin", "certain_count",
-            "log_none_sum", "event_count", "snv_event_count", "indel_event_count",
+            "testing_unit_id",
+            "unit_bucket",
+            "role",
+            "bin",
+            "certain_count",
+            "log_none_sum",
+            "event_count",
+            "snv_event_count",
+            "indel_event_count",
         )
     )
 
@@ -153,7 +190,10 @@ def vectorized_lookup_rows(
         if not role_statistics.is_empty():
             try:
                 row_indices = np.fromiter(
-                    (unit_index[str(unit)] for unit in role_statistics["testing_unit_id"]),
+                    (
+                        unit_index[str(unit)]
+                        for unit in role_statistics["testing_unit_id"]
+                    ),
                     dtype=np.intp,
                     count=role_statistics.height,
                 )
@@ -163,12 +203,28 @@ def vectorized_lookup_rows(
                 ) from exc
             column_indices = role_statistics["bin"].to_numpy().astype(np.intp) - 1
             if np.any(column_indices < 0) or np.any(column_indices >= bin_count):
-                raise ValueError("Partition statistics contain a bin outside the configured range")
-            log_none[row_indices, column_indices] = role_statistics["log_none_sum"].to_numpy()
-            certain[row_indices, column_indices] = role_statistics["certain_count"].to_numpy() > 0
-            np.add.at(event_count, row_indices, role_statistics["event_count"].to_numpy())
-            np.add.at(snv_event_count, row_indices, role_statistics["snv_event_count"].to_numpy())
-            np.add.at(indel_event_count, row_indices, role_statistics["indel_event_count"].to_numpy())
+                raise ValueError(
+                    "Partition statistics contain a bin outside the configured range"
+                )
+            log_none[row_indices, column_indices] = role_statistics[
+                "log_none_sum"
+            ].to_numpy()
+            certain[row_indices, column_indices] = (
+                role_statistics["certain_count"].to_numpy() > 0
+            )
+            np.add.at(
+                event_count, row_indices, role_statistics["event_count"].to_numpy()
+            )
+            np.add.at(
+                snv_event_count,
+                row_indices,
+                role_statistics["snv_event_count"].to_numpy(),
+            )
+            np.add.at(
+                indel_event_count,
+                row_indices,
+                role_statistics["indel_event_count"].to_numpy(),
+            )
         has_event = event_count > 0
         has_certain = certain.any(axis=1)
         total_log_none = np.fromiter(
@@ -197,15 +253,32 @@ def vectorized_lookup_rows(
         )
         np.clip(survival, 0.0, 1.0, out=survival)
         role_results[role] = (
-            status, event_mass, event_count, snv_event_count, indel_event_count, survival,
+            status,
+            event_mass,
+            event_count,
+            snv_event_count,
+            indel_event_count,
+            survival,
         )
     for index, unit in enumerate(units):
         for role in roles:
-            status, event_mass, event_count, snv_event_count, indel_event_count, survival = role_results[role]
+            (
+                status,
+                event_mass,
+                event_count,
+                snv_event_count,
+                indel_event_count,
+                survival,
+            ) = role_results[role]
             diagnostics.append(
                 (
-                    unit, role, float(event_mass[index]), str(status[index]),
-                    int(event_count[index]), int(snv_event_count[index]), int(indel_event_count[index]),
+                    unit,
+                    role,
+                    float(event_mass[index]),
+                    str(status[index]),
+                    int(event_count[index]),
+                    int(snv_event_count[index]),
+                    int(indel_event_count[index]),
                 )
             )
             if status[index] == "ok":

@@ -16,7 +16,9 @@ from io_contracts import iter_bed, open_text
 
 try:
     import pysam
-except ImportError:  # pragma: no cover - production validation environment supplies pysam
+except (
+    ImportError
+):  # pragma: no cover - production validation environment supplies pysam
     pysam = None
 
 
@@ -69,18 +71,19 @@ def parse_exclusion_tsv_row(
 
     try:
         end = int(columns[2])
-    except ValueError:
+    except ValueError as error:
         if len(columns) < 4 or start < 1 or not columns[2] or not columns[3]:
-            raise ValueError("must contain either CHROM,START,END or CHROM,POS,REF,ALT")
+            raise ValueError(
+                "must contain either CHROM,START,END or CHROM,POS,REF,ALT"
+            ) from error
         alternates = tuple(columns[3].split(","))
         if any(not alternate for alternate in alternates):
-            raise ValueError("has an empty ALT allele")
+            raise ValueError("has an empty ALT allele") from error
         return ExclusionAlleles(chromosome, start, columns[2], alternates)
 
     if start < 1 or end < start:
         raise ValueError(
-            "interval must satisfy 1 <= start <= end; "
-            f"received {start}, {end}"
+            f"interval must satisfy 1 <= start <= end; received {start}, {end}"
         )
     return ExclusionInterval(chromosome, start, end)
 
@@ -179,9 +182,7 @@ def vcf_record_span(columns: list[str]) -> tuple[int, int]:
             except ValueError as exc:
                 raise ValueError(f"VCF INFO/END is not an integer: {field!r}") from exc
             if info_end < position:
-                raise ValueError(
-                    f"VCF INFO/END precedes POS: {position}, {info_end}"
-                )
+                raise ValueError(f"VCF INFO/END precedes POS: {position}, {info_end}")
             end = max(end, info_end)
             break
 
@@ -302,9 +303,18 @@ def project_vcf_records(
                 (chromosome, position, columns[3], alternate) in variants
                 for alternate in columns[4].split(",")
             )
-            indexed_match = indexed_tsv_matches_variant(
-                readers, columns[0], position, record_end, columns[3], columns[4].split(",")
-            ) if readers else False
+            indexed_match = (
+                indexed_tsv_matches_variant(
+                    readers,
+                    columns[0],
+                    position,
+                    record_end,
+                    columns[3],
+                    columns[4].split(","),
+                )
+                if readers
+                else False
+            )
             if interval_match or variant_match or indexed_match:
                 output.write(line)
 
@@ -317,5 +327,8 @@ def write_projected_vcf(
 ) -> None:
     """Project a VCF path onto exclusion targets for direct library callers."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open_text(cohort_path, errors="replace") as cohort, output_path.open("w", encoding="utf-8") as output:
+    with (
+        open_text(cohort_path, errors="replace") as cohort,
+        output_path.open("w", encoding="utf-8") as output,
+    ):
         project_vcf_records(cohort, output, intervals, variants, str(cohort_path))

@@ -15,11 +15,7 @@ def is_bgzf(path: str | Path) -> bool:
     try:
         with Path(path).open("rb") as handle:
             header = handle.read(12)
-            if (
-                len(header) != 12
-                or header[:2] != b"\x1f\x8b"
-                or not header[3] & 0x04
-            ):
+            if len(header) != 12 or header[:2] != b"\x1f\x8b" or not header[3] & 0x04:
                 return False
             extra_length = int.from_bytes(header[10:12], byteorder="little")
             extra = handle.read(extra_length)

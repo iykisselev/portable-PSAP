@@ -6,20 +6,32 @@ rule finalize_null_distribution_bundle:
     input:
         lookup_het=lambda wc: generation_bucket_artifacts(wc, "lookup_het"),
         lookup_hom=lambda wc: generation_bucket_artifacts(wc, "lookup_hom"),
-        lookup_hem=hem_artifact(
-            lambda wc: generation_bucket_artifacts(wc, "lookup_hem")
-        ),
+        lookup_hem_chrX=lambda wc: generation_bucket_artifacts(wc, "lookup_hem_chrX"),
         diagnostics=lambda wc: generation_bucket_artifacts(wc, "diagnostics"),
         units=lambda wc: generation_scope_artifact(wc, "units"),
-        masked_unit_intervals=lambda wc: generation_scope_artifact(wc, "masked_unit_intervals"),
+        masked_unit_intervals=lambda wc: generation_scope_artifact(
+            wc, "masked_unit_intervals"
+        ),
         allele_states=lambda wc: generation_partition_artifacts(wc, "allele_states"),
         candidate_audit=lambda wc: generation_partition_artifacts(wc, "candidate_audit"),
-        effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask")
+        effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
     output:
         **{
             name: ensure(path, non_empty=True) if path else []
             for name, path in GENERATION_CONTEXT.bundle_outputs().items()
-        }
+        },
+    log:
+        str(GENERATION_CONTEXT.log_dir / "finalize.log"),
+    conda:
+        env("validation")
+    container:
+        sif("validation")
+    envmodules:
+        *mod("validation"),
+    threads: 1
+    resources:
+        mem_mb=policy_resources("finalize_null_distribution_bundle").mem_mb,
+        runtime=policy_resources("finalize_null_distribution_bundle").runtime,
     params:
         minimum_retained_fraction=WORKFLOW_PLAN.generation_settings.minimum_retained_fraction,
         bin_count=GENERATION_CONTEXT.bin_count,
@@ -42,17 +54,7 @@ rule finalize_null_distribution_bundle:
         resource_identities={
             name: dict(identity)
             for name, identity in GENERATION_CONTEXT.bundle_resource_identities.items()
-        }
-    threads: 1
-    resources:
-        mem_mb=policy_resources("finalize_null_distribution_bundle").mem_mb,
-        runtime=policy_resources("finalize_null_distribution_bundle").runtime
-    conda:
-        env("validation")
-    envmodules: *mod("validation")
-    container: sif("validation")
-    log:
-        str(GENERATION_CONTEXT.log_dir / "finalize.log")
+        },
     script:
         str(GENERATION_SCRIPT_DIR / "finalize_bundle.py")
 
@@ -64,19 +66,23 @@ rule validate_null_distribution_bundle:
             name: getattr(rules.finalize_null_distribution_bundle.output, name)
             for name in GENERATION_CONTEXT.bundle_outputs()
         },
-        schema=str(Path(workflow.basedir) / "schemas" / "null_distribution_bundle.schema.yaml")
+        schema=str(
+            Path(workflow.basedir) / "schemas" / "null_distribution_bundle.schema.yaml"
+        ),
     output:
         validation=ensure(GENERATION_CONTEXT.bundle_paths["validation"], non_empty=True),
-        marker=ensure(GENERATION_CONTEXT.bundle_paths["marker"], non_empty=True)
+        marker=ensure(GENERATION_CONTEXT.bundle_paths["marker"], non_empty=True),
+    log:
+        str(GENERATION_CONTEXT.log_dir / "validate_bundle.log"),
+    conda:
+        env("validation")
+    container:
+        sif("validation")
+    envmodules:
+        *mod("validation"),
     threads: 1
     resources:
         mem_mb=policy_resources("validate_null_distribution_bundle").mem_mb,
-        runtime=policy_resources("validate_null_distribution_bundle").runtime
-    conda:
-        env("validation")
-    envmodules: *mod("validation")
-    container: sif("validation")
-    log:
-        str(GENERATION_CONTEXT.log_dir / "validate_bundle.log")
+        runtime=policy_resources("validate_null_distribution_bundle").runtime,
     script:
         str(GENERATION_SCRIPT_DIR / "validate_bundle.py")

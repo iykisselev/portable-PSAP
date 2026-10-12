@@ -16,7 +16,10 @@ from generation_bindings import (
     GenerationScopeOutputs,
     GenerationScopeParameters,
 )
-from generation_resource_policy import MAX_UNINDEXED_FIXTURE_BYTES, check_unindexed_fixture
+from generation_resource_policy import (
+    MAX_UNINDEXED_FIXTURE_BYTES,
+    check_unindexed_fixture,
+)
 from generation_scope import prepare_generation_scope
 
 
@@ -28,7 +31,9 @@ class GenerationResourcePolicyTests(unittest.TestCase):
 
     def test_small_plain_fixture_can_be_read(self):
         self.path.write_text("1\t1\tA\tC\t0\t1\n")
-        self.assertEqual(list(indexed_lines(self.path, None, "1", 0, 10)), [self.path.read_text()])
+        self.assertEqual(
+            list(indexed_lines(self.path, None, "1", 0, 10)), [self.path.read_text()]
+        )
 
     def test_oversized_fallback_is_rejected_before_opening_text(self):
         with self.path.open("wb") as handle:
@@ -45,7 +50,10 @@ class GenerationResourcePolicyTests(unittest.TestCase):
 
     def test_compressed_suffix_is_rejected_without_reading_file(self):
         for suffix in (".gz", ".bgz", ".bgzf", ".bcf"):
-            with self.subTest(suffix=suffix), self.assertRaisesRegex(ValueError, "requires an explicit"):
+            with (
+                self.subTest(suffix=suffix),
+                self.assertRaisesRegex(ValueError, "requires an explicit"),
+            ):
                 check_unindexed_fixture(self.path.with_suffix(suffix))
 
     def test_scope_rejects_oversized_fixture_before_reading_units(self):
@@ -59,7 +67,7 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             exclusion=None,
             testing_units=self.path,
             par_regions=self.path,
-            exclusions={},
+            exclusions=(),
             fasta=self.path,
             fasta_fai=self.path,
             mutation_rate=None,
@@ -71,9 +79,9 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             units=self.path,
             unit_intervals=self.path,
             masked_unit_intervals=self.path,
-            mask=self.path,
+            effective_mask=self.path,
         )
-        params = GenerationScopeParameters(0.5, 10, 10, "zstd")
+        params = GenerationScopeParameters(0.5, 10, 10, "zstd", {}, False, 50)
         with patch("generation_scope.read_bed_units") as read_units:
             with self.assertRaisesRegex(ValueError, "up to 1 MiB"):
                 prepare_generation_scope(inputs, outputs, params)

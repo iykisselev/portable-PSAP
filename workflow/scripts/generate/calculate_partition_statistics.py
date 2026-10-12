@@ -1,8 +1,9 @@
 """Snakemake adapter for bounded probability aggregation."""
 
+from pathlib import Path
 import sys
 
-sys.path.insert(0, snakemake.scriptdir)
+sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
 from _bootstrap import bootstrap
 
 bootstrap(snakemake, configure_polars=True)
@@ -15,7 +16,6 @@ from generation_bindings import (
     PartitionStatisticsOutputs,
     PartitionStatisticsParameters,
 )
-from generation_probability import statistics_for_role
 
 
 def main() -> None:

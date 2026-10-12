@@ -40,14 +40,18 @@ def bundle_lookup_source(bundle: Path) -> dict[str, object]:
 class BundleFailureWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.temporary = tempfile.TemporaryDirectory(prefix="portable-psap-bundle-failure-")
+        cls.temporary = tempfile.TemporaryDirectory(
+            prefix="portable-psap-bundle-failure-"
+        )
         cls.root = Path(cls.temporary.name)
         result = run_workflow(GENERATE_MANIFEST, cls.root / "generated")
         output = command_output(result)
         if result.returncode:
             raise AssertionError(output[-6000:])
         cls.bundle = cls.root / "generated" / "generate" / "fixture" / "bundle"
-        cls.base_manifest = yaml.safe_load((ROOT / "tests" / "smoke" / "run.yaml").read_text(encoding="utf-8"))
+        cls.base_manifest = yaml.safe_load(
+            (ROOT / "tests" / "smoke" / "run.yaml").read_text(encoding="utf-8")
+        )
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -58,17 +62,23 @@ class BundleFailureWorkflowTests(unittest.TestCase):
         manifest = copy.deepcopy(self.base_manifest)
         manifest["workflow"] = {"mode": "apply"}
         manifest["run"] = {"apply_prefix": name}
-        manifest["bindings"]["reference"]["lookup_source"] = bundle_lookup_source(bundle)
+        manifest["bindings"]["reference"]["lookup_source"] = bundle_lookup_source(
+            bundle
+        )
         path = self.root / f"{name}.yaml"
         path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
         return path
 
-    def test_corrupt_component_fails_certificate_validation_before_apply_work(self) -> None:
+    def test_corrupt_component_fails_certificate_validation_before_apply_work(
+        self,
+    ) -> None:
         bundle = self.root / "corrupt-bundle"
         shutil.copytree(self.bundle, bundle)
         with (bundle / "lookup_het.tsv.gz").open("ab") as handle:
             handle.write(b"corrupt")
-        result = run_workflow(self.apply_manifest(bundle, "corrupt"), self.root / "corrupt-output")
+        result = run_workflow(
+            self.apply_manifest(bundle, "corrupt"), self.root / "corrupt-output"
+        )
         output = command_output(result)
         self.assertNotEqual(0, result.returncode)
         self.assertRegex(
@@ -81,7 +91,9 @@ class BundleFailureWorkflowTests(unittest.TestCase):
         bundle = self.root / "incomplete-bundle"
         shutil.copytree(self.bundle, bundle)
         (bundle / "excluded_units.tsv.gz").unlink()
-        result = run_workflow(self.apply_manifest(bundle, "incomplete"), self.root / "incomplete-output")
+        result = run_workflow(
+            self.apply_manifest(bundle, "incomplete"), self.root / "incomplete-output"
+        )
         output = command_output(result)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("excluded_units.tsv.gz", output)

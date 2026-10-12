@@ -23,11 +23,6 @@ from workflow_plan import (
 )
 
 
-def as_inputs(binding: FileBinding) -> list[str]:
-    """Return a declared optional index as a Snakemake input list."""
-    return [binding.index] if binding.index else []
-
-
 @dataclass(frozen=True)
 class GenerationRuleContext:
     """Expose generation inputs, paths, and derived execution layout together."""
@@ -99,10 +94,10 @@ class GenerationRuleContext:
         outputs = {
             name: path
             for name, path in self.bundle_paths.items()
-            if name not in {"validation", "marker", "lookup_hem"}
+            if name not in {"validation", "marker", "lookup_hem_chrX"}
         }
-        outputs["lookup_hem"] = (
-            self.bundle_paths["lookup_hem"] if self.hem_enabled else []
+        outputs["lookup_hem_chrX"] = (
+            self.bundle_paths["lookup_hem_chrX"] if self.hem_enabled else []
         )
         return MappingProxyType(outputs)
 
@@ -120,42 +115,70 @@ class GenerationRuleContext:
             "mutation_rate": "mutation_rate",
             "mutation_rate_indel": "mutation_rate_indel",
         }
-        paths = {
-            "fasta": self.plan.fasta.data,
-            "testing_units": self.plan.testing_unit_bed.data,
-            "score_snv": self.plan.score_snv.data,
-            "population_vcf": self.plan.population_vcf.data,
-            "par_regions": self.plan.par_regions.data,
-            "exclusion": self.plan.exclusion.data if self.plan.exclusion else None,
-            "score_indel": self.plan.score_indel.data if self.plan.score_indel else None,
-            "mutation_rate": self.plan.mutation_rate.data if self.plan.mutation_rate else None,
-            "mutation_rate_indel": (
-                self.plan.mutation_rate_indel.data if self.plan.mutation_rate_indel else None
-            ),
-        }
+        paths = {name: binding.data for name, binding in self.raw_bindings().items()}
         paths.update(self.exclusion_paths_by_id())
-        return MappingProxyType({
-            name: MappingProxyType({"identity": identities.get(name, name), "path": str(path)})
-            for name, path in paths.items() if path
-        })
+        return MappingProxyType(
+            {
+                name: MappingProxyType(
+                    {"identity": identities.get(name, name), "path": str(path)}
+                )
+                for name, path in paths.items()
+                if path
+            }
+        )
 
-    def mutation_rate_data(self) -> list[str]:
-        """Return the optional mutation-rate table without a placeholder path."""
-        return [self.plan.mutation_rate.data] if self.plan.mutation_rate else []
+    def raw_bindings(self) -> Mapping[str, FileBinding]:
+        """Keep each raw data path associated with its declared index."""
+        return {
+            "population_vcf": self.plan.population_vcf,
+            "score_snv": self.plan.score_snv,
+            "score_indel": self.plan.score_indel or FileBinding(None),
+            "exclusion": self.plan.exclusion,
+            "testing_units": self.plan.testing_unit_bed,
+            "par_regions": self.plan.par_regions,
+            "fasta": FileBinding(self.plan.fasta.data),
+            "mutation_rate": self.plan.mutation_rate or FileBinding(None),
+            "mutation_rate_indel": self.plan.mutation_rate_indel or FileBinding(None),
+        }
 
-    def mutation_rate_index(self) -> list[str]:
-        """Return the optional mutation-rate index without a placeholder path."""
-        if self.plan.mutation_rate and self.plan.mutation_rate.index:
-            return [self.plan.mutation_rate.index]
-        return []
-
-    def indel_mutation_rate_data(self) -> list[str]:
-        return [self.plan.mutation_rate_indel.data] if self.plan.mutation_rate_indel else []
-
-    def indel_mutation_rate_index(self) -> list[str]:
-        if self.plan.mutation_rate_indel and self.plan.mutation_rate_indel.index:
-            return [self.plan.mutation_rate_indel.index]
-        return []
+    def raw_inputs(self, operation: str) -> dict[str, list[str] | str]:
+        """Declare only the raw dependencies consumed by one generation step."""
+        names = {
+            "scope": (
+                "population_vcf",
+                "score_snv",
+                "score_indel",
+                "exclusion",
+                "testing_units",
+                "par_regions",
+                "fasta",
+                "mutation_rate",
+                "mutation_rate_indel",
+            ),
+            "partition": ("population_vcf", "score_snv", "score_indel", "fasta"),
+            "statistics": ("mutation_rate", "mutation_rate_indel"),
+        }[operation]
+        bindings = self.raw_bindings()
+        result: dict[str, list[str] | str] = {}
+        indexed = {
+            "population_vcf",
+            "score_snv",
+            "score_indel",
+            "mutation_rate",
+            "mutation_rate_indel",
+        }
+        for name in names:
+            binding = bindings[name]
+            if name == "score_indel" and not self.model.include_indels:
+                binding = FileBinding(None)
+            result[name] = binding.data_inputs()
+            if name in indexed:
+                result[f"{name}_index"] = binding.index_inputs()
+        if operation in {"scope", "partition"}:
+            result["fasta_fai"] = self.plan.fasta.fai
+        if operation == "scope":
+            result["exclusions"] = self.exclusion_data()
+        return result
 
     def exclusion_data(self) -> list[str]:
         """Return exclusion dependencies in deterministic identifier order."""
@@ -188,7 +211,7 @@ class GenerationRuleContext:
         suffixes = {
             "lookup_het": "het.tsv",
             "lookup_hom": "hom.tsv",
-            "lookup_hem": "hem_chrX.tsv",
+            "lookup_hem_chrX": "hem_chrX.tsv",
             "diagnostics": "diagnostics.tsv",
         }
         return str(self.lookup_bucket_dir / f"{bucket_id}.{suffixes[artifact_name]}")
