@@ -45,9 +45,12 @@ class WorkflowLintTests(unittest.TestCase):
 
     def test_lint_findings_are_explicitly_allowlisted_for_each_mode(self) -> None:
         for mode, expected in self.baseline.items():
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory(
-                prefix=f"portable-psap-{mode}-lint-"
-            ) as temporary_dir:
+            with (
+                self.subTest(mode=mode),
+                tempfile.TemporaryDirectory(
+                    prefix=f"portable-psap-{mode}-lint-"
+                ) as temporary_dir,
+            ):
                 result = run_workflow(
                     expected["manifest"], Path(temporary_dir) / "output", lint=True
                 )
@@ -58,7 +61,9 @@ class WorkflowLintTests(unittest.TestCase):
                     for path, details in self.allowlist[mode].items()
                 }
                 self.assertEqual(expected_findings, observed, output[-6000:])
-                self.assertEqual(bool(expected_findings), bool(result.returncode), output[-6000:])
+                self.assertEqual(
+                    bool(expected_findings), bool(result.returncode), output[-6000:]
+                )
 
 
 if __name__ == "__main__":

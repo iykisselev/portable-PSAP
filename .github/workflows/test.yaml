@@ -8,6 +8,20 @@ on:
     - cron: "17 4 * * 1"
 
 jobs:
+  formatting-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: portable-psap-ci
+          environment-file: workflow/envs/ci.yaml
+          auto-activate-base: false
+      - run: conda run --no-capture-output --name portable-psap-ci ruff check .
+      - run: conda run --no-capture-output --name portable-psap-ci ruff format --check .
+      - run: conda run --no-capture-output --name portable-psap-ci snakefmt --check workflow
+      - run: conda run --no-capture-output --name portable-psap-ci Rscript tests/lint_r.R
+
   unit-and-schema:
     runs-on: ubuntu-latest
     steps:
