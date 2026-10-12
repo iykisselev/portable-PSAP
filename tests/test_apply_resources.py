@@ -33,11 +33,51 @@ def merge(base: dict, override: dict) -> dict:
 
 
 class ApplyResourceRegistryTests(unittest.TestCase):
+    def test_validation_handoff_preserves_custom_indexes_and_input_remapping(self):
+        from runpy import run_path
+        from types import SimpleNamespace
+
+        configuration = merge(
+            load_yaml(ROOT / "config/config.yaml"),
+            load_yaml(ROOT / "tests/smoke/run.yaml"),
+        )
+        configuration["bindings"]["reference"]["cadd"]["snv"]["index"] = (
+            "custom-scores.tbi"
+        )
+        registry = build_apply_resource_registry(
+            build_workflow_plan(configuration), Path("output/prepared")
+        )
+        fields = registry.validation_fields()["cadd_snv"]
+        declared = registry.validation_inputs()
+        self.assertEqual(["custom-scores.tbi"], declared[fields["index"]])
+        declared[fields["data"]] = ["localized-scores.tsv.gz"]
+        declared[fields["index"]] = ["localized-custom.tbi"]
+        adapter = run_path(
+            str(ROOT / "workflow/scripts/apply/validate_resources.py"),
+            init_globals={
+                "snakemake": SimpleNamespace(scriptdir=ROOT / "workflow/scripts/apply")
+            },
+        )
+        binding = adapter["indexed_resource"](SimpleNamespace(**declared), fields)
+        self.assertEqual("localized-scores.tsv.gz", binding.path)
+        self.assertEqual("localized-custom.tbi", binding.index)
+        self.assertEqual([], registry.inputs("absent_resource"))
+
     def test_primary_exclusion_is_subtracted_not_used_as_calibration_regions(self):
-        configuration = merge(load_yaml(ROOT / "config/config.yaml"), load_yaml(ROOT / "tests/smoke/run.yaml"))
-        configuration["bindings"]["reference"]["exclusion"] = {"data": "mask.bed", "index": None}
-        registry = build_apply_resource_registry(build_workflow_plan(configuration), Path("output/prepared"))
-        self.assertEqual(registry.resource("exclusion").scientific_role, "variants_exclude")
+        configuration = merge(
+            load_yaml(ROOT / "config/config.yaml"),
+            load_yaml(ROOT / "tests/smoke/run.yaml"),
+        )
+        configuration["bindings"]["reference"]["exclusion"] = {
+            "data": "mask.bed",
+            "index": None,
+        }
+        registry = build_apply_resource_registry(
+            build_workflow_plan(configuration), Path("output/prepared")
+        )
+        self.assertEqual(
+            registry.resource("exclusion").scientific_role, "variants_exclude"
+        )
         self.assertIn("exclusion", registry.exclusion_ids)
         self.assertNotIn("calibration_regions", registry.resources)
 
@@ -63,7 +103,9 @@ class ApplyResourceRegistryTests(unittest.TestCase):
             "(?:testing_units|cadd_snv|cadd_indel|exclusion_encode\\-hg38\\-blacklist\\-v2|exclusion_par\\-regions)",
             registry.table_resource_pattern,
         )
-        self.assertEqual("output/prepared/cohort.vcf.gz", registry.resource("cohort").staged_data)
+        self.assertEqual(
+            "output/prepared/cohort.vcf.gz", registry.resource("cohort").staged_data
+        )
         self.assertEqual(
             "tests/smoke/data/exclude_full_span.bed",
             registry.resource("exclusion_encode-hg38-blacklist-v2").source,
@@ -98,7 +140,9 @@ class ApplyResourceRegistryTests(unittest.TestCase):
             registry.resource("cadd_snv").source,
         )
         self.assertEqual("generated_bundle", registry.resource("testing_units").origin)
-        self.assertEqual("generated_bundle", registry.resource("calibration_regions").origin)
+        self.assertEqual(
+            "generated_bundle", registry.resource("calibration_regions").origin
+        )
         self.assertEqual(
             "generated_bundle",
             registry.resource("exclusion_generated-bundle-excluded-alleles").origin,

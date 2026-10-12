@@ -42,7 +42,9 @@ collapse_ids <- function(value) {
 
 combine_id_lists <- function(value) {
   value <- value[!is.na(value) & nzchar(value)]
-  if (length(value) == 0L) NA_character_ else collapse_ids(unlist(strsplit(value, ",", fixed = TRUE), use.names = FALSE))
+  if (length(value) == 0L) NA_character_ else {
+    collapse_ids(unlist(strsplit(value, ",", fixed = TRUE), use.names = FALSE))
+  }
 }
 
 
@@ -52,9 +54,14 @@ validation_priority <- function(value) {
 
 
 build_candidate_groups <- function(candidates) {
-  inconsistent <- candidates[, .(pid_count = uniqueN(pid), unit_count = uniqueN(unit), model_count = uniqueN(model)), by = candidate_id][pid_count != 1L | unit_count != 1L | model_count != 1L]
+  inconsistent <- candidates[, .(
+    pid_count = uniqueN(pid), unit_count = uniqueN(unit), model_count = uniqueN(model)
+  ), by = candidate_id][pid_count != 1L | unit_count != 1L | model_count != 1L]
   if (nrow(inconsistent) > 0L) abort("candidate_id values span multiple patients, units, or models")
-  groups <- candidates[, .(pid = pid[[1]], unit = unit[[1]], model = model[[1]], variant_keys = list(sort(unique(variant_key))), PSAP = minimum_or_na(PSAP)), by = candidate_id]
+  groups <- candidates[, .(
+    pid = pid[[1]], unit = unit[[1]], model = model[[1]],
+    variant_keys = list(sort(unique(variant_key))), PSAP = minimum_or_na(PSAP)
+  ), by = candidate_id]
   groups[, variant_count := lengths(variant_keys)]
   if (any(groups$variant_count != 1L)) abort("Candidates must contain exactly one distinct variant")
   groups[, candidate_signature := vapply(variant_keys, paste, collapse = "|", FUN.VALUE = character(1))]
@@ -63,7 +70,11 @@ build_candidate_groups <- function(candidates) {
 
 
 empty_cohort_summary <- function() {
-  data.table(unit = character(), model = character(), candidate_signature = character(), affected_count = integer(), affected_pids = character(), minimum_PSAP = numeric(), validation = character(), control_count = integer(), control_pids = character())
+  data.table(
+    unit = character(), model = character(), candidate_signature = character(),
+    affected_count = integer(), affected_pids = character(), minimum_PSAP = numeric(),
+    validation = character(), control_count = integer(), control_pids = character()
+  )
 }
 
 
@@ -110,7 +121,10 @@ validate_candidates <- function(candidates, controls) {
   status[is.na(control_count), control_count := 0L]
   setcolorder(status, c("candidate_id", "validation", "control_count", "control_pids"))
   detail <- status[candidates, on = "candidate_id"]
-  setcolorder(detail, c("candidate_id", "pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP", "validation", "control_count", "control_pids"))
+  setcolorder(detail, c(
+    "candidate_id", "pid", "phenotype", "sex", "unit", "model", "variant_key",
+    "PSAP", "validation", "control_count", "control_pids"
+  ))
   candidate_level <- status[groups, on = "candidate_id"]
   summary <- candidate_level[, .(
     affected_count = uniqueN(pid), affected_pids = collapse_ids(pid), minimum_PSAP = minimum_or_na(PSAP),

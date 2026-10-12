@@ -1,7 +1,10 @@
 # Reusable extraction and table joins for unaffected control evidence.
 
 empty_reference <- function() {
-  data.table(pid = character(), phenotype = character(), sex = numeric(), unit = character(), model = character(), variant_key = character(), PSAP = numeric())
+  data.table(
+    pid = character(), phenotype = character(), sex = numeric(), unit = character(),
+    model = character(), variant_key = character(), PSAP = numeric()
+  )
 }
 
 make_evidence <- function(variants, row_filter, model) {
@@ -28,7 +31,11 @@ derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
     require_columns(variants, "CHROM", sprintf("Hemizygous control annotation table for %s", pid))
     chromosome <- canonical_chromosome(variants$CHROM)
     hem_definition <- hem_disease_model()
-    evidence <- c(evidence, list(make_evidence(variants, variants$gt_class == hem_definition$genotype_class & chromosome == hem_definition$required_chromosome, hem_definition$model)))
+    evidence <- c(evidence, list(make_evidence(
+      variants,
+      variants$gt_class == hem_definition$genotype_class & chromosome == hem_definition$required_chromosome,
+      hem_definition$model
+    )))
   }
   evidence <- Filter(Negate(is.null), evidence)
   if (length(evidence) == 0L) return(empty_reference())
@@ -65,7 +72,9 @@ run_control_reference <- function(config) {
   } else {
     controls <- vector("list", length(config$input))
     for (i in seq_along(config$input)) {
-      evidence <- derive_control_evidence(config$input[[i]], config$pid[[i]], config$sex_value[[i]], config$hemizygote_model)
+      evidence <- derive_control_evidence(
+        config$input[[i]], config$pid[[i]], config$sex_value[[i]], config$hemizygote_model
+      )
       controls[[i]] <- attach_psap(evidence, read_psap_scores(config$psap_input[[i]], config$pid[[i]]))
     }
     reference <- rbindlist(controls, use.names = TRUE, fill = FALSE)

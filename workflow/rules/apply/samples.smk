@@ -15,23 +15,25 @@ rule split_genotypes:
     input:
         vcf=rules.annotate_variants.output.vcf,
         vcf_index=rules.annotate_variants.output.csi,
-        validated=validation_marker,
-        annotation_qc=rules.require_valid_annotations.output.ok
+        validated=rules.require_valid_inputs.output.ok,
+        annotation_qc=rules.require_valid_annotations.output.ok,
     output:
         vcf=SPLIT_GENOTYPE_VCFS,
-        csi=SPLIT_GENOTYPE_INDICES
-    params:
-        samples=PROCESSING_SAMPLE_IDS
+        csi=SPLIT_GENOTYPE_INDICES,
+    log:
+        str(APPLY_LOG_DIR / "samples" / "split_genotypes.log"),
+    conda:
+        env("bioinformatics")
+    container:
+        sif("bioinformatics")
+    envmodules:
+        *mod("bioinformatics"),
     threads: 1
     resources:
         mem_mb=policy_resources("split_genotypes").mem_mb,
-        runtime=policy_resources("split_genotypes").runtime
-    conda:
-        env("bioinformatics")
-    envmodules: *mod("bioinformatics")
-    container: sif("bioinformatics")
-    log:
-        str(APPLY_LOG_DIR / "samples" / "split_genotypes.log")
+        runtime=policy_resources("split_genotypes").runtime,
+    params:
+        samples=PROCESSING_SAMPLE_IDS,
     script:
         str(APPLY_SCRIPT_DIR / "split_genotypes.py")
 
@@ -42,21 +44,23 @@ rule extract_gt:
     """
     input:
         vcf=str(SPLIT_GENOTYPE_DIR / "{sample}.vcf.gz"),
-        vcf_index=str(SPLIT_GENOTYPE_DIR / "{sample}.vcf.gz.csi")
+        vcf_index=str(SPLIT_GENOTYPE_DIR / "{sample}.vcf.gz.csi"),
     output:
-        gt=temp(ensure(str(RAW_DIR / "{sample}.tsv.gz"), non_empty=True))
+        gt=temp(ensure(str(RAW_DIR / "{sample}.tsv.gz"), non_empty=True)),
+    log:
+        str(APPLY_LOG_DIR / "samples" / "extract_gt_{sample}.log"),
     wildcard_constraints:
-        sample=SAMPLE_PATTERN
+        sample=SAMPLE_PATTERN,
+    conda:
+        env("bioinformatics")
+    container:
+        sif("bioinformatics")
+    envmodules:
+        *mod("bioinformatics"),
     threads: 2
     resources:
         mem_mb=policy_resources("extract_gt").mem_mb,
-        runtime=policy_resources("extract_gt").runtime
-    conda:
-        env("bioinformatics")
-    envmodules: *mod("bioinformatics")
-    container: sif("bioinformatics")
-    log:
-        str(APPLY_LOG_DIR / "samples" / "extract_gt_{sample}.log")
+        runtime=policy_resources("extract_gt").runtime,
     shell:
         """
         bcftools query \
@@ -65,30 +69,36 @@ rule extract_gt:
             bgzip --threads {threads} --stdout > {output.gt:q}
         """
 
+
 rule prepare_sample_genotypes:
     """Standardize, sex-classify, and annotate one sample in memory."""
     input:
-        gt=rules.extract_gt.output.gt
+        gt=rules.extract_gt.output.gt,
     output:
         annotated_gt=ensure(
-            str(ANNOTATED_DIR / "{sample}.{testing_unit}.tsv.gz"),
+            str(ANNOTATED_DIR / f"{{sample}}.{TESTING_UNIT}.tsv.gz"),
             non_empty=True,
-        )
+        ),
+    log:
+        str(
+            APPLY_LOG_DIR
+            / "samples"
+            / f"prepare_sample_genotypes_{{sample}}_{TESTING_UNIT}.log"
+        ),
     wildcard_constraints:
         sample=SAMPLE_PATTERN,
-        testing_unit=TESTING_UNIT_PATTERN
-    params:
-        sex=sample_sex,
-        hemizygote_model=WORKFLOW_PLAN.model.hemizygote
+    conda:
+        env("r")
+    container:
+        sif("r")
+    envmodules:
+        *mod("r"),
     threads: 4
     resources:
         mem_mb=policy_resources("prepare_sample_genotypes").mem_mb,
-        runtime=policy_resources("prepare_sample_genotypes").runtime
-    conda:
-        env("r")
-    envmodules: *mod("r")
-    container: sif("r")
-    log:
-        str(APPLY_LOG_DIR / "samples" / "prepare_sample_genotypes_{sample}_{testing_unit}.log")
+        runtime=policy_resources("prepare_sample_genotypes").runtime,
+    params:
+        sex=sample_sex,
+        hemizygote_model=WORKFLOW_PLAN.model.hemizygote,
     script:
         str(APPLY_SCRIPT_DIR / "prepare_sample_genotypes.R")

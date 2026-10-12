@@ -25,15 +25,23 @@ class RunExampleTests(unittest.TestCase):
         full = yaml.safe_load((ROOT / "runs/full.example.yaml").read_text())
 
         self.assertTrue(generate["model"]["include_indels"])
-        self.assertEqual(["snv", "indel"], generate["generation_settings"]["variant_classes"])
+        self.assertEqual(
+            ["snv", "indel"], generate["generation_settings"]["variant_classes"]
+        )
         self.assertIn("score_indel", generate["generation"])
 
         self.assertTrue(full["model"]["include_indels"])
-        self.assertEqual(["snv", "indel"], full["generation_settings"]["variant_classes"])
+        self.assertEqual(
+            ["snv", "indel"], full["generation_settings"]["variant_classes"]
+        )
         self.assertIn("indel", full["bindings"]["reference"]["cadd"])
 
-    def test_unindexed_production_generation_fails_during_dag_construction(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="portable-psap-index-required-") as temporary:
+    def test_unindexed_production_generation_fails_during_dag_construction(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="portable-psap-index-required-"
+        ) as temporary:
             directory = Path(temporary)
             manifest = yaml.safe_load((ROOT / "runs/generate.example.yaml").read_text())
             manifest["generation"]["execution"].pop("allow_unindexed_fixture_inputs")
@@ -47,10 +55,15 @@ class RunExampleTests(unittest.TestCase):
 
     def test_every_documented_example_constructs_its_mode_dag(self) -> None:
         for mode, manifest in EXAMPLES.items():
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory(
-                prefix=f"portable-psap-{mode}-example-"
-            ) as temporary:
-                result = run_workflow(manifest, Path(temporary) / "output", dry_run=True)
+            with (
+                self.subTest(mode=mode),
+                tempfile.TemporaryDirectory(
+                    prefix=f"portable-psap-{mode}-example-"
+                ) as temporary,
+            ):
+                result = run_workflow(
+                    manifest, Path(temporary) / "output", dry_run=True
+                )
                 output = command_output(result)
                 self.assertEqual(0, result.returncode, output[-6000:])
 

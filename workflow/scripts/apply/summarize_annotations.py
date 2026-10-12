@@ -3,11 +3,13 @@
 from pathlib import Path
 import sys
 
-SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
-sys.path.insert(0, str(SHARED_SCRIPT_DIR))
-from _library import add_library_path
+sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
+from _bootstrap import bootstrap
 
-add_library_path(snakemake.scriptdir)
+bootstrap(snakemake)
+from apply_bindings import AnnotationInputs, ReportOutput, AnnotationParameters
+from _library import bind
+
 
 from annotation_qc import summarize_annotations
 from validation_reporting import build_validation_report, write_validation_report
@@ -20,9 +22,12 @@ def main() -> None:
     writes a deterministic JSON report consumed by the annotation validation
     gate. Input-format errors propagate from `summarize_annotations`.
     """
+    inputs = bind(AnnotationInputs, snakemake.input)
+    outputs = bind(ReportOutput, snakemake.output)
+    params = bind(AnnotationParameters, snakemake.params)
     report = summarize_annotations(
-        snakemake.input.annotations,
-        include_indels=bool(snakemake.params.include_indels),
+        inputs.annotations,
+        include_indels=bool(params.include_indels),
     )
     write_validation_report(
         build_validation_report(
@@ -31,7 +36,7 @@ def main() -> None:
             summary=report["summary"],
             sections=("annotation",),
         ),
-        snakemake.output.report,
+        outputs.report,
         create_parents=False,
     )
 

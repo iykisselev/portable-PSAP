@@ -3,14 +3,23 @@
 from pathlib import Path
 import sys
 
-SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
-sys.path.insert(0, str(SHARED_SCRIPT_DIR))
-from _library import add_library_path
+sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
+from _bootstrap import bootstrap
 
-add_library_path(snakemake.scriptdir)
+bootstrap(snakemake)
+from apply_bindings import (
+    ModelValidationInputs,
+    ReportOutput,
+    ModelValidationParameters,
+)
+from _library import bind
+
 
 from bundle_contract import is_supported_contract
-from validation_model import certificate_components_with_exclusions, validate_model_inputs
+from validation_model import (
+    certificate_components_with_exclusions,
+    validate_model_inputs,
+)
 from validation_reporting import write_validation_report
 
 
@@ -21,46 +30,49 @@ def main() -> None:
     checks every enabled lookup table, and writes a JSON report used by the
     shared validation gate.
     """
+    inputs = bind(ModelValidationInputs, snakemake.input)
+    outputs = bind(ReportOutput, snakemake.output)
+    params = bind(ModelValidationParameters, snakemake.params)
     configured = {
-        "het": str(snakemake.input.lookup_het),
-        "hom": str(snakemake.input.lookup_hom),
-        "hem_chrX": str(snakemake.input.lookup_hem_chrx[0]) if snakemake.input.lookup_hem_chrx else "",
+        "het": str(inputs.lookup_het),
+        "hom": str(inputs.lookup_hom),
+        "hem_chrX": inputs.lookup_hem_chrX or "",
     }
-    contract = str(snakemake.params.lookup_contract)
+    contract = str(params.lookup_contract)
     certificate = None
     components: dict[str, str] = {}
     if is_supported_contract(contract):
         certificate = {
-            "metadata": str(snakemake.input.lookup_metadata[0]),
-            "validation": str(snakemake.input.lookup_validation[0]),
-            "marker": str(snakemake.input.lookup_marker[0]),
+            "metadata": str(inputs.lookup_metadata),
+            "validation": str(inputs.lookup_validation),
+            "marker": str(inputs.lookup_marker),
         }
         components = certificate_components_with_exclusions(
             {
                 "lookup_het": configured["het"],
                 "lookup_hom": configured["hom"],
-                "eligible_testing_units": str(snakemake.input.lookup_eligible_units[0]),
-                "calibration_regions": str(snakemake.input.lookup_calibration_mask[0]),
-                "excluded_units": str(snakemake.input.lookup_excluded_units[0]),
+                "eligible_testing_units": str(inputs.lookup_eligible_units),
+                "calibration_regions": str(inputs.lookup_calibration_mask),
+                "excluded_units": str(inputs.lookup_excluded_units),
             },
-            snakemake.input.lookup_excluded_alleles,
+            inputs.lookup_excluded_alleles,
         )
-        if snakemake.params.hemizygote_model:
+        if params.hemizygote_model:
             components["lookup_hem_chrX"] = configured["hem_chrX"]
     report = validate_model_inputs(
-        score_max=snakemake.params.score_max,
-        assembly=str(snakemake.params.assembly),
-        unit=str(snakemake.params.unit),
-        hemizygote_model=snakemake.params.hemizygote_model,
-        include_indels=snakemake.params.include_indels,
-        testing_unit_bed=snakemake.input.testing_unit_bed,
+        score_max=params.score_max,
+        assembly=str(params.assembly),
+        unit=str(params.unit),
+        hemizygote_model=params.hemizygote_model,
+        include_indels=params.include_indels,
+        testing_unit_bed=inputs.testing_unit_bed,
         lookup_tables=configured,
         lookup_contract=contract,
-        lookup_bin_width=snakemake.params.lookup_bin_width,
+        lookup_bin_width=params.lookup_bin_width,
         bundle_certificate=certificate,
         bundle_components=components,
     )
-    write_validation_report(report, snakemake.output.report, create_parents=False)
+    write_validation_report(report, outputs.report, create_parents=False)
 
 
 if __name__ == "__main__":

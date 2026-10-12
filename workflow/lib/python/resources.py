@@ -9,13 +9,15 @@ import sys
 import tempfile
 from pathlib import Path
 
+from execution_tools import require_tool
 from bgzf import has_bgzf_eof, is_bgzf
-from genomic_contracts import canonical_chromosome
+from genomic_contracts import canonical_chromosome, parse_contig_id
 from io_contracts import open_text
 
 
 SORT_BUFFER_MIB = 512
 """Bound external sorting below scheduler cgroups during table staging."""
+
 
 def source_has_index(index_path: Path | None) -> bool:
     return index_path is not None and index_path.is_file()
@@ -25,22 +27,13 @@ def is_conventional_source_index(source: Path, index_path: Path) -> bool:
     return index_path in (Path(f"{source}.tbi"), Path(f"{source}.csi"))
 
 
-def require_tool(name: str) -> str:
-    executable = shutil.which(name)
-    if executable is None:
-        raise RuntimeError(f"Required executable is unavailable: {name}")
-    return executable
-
-
 def run(command: list[str], **kwargs) -> None:
     rendered = " ".join(command)
     print(f"RUN: {rendered}", file=sys.stderr)
     subprocess.run(command, check=True, **kwargs)
 
 
-def prepare_vcf(
-    source: Path, output: Path, source_index: Path | None = None
-) -> None:
+def prepare_vcf(source: Path, output: Path, source_index: Path | None = None) -> None:
     """Stage a cohort VCF, reusing a complete conventional BGZF pair when safe."""
     bcftools = require_tool("bcftools")
     reusable = (
@@ -76,12 +69,10 @@ def vcf_chromosome_map(path: Path) -> dict[str, str]:
         check=True,
     )
     names: list[str] = []
-    prefix = "##contig=<ID="
     for line in result.stdout.splitlines():
-        if line.startswith(prefix):
-            name = line[len(prefix) :].split(",", 1)[0].split(">", 1)[0]
-            if name:
-                names.append(name)
+        name = parse_contig_id(line)
+        if name:
+            names.append(name)
 
     # Indexed record statistics cover VCFs whose headers omit contig metadata.
     if not names:
@@ -92,9 +83,7 @@ def vcf_chromosome_map(path: Path) -> dict[str, str]:
             check=True,
         )
         names.extend(
-            line.split("\t", 1)[0]
-            for line in stats.stdout.splitlines()
-            if line.strip()
+            line.split("\t", 1)[0] for line in stats.stdout.splitlines() if line.strip()
         )
 
     chromosome_map: dict[str, str] = {}
@@ -130,10 +119,7 @@ def copy_as_bgzip(
             rows_path.open("w", encoding="utf-8") as rows_handle,
         ):
             for line in source_handle:
-                if (
-                    not line.strip()
-                    or line.startswith(("#", "track ", "browser "))
-                ):
+                if not line.strip() or line.startswith(("#", "track ", "browser ")):
                     header_handle.write(line)
                     continue
 
@@ -230,8 +216,10 @@ def copy_indexed_as_bgzip(
         )
         assert process.stdin is not None
         for line in source_handle:
-            if chromosome_map and line.strip() and not line.startswith(
-                ("#", "track ", "browser ")
+            if (
+                chromosome_map
+                and line.strip()
+                and not line.startswith(("#", "track ", "browser "))
             ):
                 chromosome, separator, remainder = line.partition("\t")
                 replacement = chromosome_map.get(canonical_chromosome(chromosome))
@@ -296,17 +284,15 @@ def prepare_table(
     if source_ready:
         source_chromosomes = (
             indexed_chromosome_names(source, tabix)
-            if source_index is not None and is_conventional_source_index(source, source_index)
+            if source_index is not None
+            and is_conventional_source_index(source, source_index)
             else set()
         )
-        compatible = (
-            chromosome_map is None
-            or (
-                bool(source_chromosomes)
-                and not chromosome_rewrites_required(
-                    source_chromosomes,
-                    chromosome_map,
-                )
+        compatible = chromosome_map is None or (
+            bool(source_chromosomes)
+            and not chromosome_rewrites_required(
+                source_chromosomes,
+                chromosome_map,
             )
         )
         if compatible:

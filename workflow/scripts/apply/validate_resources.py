@@ -3,21 +3,29 @@
 from pathlib import Path
 import sys
 
-SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
-sys.path.insert(0, str(SHARED_SCRIPT_DIR))
-from _library import add_library_path
+sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
+from _bootstrap import bootstrap
 
-add_library_path(snakemake.scriptdir)
+bootstrap(snakemake)
+from apply_bindings import (
+    ResourceValidationInputs,
+    ReportOutput,
+    ResourceValidationParameters,
+)
+from _library import bind, optional_path
+
 
 from validation import IndexedResource
 from validation_reporting import write_validation_report
 from validation_resources import validate_resource_inputs
 
 
-def indexed_resource(binding) -> IndexedResource:
-    """Build one typed binding without inferring an index by position."""
-    path, index = binding
-    return IndexedResource(path=str(path), index=str(index) if index else None)
+def indexed_resource(namespace, fields) -> IndexedResource | None:
+    """Resolve an identity's paired files from the actual job inputs."""
+    path = optional_path(getattr(namespace, fields["data"]))
+    if path is None:
+        return None
+    return IndexedResource(path, optional_path(getattr(namespace, fields["index"])))
 
 
 def main() -> None:
@@ -27,31 +35,34 @@ def main() -> None:
     required indexes and annotation resources, and writes the resulting JSON
     report for the workflow validation gate.
     """
-    calibration_binding = snakemake.params.calibration_regions
-    cadd_indel_binding = snakemake.params.cadd_indel
+    inputs = bind(ResourceValidationInputs, snakemake.input)
+    outputs = bind(ReportOutput, snakemake.output)
+    params = bind(ResourceValidationParameters, snakemake.params)
+    resources = {
+        name: indexed_resource(snakemake.input, fields)
+        for name, fields in params.resource_fields.items()
+    }
+
+    def by_role(role):
+        return [
+            resources[name]
+            for name, fields in params.resource_fields.items()
+            if fields["role"] == role and resources[name] is not None
+        ]
+
     write_validation_report(
         validate_resource_inputs(
-            vcf=str(snakemake.input.vcf),
-            calibration_regions=(
-                indexed_resource(calibration_binding)
-                if calibration_binding
-                else None
-            ),
-            exclusions=[
-                indexed_resource(binding) for binding in snakemake.params.exclusions
-            ],
-            testing_units=indexed_resource(snakemake.params.testing_units),
-            par_regions=[
-                indexed_resource(binding) for binding in snakemake.params.par_regions
-            ],
-            cadd_snv=indexed_resource(snakemake.params.cadd_snv),
-            cadd_indel=(
-                indexed_resource(cadd_indel_binding) if cadd_indel_binding else None
-            ),
-            unit=str(snakemake.params.unit),
-            include_indels=snakemake.params.include_indels,
+            vcf=inputs.vcf,
+            calibration_regions=resources.get("calibration_regions"),
+            exclusions=by_role("variants_exclude"),
+            testing_units=resources["testing_units"],
+            par_regions=by_role("par_regions"),
+            cadd_snv=resources["cadd_snv"],
+            cadd_indel=resources.get("cadd_indel"),
+            unit=params.unit,
+            include_indels=params.include_indels,
         ),
-        snakemake.output.report,
+        outputs.report,
         create_parents=False,
     )
 

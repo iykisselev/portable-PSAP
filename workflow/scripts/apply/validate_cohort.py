@@ -3,11 +3,17 @@
 from pathlib import Path
 import sys
 
-SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
-sys.path.insert(0, str(SHARED_SCRIPT_DIR))
-from _library import add_library_path
+sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
+from _bootstrap import bootstrap
 
-add_library_path(snakemake.scriptdir)
+bootstrap(snakemake)
+from apply_bindings import (
+    CohortValidationInputs,
+    CohortValidationOutputs,
+    CohortValidationParameters,
+)
+from _library import bind
+
 
 from validation_cohort import validate_cohort_inputs
 from validation_reporting import write_validation_report
@@ -21,21 +27,22 @@ def main() -> None:
     accumulated validation report and writes the manifest for downstream dynamic
     sample selection.
     """
-    kind = str(snakemake.params.metadata_kind)
-    vcf_index = str(snakemake.input.vcf_index[0]) if snakemake.input.vcf_index else None
-    fasta_gzi = str(snakemake.input.fasta_gzi[0]) if snakemake.input.fasta_gzi else None
+    inputs = bind(CohortValidationInputs, snakemake.input)
+    outputs = bind(CohortValidationOutputs, snakemake.output)
+    params = bind(CohortValidationParameters, snakemake.params)
+    kind = str(params.metadata_kind)
     report = validate_cohort_inputs(
-        metadata_path=snakemake.input.metadata,
+        metadata_path=inputs.metadata,
         metadata_kind=kind,
-        vcf=snakemake.input.vcf,
-        vcf_index=vcf_index,
-        fasta=snakemake.input.fasta,
-        fasta_index=snakemake.input.fasta_index,
-        fasta_gzi=fasta_gzi,
-        hemizygote_model=snakemake.params.hemizygote_model,
-        manifest_path=snakemake.output.manifest,
+        vcf=inputs.vcf,
+        vcf_index=inputs.vcf_index,
+        fasta=inputs.fasta,
+        fasta_index=inputs.fasta_index,
+        fasta_gzi=inputs.fasta_gzi,
+        hemizygote_model=params.hemizygote_model,
+        manifest_path=outputs.manifest,
     )
-    write_validation_report(report, snakemake.output.report, create_parents=False)
+    write_validation_report(report, outputs.report, create_parents=False)
 
 
 if __name__ == "__main__":

@@ -4,30 +4,35 @@ rule build_sample_candidates:
     """
     input:
         psap=rules.apply_psap.output.psap,
-        sample_manifest=validated_manifest_path
+        sample_manifest=str(SAMPLE_MANIFEST_PATH),
     output:
         candidates=ensure(
-            str(CANDIDATE_DIR / "{sample}.{testing_unit}.tsv.gz"),
+            str(CANDIDATE_DIR / f"{{sample}}.{TESTING_UNIT}.tsv.gz"),
             non_empty=True,
-        )
+        ),
+    log:
+        str(
+            APPLY_LOG_DIR
+            / "cohort"
+            / f"build_sample_candidates_{{sample}}_{TESTING_UNIT}.log"
+        ),
     wildcard_constraints:
         sample=SAMPLE_PATTERN,
-        testing_unit=TESTING_UNIT_PATTERN
+    conda:
+        env("r")
+    container:
+        sif("r")
+    envmodules:
+        *mod("r"),
+    threads: 2
+    resources:
+        mem_mb=policy_resources("build_sample_candidates").mem_mb,
+        runtime=policy_resources("build_sample_candidates").runtime,
     params:
         pid=lambda wc: wc.sample,
         sex=affected_sample_sex,
         candidate_id_separator=WORKFLOW_PLAN.report.candidate_id_separator,
-        candidate_id_ordinal_width=WORKFLOW_PLAN.report.candidate_id_ordinal_width
-    threads: 2
-    resources:
-        mem_mb=policy_resources("build_sample_candidates").mem_mb,
-        runtime=policy_resources("build_sample_candidates").runtime
-    conda:
-        env("r")
-    envmodules: *mod("r")
-    container: sif("r")
-    log:
-        str(APPLY_LOG_DIR / "cohort" / "build_sample_candidates_{sample}_{testing_unit}.log")
+        candidate_id_ordinal_width=WORKFLOW_PLAN.report.candidate_id_ordinal_width,
     script:
         str(APPLY_SCRIPT_DIR / "build_sample_candidates.R")
 
@@ -37,32 +42,34 @@ rule build_control_reference:
     Retain model evidence for every carried variant in unaffected individuals.
     """
     input:
-        validated=validation_marker,
-        sample_manifest=validated_manifest_path,
-        annotated=control_annotated_tables,
-        psap=control_psap_tables
+        validated=rules.require_valid_inputs.output.ok,
+        sample_manifest=str(SAMPLE_MANIFEST_PATH),
+        annotated=per_sample(ANNOTATED_DIR, "unaffected"),
+        psap=per_sample(SCORED_DIR, "unaffected"),
     output:
         control_variants=ensure(
-            str(COHORT_DIR / "control_variants.tsv.gz"),
+            COHORT_OUTPUTS["control_variants"],
             non_empty=True,
-        )
+        ),
+    log:
+        str(APPLY_LOG_DIR / "cohort" / "build_control_reference.log"),
+    benchmark:
+        str(BENCHMARK_DIR / "build_control_reference.tsv")
+    conda:
+        env("r")
+    container:
+        sif("r")
+    envmodules:
+        *mod("r"),
+    threads: 4
+    resources:
+        mem_mb=policy_resources("build_control_reference").mem_mb,
+        runtime=policy_resources("build_control_reference").runtime,
     params:
         pids=control_pids,
         sexes=control_sexes,
         hemizygote=WORKFLOW_PLAN.model.hemizygote,
-        deduplicate=WORKFLOW_PLAN.report.deduplicate_controls
-    threads: 4
-    resources:
-        mem_mb=policy_resources("build_control_reference").mem_mb,
-        runtime=policy_resources("build_control_reference").runtime
-    conda:
-        env("r")
-    envmodules: *mod("r")
-    container: sif("r")
-    benchmark:
-        str(BENCHMARK_DIR / "build_control_reference.tsv")
-    log:
-        str(APPLY_LOG_DIR / "cohort" / "build_control_reference.log")
+        deduplicate=WORKFLOW_PLAN.report.deduplicate_controls,
     script:
         str(APPLY_SCRIPT_DIR / "build_control_reference.R")
 
@@ -72,28 +79,30 @@ rule build_cohort_report:
     Validate affected candidates against controls and summarize the cohort.
     """
     input:
-        candidates=affected_candidate_tables,
-        controls=rules.build_control_reference.output.control_variants
+        candidates=per_sample(CANDIDATE_DIR, "affected"),
+        controls=rules.build_control_reference.output.control_variants,
     output:
         candidates=ensure(
-            str(COHORT_DIR / "cohort_candidates.tsv.gz"),
+            COHORT_OUTPUTS["cohort_candidates"],
             non_empty=True,
         ),
         summary=ensure(
-            str(COHORT_DIR / "cohort_summary.tsv.gz"),
+            COHORT_OUTPUTS["cohort_summary"],
             non_empty=True,
-        )
+        ),
+    log:
+        str(APPLY_LOG_DIR / "cohort" / "build_cohort_report.log"),
+    benchmark:
+        str(BENCHMARK_DIR / "build_cohort_report.tsv")
+    conda:
+        env("r")
+    container:
+        sif("r")
+    envmodules:
+        *mod("r"),
     threads: 4
     resources:
         mem_mb=policy_resources("build_cohort_report").mem_mb,
-        runtime=policy_resources("build_cohort_report").runtime
-    conda:
-        env("r")
-    envmodules: *mod("r")
-    container: sif("r")
-    benchmark:
-        str(BENCHMARK_DIR / "build_cohort_report.tsv")
-    log:
-        str(APPLY_LOG_DIR / "cohort" / "build_cohort_report.log")
+        runtime=policy_resources("build_cohort_report").runtime,
     script:
         str(APPLY_SCRIPT_DIR / "build_cohort_report.R")

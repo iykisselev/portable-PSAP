@@ -41,7 +41,9 @@ class FullWorkflowFixtureTests(unittest.TestCase):
             result = run_workflow(FULL_MANIFEST, outdir)
             if result.returncode:
                 output = command_output(result)[-6000:]
-                self.fail(f"full fixture failed with exit code {result.returncode}:\n{output}")
+                self.fail(
+                    f"full fixture failed with exit code {result.returncode}:\n{output}"
+                )
             self.assertEqual(
                 self.baseline["fresh_execution_steps"], completed_step_count(result)
             )
@@ -129,7 +131,9 @@ class FullWorkflowFixtureTests(unittest.TestCase):
             )
 
     def test_full_indel_fixture_consumes_the_generated_v3_bundle(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="portable-psap-full-indel-workflow-") as temporary:
+        with tempfile.TemporaryDirectory(
+            prefix="portable-psap-full-indel-workflow-"
+        ) as temporary:
             outdir = Path(temporary) / "output"
             result = run_workflow(FULL_INDEL_MANIFEST, outdir)
             output = command_output(result)
@@ -137,10 +141,14 @@ class FullWorkflowFixtureTests(unittest.TestCase):
 
             bundle = outdir / "generate" / "indel-fixture" / "bundle"
             model = outdir / "apply" / "indel-fixture" / "validation" / "model.json"
-            metadata = json.loads((bundle / "metadata.json").read_text(encoding="utf-8"))
+            metadata = json.loads(
+                (bundle / "metadata.json").read_text(encoding="utf-8")
+            )
             model_validation = json.loads(model.read_text(encoding="utf-8"))
             self.assertEqual("generated_bundle_v3", metadata["contract"])
-            self.assertEqual("generated_bundle_v3", model_validation["summary"]["lookup_contract"])
+            self.assertEqual(
+                "generated_bundle_v3", model_validation["summary"]["lookup_contract"]
+            )
             self.assertTrue((bundle / "validation.ok").is_file())
 
 

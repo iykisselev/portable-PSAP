@@ -3,11 +3,13 @@
 from pathlib import Path
 import sys
 
-SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
-sys.path.insert(0, str(SHARED_SCRIPT_DIR))
-from _library import add_library_path
+sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
+from _bootstrap import bootstrap
 
-add_library_path(snakemake.scriptdir)
+bootstrap(snakemake)
+from apply_bindings import GateInputs, GateOutputs, GateParameters
+from _library import bind
+
 
 from validation_reporting import require_validation_success
 
@@ -23,12 +25,15 @@ def main() -> None:
         RuntimeError: If the report cannot be parsed, lacks an errors list, or
             records validation failures.
     """
+    inputs = bind(GateInputs, snakemake.input)
+    outputs = bind(GateOutputs, snakemake.output)
+    params = bind(GateParameters, snakemake.params)
     require_validation_success(
-        snakemake.input.report,
-        snakemake.output.ok,
-        failure_message=snakemake.params.failure_message,
-        include_errors=bool(snakemake.params.include_errors),
-        success_marker=snakemake.params.success_marker,
+        inputs.report,
+        outputs.ok,
+        failure_message=params.failure_message,
+        include_errors=bool(params.include_errors),
+        success_marker=params.success_marker,
     )
 
 

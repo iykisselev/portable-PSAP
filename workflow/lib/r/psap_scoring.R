@@ -23,7 +23,10 @@ read_lookup <- function(path, metadata = NULL, role = NULL) {
   }
   ids <- trimws(as.character(lookup[[1]]))
   values <- lookup[, -1, with = FALSE]
-  value_matrix <- matrix(suppressWarnings(as.numeric(unlist(values, use.names = FALSE))), nrow = nrow(values), ncol = ncol(values))
+  value_matrix <- matrix(
+    suppressWarnings(as.numeric(unlist(values, use.names = FALSE))),
+    nrow = nrow(values), ncol = ncol(values)
+  )
   invalid_rows <- rowSums(is.na(value_matrix)) > 0L
   if (identical(tolower(ids[[1L]]), "testing_unit_id") || (invalid_rows[1] && any(!invalid_rows[-1]))) {
     ids <- ids[-1]
@@ -44,8 +47,7 @@ read_lookup <- function(path, metadata = NULL, role = NULL) {
 
 
 prepare_psap_lookups <- function(lookup_source, output_paths, hemizygote_model) {
-  roles <- c("het", "hom")
-  if (hemizygote_model) roles <- c(roles, "hem_chrX")
+  roles <- model_roles(hemizygote_model)
   for (role in roles) {
     output <- output_paths[[role]]
     if (is.null(output) || !nzchar(output)) {
@@ -71,7 +73,9 @@ read_prepared_lookup <- function(path) {
 }
 
 
-lookup_psap <- function(variants, lookup, score_max, score_column = "CADD_PHRED", lookup_contract = "external_legacy_v0", metadata = NULL, row_index = NULL) {
+lookup_psap <- function(
+    variants, lookup, score_max, score_column = "CADD_PHRED",
+    lookup_contract = "external_legacy_v0", metadata = NULL, row_index = NULL) {
   score <- pmin(pmax(variants[[score_column]], 0), score_max)
   if (identical(lookup_contract, "external_legacy_v0")) {
     score_grid <- seq(0, score_max, length.out = ncol(lookup$values))
@@ -99,12 +103,20 @@ select_highest <- function(variants) {
 
 
 score_model <- function(variants, model, genotype_class, lookup, lookup_source) {
-  selected <- variants[gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id)]
+  selected <- variants[
+    gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id)
+  ]
   if (nrow(selected) == 0) return(NULL)
   selected <- select_highest(selected)
   row_index <- require_lookup_units(selected, lookup, model)
-  selected[, PSAP := lookup_psap(selected, lookup, lookup_source$score_max, lookup_contract = lookup_source$type, metadata = lookup_source$metadata, row_index = row_index)]
-  selected[, .(Key = as.character(Key), unit = as.character(.testing_unit_id), `Dz.Model` = as.character(model), PSAP = as.numeric(PSAP))]
+  selected[, PSAP := lookup_psap(
+    selected, lookup, lookup_source$score_max, lookup_contract = lookup_source$type,
+    metadata = lookup_source$metadata, row_index = row_index
+  )]
+  selected[, .(
+    Key = as.character(Key), unit = as.character(.testing_unit_id),
+    `Dz.Model` = as.character(model), PSAP = as.numeric(PSAP)
+  )]
 }
 
 
@@ -129,7 +141,12 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
     hem_variants[, .chromosome := canonical_chromosome(CHROM)]
     hem_definition <- hem_disease_model()
     hem_lookup <- read_prepared_lookup(lookup_source$paths[[hem_definition$lookup]])
-    results <- c(results, list(score_model(hem_variants[.chromosome == hem_definition$required_chromosome & gt_class == hem_definition$genotype_class], hem_definition$model, hem_definition$genotype_class, hem_lookup, lookup_source)))
+    selected_hem <- hem_variants[
+      .chromosome == hem_definition$required_chromosome & gt_class == hem_definition$genotype_class
+    ]
+    results <- c(results, list(score_model(
+      selected_hem, hem_definition$model, hem_definition$genotype_class, hem_lookup, lookup_source
+    )))
   }
   results <- Filter(Negate(is.null), results)
   if (length(results) == 0) return(empty_scoring_output())
@@ -145,7 +162,10 @@ run_psap_scoring <- function(config) {
   output <- score_variants(variants, lookup_source = config$lookup_source, hemizygote_model = config$hemizygote_model)
   if (nrow(output) > 0) setorderv(output, "PSAP", 1L, na.last = TRUE)
   if (!identical(names(output), SCORING_OUTPUT_COLUMNS)) {
-    abort("Internal scoring output schema mismatch: expected %s; found %s", paste(SCORING_OUTPUT_COLUMNS, collapse = ", "), paste(names(output), collapse = ", "))
+    abort(
+      "Internal scoring output schema mismatch: expected %s; found %s",
+      paste(SCORING_OUTPUT_COLUMNS, collapse = ", "), paste(names(output), collapse = ", ")
+    )
   }
   write_tsv(output, config$output, threads = config$threads)
   message("Candidate rows written: ", nrow(output))

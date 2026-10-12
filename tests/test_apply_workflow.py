@@ -46,7 +46,9 @@ class ApplyWorkflowFixtureTests(unittest.TestCase):
             # Repeated exclusions must be subtracted once, never treated as an
             # inclusion mask by the renamed primary input.
             manifest["bindings"]["reference"]["exclusion"] = dict(
-                manifest["bindings"]["reference"]["exclusions"]["encode-hg38-blacklist-v2"]
+                manifest["bindings"]["reference"]["exclusions"][
+                    "encode-hg38-blacklist-v2"
+                ]
             )
             manifest_path = Path(temporary_dir) / "run.yaml"
             manifest_path.write_text(yaml.safe_dump(manifest))
@@ -74,7 +76,9 @@ class ApplyWorkflowFixtureTests(unittest.TestCase):
             for filename, digest in expected_digests().items():
                 report = cohort / filename
                 self.assertTrue(report.is_file(), f"missing workflow output: {report}")
-                self.assertEqual(digest, sha256(report), f"changed fixture digest: {filename}")
+                self.assertEqual(
+                    digest, sha256(report), f"changed fixture digest: {filename}"
+                )
 
             with (apply_dir / "validation" / "model.json").open(
                 encoding="utf-8"

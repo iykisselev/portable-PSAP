@@ -1,24 +1,21 @@
 """Project configured exclusions from a sites-only filtered BCF stream."""
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
-sys.path.insert(0, str(SHARED_SCRIPT_DIR))
+sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
+from _bootstrap import bootstrap
 
-from _library import add_library_path
-add_library_path(snakemake.scriptdir)
+bootstrap(snakemake)
+from apply_bindings import ExclusionInputs, ExclusionOutputs, ExclusionParameters
+from _library import bind
+
 
 from exclusions import collect_exclusions, project_vcf_records
 
 
-def require_tool(name: str) -> str:
-    executable = shutil.which(name)
-    if executable is None:
-        raise RuntimeError(f"Required executable is unavailable: {name}")
-    return executable
+from execution_tools import require_tool
 
 
 def main() -> None:
@@ -27,14 +24,17 @@ def main() -> None:
     A sites-only ``bcftools view`` stream avoids reading cohort genotype
     columns. The matched records are written directly as an indexed BGZF VCF.
     """
+    inputs = bind(ExclusionInputs, snakemake.input)
+    outputs = bind(ExclusionOutputs, snakemake.output)
+    params = bind(ExclusionParameters, snakemake.params)
     intervals, variants, indexed_tsv_sources = collect_exclusions(
-        snakemake.params.sources,
-        indexed_tsv_paths=snakemake.params.indexed_tsv_sources,
+        params.sources,
+        indexed_tsv_paths=params.indexed_tsv_sources,
     )
     bcftools = require_tool("bcftools")
     bgzip = require_tool("bgzip")
-    source_path = Path(snakemake.input.variants)
-    output_path = Path(snakemake.output.vcf)
+    source_path = Path(inputs.variants)
+    output_path = Path(outputs.vcf)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     reader = subprocess.Popen(

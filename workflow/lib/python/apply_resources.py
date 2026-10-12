@@ -12,7 +12,14 @@ import re
 from types import MappingProxyType
 from typing import Mapping
 
-from workflow_plan import FileBinding, FastaBinding, WorkflowPlan, binding_data, binding_index
+from workflow_plan import (
+    FileBinding,
+    FastaBinding,
+    WorkflowPlan,
+    binding_data,
+    binding_index,
+)
+from workflow_bindings import as_inputs
 
 
 @dataclass(frozen=True)
@@ -47,6 +54,58 @@ class ApplyResourceRegistry:
         except KeyError as exc:
             raise KeyError(f"Unknown apply resource: {logical_name!r}") from exc
 
+    def inputs(self, name: str, field: str = "source") -> list[str]:
+        """Declare one enabled resource field, preserving absent optionals."""
+        resource = self.resources.get(name)
+        return as_inputs(getattr(resource, field)) if resource else []
+
+    def resources_with_role(self, role: str) -> tuple[ResourceSpec, ...]:
+        return tuple(
+            resource
+            for resource in self.resources.values()
+            if resource.scientific_role == role
+        )
+
+    def role_inputs(self, role: str, field: str = "source") -> list[str]:
+        return [
+            path
+            for resource in self.resources_with_role(role)
+            for path in as_inputs(getattr(resource, field))
+        ]
+
+    def exclusion_specs(self) -> list[str]:
+        return [
+            f"{self.resource(name).kind}:{self.resource(name).staged_data}"
+            for name in self.exclusion_ids
+        ]
+
+    def validation_fields(self) -> dict[str, dict[str, str]]:
+        """Serialize resource identities as references to declared input fields."""
+        roles = {
+            "calibration_regions",
+            "variants_exclude",
+            "testing_units",
+            "par_regions",
+            "cadd_snv",
+            "cadd_indel",
+        }
+        return {
+            name: {
+                "data": f"resource_{name}",
+                "index": f"resource_{name}_index",
+                "role": resource.scientific_role,
+            }
+            for name, resource in self.resources.items()
+            if resource.scientific_role in roles
+        }
+
+    def validation_inputs(self) -> dict[str, list[str]]:
+        result = {}
+        for name, fields in self.validation_fields().items():
+            result[fields["data"]] = self.inputs(name)
+            result[fields["index"]] = self.inputs(name, "source_index")
+        return result
+
     @property
     def prepared_table_dir(self) -> Path:
         return self.prepared_dir / "tables"
@@ -78,12 +137,6 @@ class ApplyResourceRegistry:
         )
 
     @property
-    def exclusion_kind_by_id(self) -> Mapping[str, str]:
-        return MappingProxyType(
-            {name: self.resource(name).kind for name in self.exclusion_ids}
-        )
-
-    @property
     def workflow_exclusions(self) -> tuple[str, ...]:
         return tuple(self.resource(name).staged_data for name in self.exclusion_ids)
 
@@ -105,7 +158,9 @@ def build_apply_resource_registry(
 ) -> ApplyResourceRegistry:
     """Build the one resource catalog used by apply validation and staging."""
     if plan.apply is None:
-        raise ValueError("Apply resource registry requires an apply or full WorkflowPlan")
+        raise ValueError(
+            "Apply resource registry requires an apply or full WorkflowPlan"
+        )
 
     apply_plan = plan.apply
     effective_reference = apply_plan.effective_reference

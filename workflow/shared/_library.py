@@ -18,7 +18,9 @@ def workflow_root(scriptdir: str | Path) -> Path:
     for candidate in (start, *start.parents):
         if (candidate / "lib" / "python").is_dir():
             return candidate
-    raise ValueError(f"Could not find workflow/lib/python above script directory {start}")
+    raise ValueError(
+        f"Could not find workflow/lib/python above script directory {start}"
+    )
 
 
 def add_library_path(scriptdir: str | Path) -> None:
@@ -77,7 +79,9 @@ def _coerce(value: object, hint: object) -> object:
     if origin in (Union, types.UnionType):
         options = get_args(hint)
         if type(None) in options:
-            path_options = tuple(option for option in options if option is not type(None))
+            path_options = tuple(
+                option for option in options if option is not type(None)
+            )
             if _is_path_like(path_options):
                 return optional_path(value)
             if value is None:

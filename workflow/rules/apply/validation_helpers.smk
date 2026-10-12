@@ -6,7 +6,6 @@ here lets each validation rule use the same sources as the downstream rules.
 
 from pathlib import Path
 
-
 VALIDATION_DIR = Path(APPLY_OUTPUT_DIR) / "validation"
 COHORT_VALIDATION_REPORT = VALIDATION_DIR / "cohort.json"
 RESOURCE_VALIDATION_REPORT = VALIDATION_DIR / "resources.json"

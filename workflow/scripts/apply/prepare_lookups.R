@@ -17,7 +17,7 @@ workflow_config <- function() {
     list(
       het = snakemake@input[["lookup_het"]],
       hom = snakemake@input[["lookup_hom"]],
-      hem_chrX = if (hemizygote_model) snakemake@input[["lookup_hem_chrx"]][[1L]] else ""
+      hem_chrX = if (hemizygote_model) snakemake@input[["lookup_hem_chrX"]][[1L]] else ""
     ),
     expected_score_max = score_max,
     expected_bin_width = as.character(snakemake@params[["lookup_bin_width"]])
@@ -27,7 +27,7 @@ workflow_config <- function() {
     output_paths = list(
       het = snakemake@output[["lookup_het"]],
       hom = snakemake@output[["lookup_hom"]],
-      hem_chrX = if (hemizygote_model) snakemake@output[["lookup_hem_chrx"]][[1L]] else ""
+      hem_chrX = if (hemizygote_model) snakemake@output[["lookup_hem_chrX"]][[1L]] else ""
     ),
     hemizygote_model = hemizygote_model
   )

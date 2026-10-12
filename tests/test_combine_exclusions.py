@@ -37,9 +37,7 @@ class ExclusionOverlapTests(unittest.TestCase):
         self.assertEqual([], errors)
         self.assertEqual({"1", "MT"}, chromosomes)
         self.assertEqual(([10], [12]), intervals["1"])
-        self.assertEqual(
-            {("MT", 15, "A", "C"), ("MT", 15, "A", "T")}, variants
-        )
+        self.assertEqual({("MT", 15, "A", "C"), ("MT", 15, "A", "T")}, variants)
         self.assertEqual((), indexed_sources)
 
     def test_validation_and_staging_reject_the_same_bad_tsv_row(self) -> None:
@@ -107,9 +105,7 @@ class ExclusionOverlapTests(unittest.TestCase):
             (95, 104),
         )
         self.assertEqual(
-            vcf_record_span(
-                ["1", "90", ".", "N", "<DEL>", ".", "PASS", "END=105"]
-            ),
+            vcf_record_span(["1", "90", ".", "N", "<DEL>", ".", "PASS", "END=105"]),
             (90, 105),
         )
 

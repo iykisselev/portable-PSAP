@@ -3,11 +3,13 @@
 from pathlib import Path
 import sys
 
-SHARED_SCRIPT_DIR = Path(snakemake.scriptdir).parents[1] / "shared"
-sys.path.insert(0, str(SHARED_SCRIPT_DIR))
-from _library import add_library_path
+sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
+from _bootstrap import bootstrap
 
-add_library_path(snakemake.scriptdir)
+bootstrap(snakemake)
+from apply_bindings import MergeInputs, ReportOutput
+from _library import bind
+
 
 from validation_reporting import merge_validation_reports, write_validation_report
 
@@ -24,9 +26,11 @@ def main() -> None:
         OSError: If a fragment or the destination cannot be read or written.
         json.JSONDecodeError: If a validation fragment is not valid JSON.
     """
+    inputs = bind(MergeInputs, snakemake.input)
+    outputs = bind(ReportOutput, snakemake.output)
     write_validation_report(
-        merge_validation_reports(snakemake.input),
-        snakemake.output.report,
+        merge_validation_reports((inputs.cohort, inputs.resources, inputs.model)),
+        outputs.report,
         create_parents=False,
     )
 
