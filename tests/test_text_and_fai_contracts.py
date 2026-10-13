@@ -50,6 +50,13 @@ class TextAndFaiContractTests(unittest.TestCase):
             ],
         )
 
+    def test_bed_contig_prefixes_are_not_mistaken_for_directives(self):
+        bed = self.directory / "prefixes.bed"
+        bed.write_text("track1\t0\t2\nbrowser_alt\t2\t4\n")
+        self.assertEqual(
+            ["track1", "browser_alt"], [row.chromosome for row in iter_bed(bed)]
+        )
+
     def test_bed_reader_can_collect_invalid_rows_or_fail_strictly(self) -> None:
         bed = self.directory / "invalid.bed"
         bed.write_text("1\t4\t2\n1\t5\t7\n", encoding="utf-8")

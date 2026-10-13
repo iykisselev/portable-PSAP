@@ -1,0 +1,27 @@
+# Apply a bundle that already exists. Replace these resource paths and directory.
+# From the repository root:
+# snakemake --configfile runs/apply.bundle.example.yaml --cores 2 --use-conda
+outdir: results
+workflow:
+  mode: apply
+run:
+  apply_prefix: bundle-analysis
+model:
+  include_indels: true
+  hemizygote: true
+inputs:
+  vcf: {data: data/cohort.vcf.gz, index: data/cohort.vcf.gz.tbi}
+  ped: null
+  samples: config/samples.tsv
+bindings:
+  reference:
+    fasta:
+      data: resources/reference.fa.gz
+      fai: resources/reference.fa.gz.fai
+      gzi: resources/reference.fa.gz.gzi
+    cadd:
+      snv: {data: resources/cadd_snv.tsv.gz, index: resources/cadd_snv.tsv.gz.tbi}
+      indel: {data: resources/cadd_indel.tsv.gz, index: resources/cadd_indel.tsv.gz.tbi}
+    lookup_source:
+      type: bundle
+      directory: results/generate/my-model/bundle

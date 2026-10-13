@@ -72,7 +72,13 @@ rule annotate_variants:
             # one-based intervals so concat restores the original sort order.
             bcftools index --stats {input.vcf:q} |
                 awk -v width={params.partition_size_bp} '\
-                    $2 > 0 && $3 > 0 {{
+                    $3 > 0 {{
+                        if ($2 !~ /^[0-9]+$/ || $2 <= 0) {{
+                            # A valid VCF may omit a contig length. Fetch the
+                            # whole contig rather than silently dropping it.
+                            printf "%06d\\t%s\\n", ++ordinal, $1
+                            next
+                        }}
                         for (start = 1; start <= $2; start += width) {{
                             end = start + width - 1
                             if (end > $2) end = $2

@@ -313,34 +313,9 @@ fwrite(
     generated_path,
     sep = "\t"
 )
-metadata_path <- tempfile(fileext = ".json")
-jsonlite::write_json(
-    list(
-        contract = "generated_bundle_v2",
-        binning = list(
-            algorithm = "fixed_width_decimal_v1",
-            score_max = 6,
-            bin_width = 2,
-            bin_count = 3
-        )
-    ),
-    metadata_path,
-    auto_unbox = TRUE
-)
-validation_path <- tempfile(fileext = ".json")
-jsonlite::write_json(
-    list(status = "ok", metadata_sha256 = "fixture-digest"),
-    validation_path,
-    auto_unbox = TRUE
-)
-marker_path <- tempfile(fileext = ".ok")
-writeLines("generated_bundle_v2\tfixture-digest\tfixture-validation-digest", marker_path)
 generated_contract <- resolve_lookup_contract(
     "generated_bundle_v2",
     list(het = generated_path),
-    metadata_path,
-    validation_path,
-    marker_path,
     expected_score_max = 6,
     expected_bin_width = 2
 )
@@ -391,7 +366,7 @@ stopifnot(
     identical(hem_scored$PSAP, 0.75)
 )
 expect_error(
-    resolve_lookup_contract("unknown", list(), NULL),
+    resolve_lookup_contract("unknown", list()),
     "Unsupported lookup contract"
 )
 

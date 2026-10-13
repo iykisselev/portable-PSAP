@@ -21,7 +21,7 @@ rule finalize_null_distribution_bundle:
             for name, path in GENERATION_CONTEXT.bundle_outputs().items()
         },
     log:
-        str(GENERATION_CONTEXT.log_dir / "finalize.log"),
+        str(GENERATION_CONTEXT.plan.log_dir / "finalize.log"),
     conda:
         env("validation")
     container:
@@ -34,7 +34,7 @@ rule finalize_null_distribution_bundle:
         runtime=policy_resources("finalize_null_distribution_bundle").runtime,
     params:
         minimum_retained_fraction=WORKFLOW_PLAN.generation_settings.minimum_retained_fraction,
-        bin_count=GENERATION_CONTEXT.bin_count,
+        bin_count=GENERATION_CONTEXT.execution_layout.bin_count,
         bin_width=WORKFLOW_PLAN.generation_settings.score_bin_width,
         score_max=WORKFLOW_PLAN.model.score_max,
         policy=GENERATION_CONTEXT.plan.unobserved_policy,
@@ -73,7 +73,7 @@ rule validate_null_distribution_bundle:
         validation=ensure(GENERATION_CONTEXT.bundle_paths["validation"], non_empty=True),
         marker=ensure(GENERATION_CONTEXT.bundle_paths["marker"], non_empty=True),
     log:
-        str(GENERATION_CONTEXT.log_dir / "validate_bundle.log"),
+        str(GENERATION_CONTEXT.plan.log_dir / "validate_bundle.log"),
     conda:
         env("validation")
     container:

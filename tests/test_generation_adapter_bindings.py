@@ -13,7 +13,11 @@ sys.path.insert(0, str(ROOT / "workflow" / "shared"))
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from _library import BindingError, bind  # noqa: E402
-from apply_bindings import CohortValidationInputs, PreparationInputs  # noqa: E402
+from apply_bindings import (
+    CohortValidationInputs,
+    PreparationInputs,
+    AnnotationParameters,
+)  # noqa: E402
 from generation_bindings import (  # noqa: E402
     BundleFinalizationParameters,
     GenerationScopeInputs,
@@ -24,6 +28,34 @@ from generation_bindings import (  # noqa: E402
 
 
 class GenerationAdapterBindingTests(unittest.TestCase):
+    def test_boolean_binding_rejects_null_and_arbitrary_truthy_values(self):
+        for value in (None, 2, [], ["false"]):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(BindingError, "include_indels"),
+            ):
+                bind(AnnotationParameters, SimpleNamespace(include_indels=value))
+
+    def test_optional_bindings_reject_extra_paths_with_field_context(self):
+        with self.assertRaisesRegex(
+            BindingError, "PreparationInputs.source_index.*at most one"
+        ):
+            bind(
+                PreparationInputs,
+                SimpleNamespace(source="x", source_index=["one", "two"]),
+            )
+
+    def test_invalid_scalar_binding_reports_the_field(self):
+        from generation_bindings import LookupReductionParameters
+
+        with self.assertRaisesRegex(
+            BindingError, "LookupReductionParameters.bin_count"
+        ):
+            bind(
+                LookupReductionParameters,
+                SimpleNamespace(bin_count="not-integer", roles=["het"]),
+            )
+
     def test_apply_inputs_decode_optional_paths_and_require_core_fields(self):
         preparation = bind(
             PreparationInputs, SimpleNamespace(source="resource.vcf", source_index=[])

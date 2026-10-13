@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import copy
+import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 import warnings
 
@@ -46,6 +49,198 @@ class WorkflowPlanTests(unittest.TestCase):
 
     def manifest(self, relative_path: str) -> dict:
         return merge(self.science, load_yaml(ROOT / relative_path))
+
+    def test_nonfinite_score_max_is_rejected_before_scoring(self):
+        for value in (float("inf"), float("nan")):
+            with self.subTest(value=value):
+                manifest = self.manifest("tests/smoke/run.yaml")
+                manifest["model"]["score_max"] = value
+                with self.assertRaisesRegex(
+                    WorkflowPlanError, "model.score_max.*finite"
+                ):
+                    build_workflow_plan(manifest)
+
+    def directory_manifest(
+        self, directory, *, contract="generated_bundle_v2", hem=True
+    ):
+        """Small declarations stand in for component bytes at the planning boundary."""
+        from bundle_contract import BUNDLE_COMPONENT_FILENAMES
+
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["model"].update(hemizygote=hem, include_indels=contract.endswith("v3"))
+        reference = manifest["bindings"]["reference"]
+        for name in ("testing_unit_bed", "exclusion", "exclusions"):
+            reference.pop(name, None)
+        reference["lookup_source"] = {"type": "bundle", "directory": str(directory)}
+        roles = ["het", "hom"] + (["hem_chrX"] if hem else [])
+        components = {
+            name: {
+                "path": BUNDLE_COMPONENT_FILENAMES[
+                    "eligible_bed" if name == "eligible_testing_units" else name
+                ]
+            }
+            for name in (
+                "eligible_testing_units",
+                "calibration_regions",
+                "excluded_alleles",
+                "excluded_units",
+                *(f"lookup_{role}" for role in roles),
+            )
+        }
+        for component in components.values():
+            (directory / component["path"]).touch()
+        for name in ("validation", "marker"):
+            (directory / BUNDLE_COMPONENT_FILENAMES[name]).touch()
+        metadata = {
+            "contract": contract,
+            "binning": {"score_max": 23, "bin_width": 0.2},
+            "model_assumptions": {"roles": roles},
+            "components": components,
+        }
+        (directory / "metadata.json").write_text(json.dumps(metadata))
+        return manifest, metadata
+
+    def test_directory_resolves_declared_grid_and_scope_for_all_reader_versions(self):
+        for contract in (
+            "generated_bundle_v1",
+            "generated_bundle_v2",
+            "generated_bundle_v3",
+        ):
+            for hem in (False, True):
+                with (
+                    self.subTest(contract=contract, hem=hem),
+                    tempfile.TemporaryDirectory() as tmp,
+                ):
+                    directory = Path(tmp)
+                    manifest, _ = self.directory_manifest(
+                        directory, contract=contract, hem=hem
+                    )
+                    original = copy.deepcopy(manifest)
+                    plan = build_workflow_plan(manifest)
+                    lookup = plan.apply.lookup_source
+                    self.assertEqual(23, lookup.score_max)
+                    self.assertEqual(0.2, lookup.bin_width)
+                    self.assertEqual(contract, lookup.contract)
+                    self.assertEqual(hem, "hem_chrX" in lookup.tables)
+                    self.assertEqual(
+                        str(directory / "eligible_testing_units.bed.gz"),
+                        plan.apply.effective_reference.testing_unit_bed.data,
+                    )
+                    self.assertIsNone(
+                        plan.apply.configured_reference.testing_unit_bed.data
+                    )
+                    self.assertEqual(original, manifest)
+                    if contract == "generated_bundle_v3" and hem:
+                        example = self.manifest("runs/apply.bundle.example.yaml")
+                        example["bindings"]["reference"]["lookup_source"][
+                            "directory"
+                        ] = str(directory)
+                        self.assertEqual(
+                            lookup, build_workflow_plan(example).apply.lookup_source
+                        )
+
+    def test_directory_and_explicit_forms_resolve_equivalently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest, _ = self.directory_manifest(directory)
+            directory_plan = build_workflow_plan(manifest)
+            lookup = directory_plan.apply.lookup_source
+            manifest["model"]["score_max"] = lookup.score_max
+            manifest["generation_settings"]["score_bin_width"] = lookup.bin_width
+            manifest["bindings"]["reference"]["lookup_source"] = {
+                "type": "bundle",
+                "contract": lookup.contract,
+                "tables": dict(lookup.tables),
+                **{
+                    name: getattr(lookup, name)
+                    for name in (
+                        "metadata",
+                        "validation",
+                        "marker",
+                        "eligible_units",
+                        "calibration_mask",
+                        "excluded_units",
+                    )
+                },
+                "excluded_alleles": lookup.excluded_alleles[0],
+            }
+            self.assertEqual(lookup, build_workflow_plan(manifest).apply.lookup_source)
+
+    def test_directory_rejects_mixed_forms_and_reports_selected_branch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, _ = self.directory_manifest(Path(tmp))
+            source = manifest["bindings"]["reference"]["lookup_source"]
+            source["contract"] = "generated_bundle_v2"
+            with self.assertRaisesRegex(WorkflowPlanError, "do not combine") as caught:
+                build_workflow_plan(manifest)
+            self.assertNotIn("external_legacy_v0", str(caught.exception))
+
+    def test_directory_rejects_incomplete_invalid_or_escaping_declarations(self):
+        for failure in (
+            "metadata",
+            "component",
+            "certificate",
+            "contract",
+            "grid",
+            "escape",
+        ):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+                manifest, metadata = self.directory_manifest(directory)
+                if failure == "metadata":
+                    (directory / "metadata.json").unlink()
+                elif failure == "component":
+                    (directory / "lookup_het.tsv.gz").unlink()
+                elif failure == "certificate":
+                    (directory / "validation.ok").unlink()
+                else:
+                    if failure == "contract":
+                        metadata["contract"] = "unknown"
+                    elif failure == "grid":
+                        metadata["binning"]["bin_width"] = 0
+                    else:
+                        metadata["components"]["lookup_het"]["path"] = (
+                            "../lookup_het.tsv.gz"
+                        )
+                    (directory / "metadata.json").write_text(json.dumps(metadata))
+                with self.assertRaisesRegex(
+                    WorkflowPlanError, "lookup_source.directory"
+                ):
+                    build_workflow_plan(manifest)
+
+    def test_directory_rejects_hem_mismatch_before_rule_input_resolution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, _ = self.directory_manifest(Path(tmp), hem=False)
+            manifest["model"]["hemizygote"] = True
+            with self.assertRaisesRegex(WorkflowPlanError, "model.hemizygote"):
+                build_workflow_plan(manifest)
+
+    def test_directory_supports_invocation_relative_paths_and_symlinked_components(
+        self,
+    ):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            manifest, _ = self.directory_manifest(directory)
+            component = directory / "lookup_het.tsv.gz"
+            component.unlink()
+            target = directory / "source.tsv.gz"
+            target.touch()
+            component.symlink_to(target)
+            relative = os.path.relpath(directory)
+            manifest["bindings"]["reference"]["lookup_source"]["directory"] = relative
+            plan = build_workflow_plan(manifest)
+            self.assertEqual(
+                str(Path(relative) / component.name),
+                plan.apply.lookup_source.tables["het"],
+            )
+
+    def test_bundle_fields_outside_lookup_source_have_a_migration_hint(self):
+        manifest = self.manifest("tests/smoke/run.yaml")
+        manifest["bindings"]["reference"]["metadata"] = "bundle/metadata.json"
+        with self.assertRaisesRegex(
+            WorkflowPlanError, "inside bindings.reference.lookup_source"
+        ):
+            build_workflow_plan(manifest)
 
     def test_apply_plan_keeps_external_bindings_effective(self) -> None:
         plan = build_workflow_plan(self.manifest("tests/smoke/run.yaml"))

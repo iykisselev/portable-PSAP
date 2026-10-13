@@ -139,6 +139,8 @@ def validate_model_inputs(
             "hemizygote_model": settings["hemizygote"],
             "include_indels": settings["include_indels"],
             "lookup_contract": lookup_contract,
+            "lookup_score_max": score_max,
+            "lookup_bin_width": lookup_bin_width,
             "lookup_files_checked": checked,
             "lookup_testing_unit_overlap": overlap,
         },

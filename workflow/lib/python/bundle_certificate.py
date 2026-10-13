@@ -60,11 +60,15 @@ def verify_bundle_certificate(
         metadata_digest = sha256_file(metadata_file)
         validation_digest = sha256_file(validation_file)
         marker_fields = marker_file.read_text(encoding="utf-8").strip().split("\t")
-    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, TypeError, ValueError) as exc:
         raise BundleCertificateError(
             f"Could not read generated lookup bundle certificate: {exc}"
         ) from exc
 
+    if not isinstance(metadata, dict) or not isinstance(validation, dict):
+        raise BundleCertificateError(
+            "Bundle metadata and validation must be JSON objects"
+        )
     if metadata.get("contract") != contract:
         raise BundleCertificateError("Generated lookup metadata has the wrong contract")
     if (

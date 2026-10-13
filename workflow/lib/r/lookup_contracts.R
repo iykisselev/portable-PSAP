@@ -66,15 +66,8 @@ generated_lookup_bin <- fixed_width_bin_index
 resolve_lookup_contract <- function(
     contract,
     lookup_paths,
-    metadata_path = NULL,
-    validation_path = NULL,
-    marker_path = NULL,
     expected_score_max = NULL,
-    expected_bin_width = NULL,
-    eligible_units = NULL,
-    calibration_mask = NULL,
-    excluded_alleles = NULL,
-    excluded_units = NULL
+    expected_bin_width = NULL
 ) {
   if (identical(contract, "external_legacy_v0")) {
     return(list(
@@ -82,11 +75,7 @@ resolve_lookup_contract <- function(
       paths = lookup_paths,
       metadata = NULL,
       score_max = as.numeric(expected_score_max),
-      bin_width = NULL,
-      eligible_units = eligible_units,
-      calibration_mask = calibration_mask,
-      excluded_alleles = excluded_alleles,
-      excluded_units = excluded_units
+      bin_width = NULL
     ))
   }
   if (!is_supported_generated_bundle_contract(contract)) {
@@ -114,11 +103,7 @@ resolve_lookup_contract <- function(
     paths = lookup_paths,
     metadata = normalized_metadata,
     score_max = normalized_metadata$score_max,
-    bin_width = normalized_metadata$bin_width,
-    eligible_units = eligible_units,
-    calibration_mask = calibration_mask,
-    excluded_alleles = excluded_alleles,
-    excluded_units = excluded_units
+    bin_width = normalized_metadata$bin_width
   )
 }
 

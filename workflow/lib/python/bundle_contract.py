@@ -46,14 +46,13 @@ BUNDLE_COMPONENT_FILENAMES: Mapping[str, str] = MappingProxyType(
         "marker": VALIDATION_ARTIFACT_FILENAMES["marker"],
     }
 )
-CORE_COMPONENTS = frozenset(
+# Public certificate keys differ from a few rule-facing field names.
+BUNDLE_INPUT_COMPONENTS = MappingProxyType(
     {
-        "lookup_het",
-        "lookup_hom",
-        "eligible_testing_units",
-        "calibration_regions",
-        "excluded_alleles",
-        "excluded_units",
+        "eligible_units": "eligible_testing_units",
+        "calibration_mask": "calibration_regions",
+        "excluded_alleles": "excluded_alleles",
+        "excluded_units": "excluded_units",
     }
 )
 HEM_COMPONENT = "lookup_hem_chrX"

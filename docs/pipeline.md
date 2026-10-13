@@ -119,6 +119,83 @@ before rules are loaded. `workflow/lib/python/workflow_plan.py` then resolves
 it into an immutable `WorkflowPlan`. Rules consume this plan rather than
 reading configuration keys independently.
 
+### Applying an existing bundle
+
+Copy `runs/apply.bundle.example.yaml`, bind the cohort, metadata, FASTA and
+CADD resources, and set `bindings.reference.lookup_source.directory` to an
+existing generated bundle. This path is relative to the invocation directory,
+not the YAML file. Existing filesystem symlinks are supported. Directory
+discovery is intended for local bundles; use explicit bindings for other
+storage arrangements.
+
+The directory form reads only `metadata.json` while constructing the plan.
+It resolves published filenames and checks that required files exist; this
+does not certify their contents. The model validation job verifies certificate
+links and component checksums before downstream processing. Bundle files are
+declared job inputs, so changing a component invalidates dependent work.
+
+The bundle owns lookup `score_max` and `bin_width`. The resolved values appear
+in the existing model validation report as `lookup_score_max` and
+`lookup_bin_width`. Cohort model choices and assembly remain compatibility
+requirements. A mismatch requires a compatible bundle or an explicit change
+to the run's scientific settings; the workflow does not infer new genotype
+models from metadata.
+
+Bundle apply uses certified eligibility, calibration regions and allele
+exclusions. Original `testing_unit_bed`, `exclusion`, and `exclusions` bindings
+are optional and do not add filtering to this branch if supplied. Remove these
+redundant bindings when migrating. Scientific identities in `config/config.yaml`
+still describe the reference and annotation resources.
+
+To migrate a verbose manifest, replace the entire `lookup_source` mapping with
+`{type: bundle, directory: /path/to/bundle}`. Do not mix the two forms. The
+existing explicit form is also supported:
+
+```yaml
+lookup_source:
+  type: bundle
+  contract: generated_bundle_v3
+  tables:
+    het: /path/to/bundle/lookup_het.tsv.gz
+    hom: /path/to/bundle/lookup_hom.tsv.gz
+    hem_chrX: /path/to/bundle/lookup_hem_chrX.tsv.gz
+  metadata: /path/to/bundle/metadata.json
+  validation: /path/to/bundle/validation.json
+  marker: /path/to/bundle/validation.ok
+  eligible_units: /path/to/bundle/eligible_testing_units.bed.gz
+  calibration_mask: /path/to/bundle/calibration_regions.bed.gz
+  excluded_alleles: /path/to/bundle/excluded_alleles.tsv.gz
+  excluded_units: /path/to/bundle/excluded_units.tsv.gz
+```
+
+Explicit bindings retain the previous behavior: configured score maximum and
+generation bin width must match the bundle. External legacy lookups still use
+their explicit tables and `external_legacy_v0` contract. Generated v1/v2/v3
+reader support is retained. Fresh `full` runs resolve future output paths from
+their generation plan and never try to discover an unpublished directory.
+
+### Deployment verification
+
+Conda is the default route exercised by CI. The pinned environment and all
+workflow modes are covered by automated tests. Module-based deployments have
+been used on HPC systems, including the failures described during development;
+containers and site module bindings are declared but are not exercised by the
+current GitHub Actions workflow. Supported configuration is not proof that a
+specific site environment has been tested.
+
+For module-based execution, the Python selected after module activation must
+import the same Snakemake version used to construct script jobs. Check both
+`command -v python` and `python -c 'import sys, snakemake; print(sys.executable,
+snakemake.__file__)'` inside the job environment. Disable user site packages
+with `PYTHONNOUSERSITE=1` and clear unintended `PYTHONPATH` entries before
+launching. Verify the check again after modules load: module activation can
+replace the interpreter or reintroduce external package paths. Merely
+activating a virtual environment on the submission host is insufficient.
+
+Deployment routes and older bundle readers remain supported. Retiring one
+requires evidence of usage and a migration proposal, rather than removal as a
+side effect of configuration cleanup.
+
 Paths in manifests are interpreted relative to the directory where Snakemake
 is invoked. For production and cluster runs, absolute paths are safer.
 
@@ -133,7 +210,7 @@ is invoked. For production and cluster runs, absolute paths are safer.
 | `model.unit` | Testing-unit identifier class |
 | `model.hemizygote` | Enables the chromosome-X HEM model |
 | `model.include_indels` | Enables indel annotation and, with `generation_settings.variant_classes: [snv, indel]`, combined SNV/indel generation |
-| `model.score_max` | Maximum CADD-PHRED value represented by the lookup grid |
+| `model.score_max` | Generation/external lookup maximum; directory bundle apply resolves its maximum from metadata |
 
 ### Resource identities versus paths
 
@@ -163,6 +240,9 @@ An uncompressed FASTA requires `.fai` and may set `gzi: null`. A BGZF FASTA
 requires both `.fai` and `.gzi`.
 
 ### Testing-unit BED
+
+Generation and external lookup application require this binding. Generated
+bundle application uses the bundle's eligible testing units instead.
 
 The testing-unit file needs at least four columns:
 

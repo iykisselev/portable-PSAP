@@ -43,6 +43,15 @@ class ApplyWorkflowFixtureTests(unittest.TestCase):
         ) as temporary_dir:
             outdir = Path(temporary_dir) / "output"
             manifest = yaml.safe_load((ROOT / "tests/smoke/run.yaml").read_text())
+            # Mixed known/unknown contig lengths must not drop chromosome X
+            # from interval-partitioned annotation.
+            vcf = Path(temporary_dir) / "unknown-length.vcf"
+            vcf.write_text(
+                (ROOT / "tests/smoke/data/cohort.vcf")
+                .read_text()
+                .replace("##contig=<ID=X,length=60>", "##contig=<ID=X>")
+            )
+            manifest["inputs"]["vcf"] = {"data": str(vcf), "index": None}
             # Repeated exclusions must be subtracted once, never treated as an
             # inclusion mask by the renamed primary input.
             manifest["bindings"]["reference"]["exclusion"] = dict(

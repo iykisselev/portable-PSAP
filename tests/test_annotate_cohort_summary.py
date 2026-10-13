@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import gzip
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -22,6 +23,52 @@ SCRIPT = ROOT / "scripts" / "annotate_cohort_summary.py"
 
 @unittest.skipUnless(pysam, "pysam is required for indexed annotation tests")
 class CohortSummaryAnnotationTests(unittest.TestCase):
+    def test_ref_and_alt_af_cardinality_and_multiallelic_scalar_rejection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cadd = self.tabix_table(root, "cadd.tsv", "1\t10\tA\tG\t1\t25\n")
+            module = self.load_module()
+            for number, frequencies, expected in (
+                ("R", "0.7,0.1,0.2", "0.2"),
+                ("1", "0.1", None),
+            ):
+                with self.subTest(number=number):
+                    vcf = root / "population.vcf"
+                    vcf.write_text(
+                        "##fileformat=VCFv4.2\n##contig=<ID=1,length=100>\n"
+                        f"##INFO=<ID=AF,Number={number},Type=Float,Description=frequency>\n"
+                        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+                        f"1\t10\t.\tA\tG,T\t.\tPASS\tAF={frequencies}\n"
+                    )
+                    bgzf = root / "population.vcf.gz"
+                    pysam.tabix_compress(str(vcf), str(bgzf), force=True)
+                    pysam.tabix_index(str(bgzf), preset="vcf", force=True)
+                    lookup = module.AnnotationLookup(cadd, None, bgzf, "AF")
+                    try:
+                        if expected is None:
+                            with self.assertRaisesRegex(ValueError, "cardinality"):
+                                lookup.values(("1", 10, "A", "T"))
+                        else:
+                            self.assertEqual(
+                                expected, lookup.values(("1", 10, "A", "T"))[1]
+                            )
+                    finally:
+                        lookup.close()
+
+    def test_direct_annotation_rejects_same_path_and_hardlink_without_truncation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "summary.tsv"
+            source.write_text("original content\n")
+            hardlink = Path(tmp) / "hardlink.tsv"
+            os.link(source, hardlink)
+            module = self.load_module()
+            for output in (source, hardlink):
+                with self.assertRaisesRegex(ValueError, "overwrite"):
+                    module.annotate_summary(
+                        source, output, {}, None, "unit", "candidate_signature"
+                    )
+                self.assertEqual("original content\n", source.read_text())
+
     @staticmethod
     def tabix_table(root: Path, name: str, text: str) -> Path:
         source = root / name

@@ -33,6 +33,24 @@ def validate_configuration(config: Mapping[str, Any]) -> None:
         )
     }
     schemas = {name: _load_schema(path) for name, path in schema_paths.items()}
+    # Select the lookup branch before collecting errors from the whole schema.
+    # Otherwise oneOf can report an unrelated external contract for bundle input.
+    source: Any = config
+    for name in ("bindings", "reference", "lookup_source"):
+        source = source.get(name) if isinstance(source, Mapping) else None
+    if isinstance(source, Mapping):
+        branches = schemas["run.schema.yaml"]["$defs"]["lookup_source"]["oneOf"]
+        selected = [
+            branch
+            for branch in branches
+            if branch["properties"]["type"]["const"] == source.get("type")
+            and (
+                source.get("type") == "external"
+                or ("directory" in branch["properties"]) == ("directory" in source)
+            )
+        ]
+        if selected:
+            schemas["run.schema.yaml"]["$defs"]["lookup_source"] = selected[0]
     schema = schemas[SCHEMA_PATH.name]
     resolver = jsonschema.RefResolver(
         base_uri=SCHEMA_PATH.resolve().as_uri(),
@@ -67,9 +85,43 @@ def validate_configuration(config: Mapping[str, Any]) -> None:
             list(candidate.absolute_path),
         ),
     )[0]
-    path = ".".join(str(part) for part in error.absolute_path) or "<root>"
+    path_parts = list(error.absolute_path)
+    if error.validator == "required":
+        missing = next(
+            (name for name in error.validator_value if name not in error.instance), None
+        )
+        if missing:
+            path_parts.append(missing)
+    path = ".".join(str(part) for part in path_parts) or "<root>"
     if error.validator == "type" and error.validator_value == "boolean":
         raise ConfigurationValidationError(f"{path} must be a boolean")
+    hint = ""
+    if "lookup_source" in path:
+        if isinstance(source, Mapping) and source.get("type") == "external":
+            hint = (
+                "; external sources require contract: external_legacy_v0 and "
+                "tables: {het: /path/to/het, hom: /path/to/hom, hem_chrX: /path/to/hem} "
+                "(hem_chrX only when enabled)"
+            )
+        else:
+            hint = (
+                "; use lookup_source: {type: bundle, directory: /path/to/bundle} "
+                "or the complete explicit-component form; do not combine them"
+            )
+    elif path == "bindings.reference" and error.validator == "additionalProperties":
+        misplaced = set(error.instance) & {
+            "tables",
+            "metadata",
+            "validation",
+            "marker",
+            "eligible_units",
+            "calibration_mask",
+            "excluded_alleles",
+            "excluded_units",
+            "directory",
+        }
+        if misplaced:
+            hint = "; place bundle fields inside bindings.reference.lookup_source"
     raise ConfigurationValidationError(
-        f"Configuration schema validation failed at {path}: {error.message}"
+        f"Configuration schema validation failed at {path}: {error.message}" + hint
     )

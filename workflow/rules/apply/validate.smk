@@ -109,7 +109,7 @@ rule validate_model:
         mem_mb=policy_resources("validate_model").mem_mb,
         runtime=policy_resources("validate_model").runtime,
     params:
-        score_max=WORKFLOW_PLAN.model.score_max,
+        score_max=LOOKUP_SOURCE.score_max,
         assembly=WORKFLOW_PLAN.reference.assembly,
         unit=WORKFLOW_PLAN.model.unit,
         hemizygote_model=WORKFLOW_PLAN.model.hemizygote,

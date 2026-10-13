@@ -55,6 +55,31 @@ Use the executable small demonstrations in
 production apply run, copy [`runs/run.example.yaml`](runs/run.example.yaml) and
 replace its physical resource paths.
 
+To apply an existing generated bundle, copy
+[`runs/apply.bundle.example.yaml`](runs/apply.bundle.example.yaml). Supply its
+directory under `bindings.reference.lookup_source`:
+
+```yaml
+lookup_source:
+  type: bundle
+  directory: results/generate/my-model/bundle
+```
+
+The workflow discovers its lookup tables, eligibility, calibration mask,
+exclusions, contract and score grid from bundle declarations. No original
+testing-unit BED or repeated component paths are needed. Paths are relative to
+the directory where you invoke Snakemake. The bundle must already exist for
+this apply form; `full` mode generates and binds its own bundle automatically.
+Model choices (`include_indels`, `hemizygote`, testing-unit type) and assembly
+must match the bundle. Certificate and checksum checks run before annotation.
+For directory bundles, the bundle's score maximum and bin width govern scoring;
+configuration grid defaults do not change them.
+
+The existing explicit-component form remains supported for advanced use and
+retains its configured-grid checks. See
+[bundle configuration and deployment](docs/pipeline.md#applying-an-existing-bundle)
+for migration and verification details.
+
 ## Workflow overview
 
 ### 1. Validation
@@ -133,7 +158,7 @@ annotations. For every enabled disease model and testing unit, the workflow:
 
 1. retains variants in the model's compatible genotype class;
 2. keeps every variant tied for the highest CADD-PHRED value in that unit;
-3. clips CADD-PHRED values to the configured interval `[0, score_max]`;
+3. clips CADD-PHRED values to the resolved lookup interval `[0, score_max]`;
 4. maps each value to an evenly spaced column in the corresponding PSAP lookup
    grid; and
 5. records the lookup value as `PSAP`.

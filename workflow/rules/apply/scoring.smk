@@ -31,7 +31,7 @@ rule prepare_lookups:
         mem_mb=policy_resources("prepare_lookups").mem_mb,
         runtime=policy_resources("prepare_lookups").runtime,
     params:
-        score_max=str(WORKFLOW_PLAN.model.score_max),
+        score_max=str(LOOKUP_SOURCE.score_max),
         hemizygote=WORKFLOW_PLAN.model.hemizygote,
         lookup_contract=LOOKUP_SOURCE.contract,
         lookup_bin_width=LOOKUP_SOURCE.bin_width or "",
@@ -72,7 +72,7 @@ rule apply_psap:
         mem_mb=policy_resources("apply_psap").mem_mb,
         runtime=policy_resources("apply_psap").runtime,
     params:
-        score_max=str(WORKFLOW_PLAN.model.score_max),
+        score_max=str(LOOKUP_SOURCE.score_max),
         hemizygote=WORKFLOW_PLAN.model.hemizygote,
         lookup_contract=LOOKUP_SOURCE.contract,
         lookup_bin_width=LOOKUP_SOURCE.bin_width or "",

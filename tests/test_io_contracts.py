@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -17,9 +18,35 @@ from io_contracts import (  # noqa: E402
     write_gzip_tsv_atomic,
     write_text_atomic,
 )
+from bundle_certificate import BundleCertificateError, verify_bundle_certificate  # noqa: E402
 
 
 class IOContractTests(unittest.TestCase):
+    def test_certificate_json_arrays_fail_with_a_contract_error(self):
+        for invalid_file in ("metadata", "validation"):
+            with (
+                self.subTest(invalid_file=invalid_file),
+                TemporaryDirectory() as temporary,
+            ):
+                directory = Path(temporary)
+                paths = {
+                    name: directory / name
+                    for name in ("metadata", "validation", "marker")
+                }
+                for name in ("metadata", "validation"):
+                    paths[name].write_text(
+                        json.dumps([] if name == invalid_file else {})
+                    )
+                paths["marker"].write_text("")
+                with self.assertRaisesRegex(BundleCertificateError, "JSON objects"):
+                    verify_bundle_certificate(
+                        contract="generated_bundle_v2",
+                        metadata_path=paths["metadata"],
+                        validation_path=paths["validation"],
+                        marker_path=paths["marker"],
+                        components={},
+                    )
+
     def test_text_writer_returns_destination_and_controls_parent_creation(self) -> None:
         with TemporaryDirectory() as temporary:
             root = Path(temporary)

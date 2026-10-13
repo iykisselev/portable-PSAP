@@ -123,10 +123,6 @@ def effective_calibration_mask(
     }
 
 
-def merged_length(intervals: list[tuple[int, int]]) -> int:
-    return sum(end - start for start, end in merge_intervals(intervals))
-
-
 def overlap_sorted(
     intervals: list[tuple[int, int]],
     merged_regions: list[tuple[int, int]],
@@ -154,21 +150,6 @@ def overlap_sorted(
                 pieces.append((left, right))
             index += 1
     return pieces
-
-
-def overlap_length(
-    intervals: list[tuple[int, int]], regions: list[tuple[int, int]]
-) -> int:
-    """Return covered bases for arbitrary interval collections."""
-    merged_regions = merge_intervals(regions)
-    return sum(
-        end - start
-        for start, end in overlap_sorted(
-            intervals,
-            merged_regions,
-            [start for start, _ in merged_regions],
-        )
-    )
 
 
 def retention_rows(

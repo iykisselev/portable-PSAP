@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+import json
+import math
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, TypeVar
@@ -23,6 +25,9 @@ from bundle_contract import (
     BUNDLE_COMPONENT_FILENAMES,
     CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
     INDEL_GENERATED_BUNDLE_CONTRACT,
+    BUNDLE_INPUT_COMPONENTS,
+    require_supported_contract,
+    fixed_width_bin_count,
 )
 
 
@@ -88,9 +93,12 @@ def _optional(value: Any) -> str | None:
 
 def _number(value: Any, key: str, converter: type[float] | type[int]) -> float | int:
     try:
-        return converter(value)
-    except (TypeError, ValueError) as exc:
+        result = converter(value)
+    except (TypeError, ValueError, OverflowError) as exc:
         raise WorkflowPlanError(f"{key} must be a {converter.__name__}") from exc
+    if isinstance(result, float) and not math.isfinite(result):
+        raise WorkflowPlanError(f"{key} must be finite")
+    return result
 
 
 def _boolean(value: Any, key: str) -> bool:
@@ -337,11 +345,6 @@ def binding_data(
     return binding.data
 
 
-def binding_index(binding: FileBinding | None) -> str:
-    """Return only the index declared by the run manifest."""
-    return "" if binding is None or binding.index is None else binding.index
-
-
 def _reference_metadata(config: Mapping[str, Any]) -> ReferenceMetadata:
     reference = _mapping(config.get("reference"), "reference")
     exclusions = _mapping(reference.get("exclusions"), "reference.exclusions")
@@ -399,6 +402,9 @@ def _reference_bindings(
     value: Any, key: str, *, require_lookup: bool
 ) -> ReferenceBindings:
     reference = _mapping(value, key)
+    bundle = (
+        require_lookup and reference.get("lookup_source", {}).get("type") == "bundle"
+    )
     cadd = _mapping(reference.get("cadd"), f"{key}.cadd")
     indel = cadd.get("indel")
     if require_lookup:
@@ -406,10 +412,14 @@ def _reference_bindings(
     return ReferenceBindings(
         fasta=FastaBinding.from_config(reference.get("fasta"), f"{key}.fasta"),
         exclusion=FileBinding.from_config(
-            reference.get("exclusion"), f"{key}.exclusion", required=False
+            reference.get("exclusion", {"data": None}),
+            f"{key}.exclusion",
+            required=False,
         ),
         testing_unit_bed=FileBinding.from_config(
-            reference.get("testing_unit_bed"), f"{key}.testing_unit_bed"
+            reference.get("testing_unit_bed", {"data": None}),
+            f"{key}.testing_unit_bed",
+            required=not bundle,
         ),
         exclusions=_frozen_mapping(
             {
@@ -417,7 +427,7 @@ def _reference_bindings(
                     item, f"{key}.exclusions.{identifier}"
                 )
                 for identifier, value in _mapping(
-                    reference.get("exclusions"), f"{key}.exclusions"
+                    reference.get("exclusions", {}), f"{key}.exclusions"
                 ).items()
                 for item in (_mapping(value, f"{key}.exclusions.{identifier}"),)
             }
@@ -442,6 +452,8 @@ def _resolved_reference_exclusions(
         raise WorkflowPlanError(
             "bindings.reference.exclusions has no scientific metadata for: "
             + ", ".join(unknown_ids)
+            + "; declare each ID with kind and role in reference.exclusions, "
+            "or remove its physical binding"
         )
     active_ids = {
         identifier
@@ -453,6 +465,8 @@ def _resolved_reference_exclusions(
         raise WorkflowPlanError(
             "bindings.reference.exclusions is missing active bindings for: "
             + ", ".join(missing_ids)
+            + "; supply data/index under bindings.reference.exclusions "
+            "or explicitly disable the corresponding scientific exclusion"
         )
     return tuple(
         ExclusionBinding(
@@ -474,6 +488,14 @@ def _lookup_source(
     settings: GenerationSettings,
 ) -> LookupSource:
     source = _mapping(value, key)
+    if "directory" in source:
+        lookup = _directory_lookup_source(source, key)
+        if model.hemizygote != ("hem_chrX" in lookup.tables):
+            raise WorkflowPlanError(
+                f"{key}.directory: bundle HEM role differs from model.hemizygote; "
+                "choose a compatible bundle or change model.hemizygote"
+            )
+        return lookup
     source_type = _required(source.get("type"), f"{key}.type")
     contract = _required(source.get("contract"), f"{key}.contract")
     tables = _frozen_mapping(
@@ -534,6 +556,62 @@ def _lookup_source(
         excluded_alleles=excluded_alleles,
         excluded_units=excluded_units,
     )
+
+
+def _directory_lookup_source(source: Mapping[str, Any], key: str) -> LookupSource:
+    """Resolve small, unverified declarations; the validation job certifies bytes."""
+    directory = Path(_required(source["directory"], f"{key}.directory"))
+    metadata_path = directory / BUNDLE_COMPONENT_FILENAMES["metadata"]
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        contract = require_supported_contract(metadata["contract"])
+        grid = metadata["binning"]
+        maximum, width = float(grid["score_max"]), float(grid["bin_width"])
+        fixed_width_bin_count(maximum, width)
+        roles = metadata["model_assumptions"]["roles"]
+        if not isinstance(roles, list) or set(roles) not in (
+            {"het", "hom"},
+            {"het", "hom", "hem_chrX"},
+        ):
+            raise ValueError("roles must declare het, hom and optionally hem_chrX")
+        components = metadata["components"]
+
+        def component(name: str) -> str:
+            filename = components[name]["path"]
+            internal_name = "eligible_bed" if name == "eligible_testing_units" else name
+            if filename != BUNDLE_COMPONENT_FILENAMES[internal_name]:
+                raise ValueError(f"component {name} must use its published filename")
+            path = directory / filename
+            if not path.is_file():
+                raise ValueError(f"missing component {path}")
+            return str(path)
+
+        tables = {role: component(f"lookup_{role}") for role in roles}
+        fields = {
+            field: component(name) for field, name in BUNDLE_INPUT_COMPONENTS.items()
+        }
+        certificate = {}
+        for name in ("validation", "marker"):
+            path = directory / BUNDLE_COMPONENT_FILENAMES[name]
+            if not path.is_file():
+                raise ValueError(f"missing certificate file {path}")
+            certificate[name] = str(path)
+        return LookupSource(
+            source_type="bundle",
+            contract=contract,
+            tables=_frozen_mapping(tables),
+            score_max=maximum,
+            bin_width=width,
+            metadata=str(metadata_path),
+            **certificate,
+            **{k: v for k, v in fields.items() if k != "excluded_alleles"},
+            excluded_alleles=(fields["excluded_alleles"],),
+        )
+    except (OSError, ValueError, TypeError, KeyError, OverflowError) as exc:
+        raise WorkflowPlanError(
+            f"{key}.directory: cannot resolve bundle {directory}: {exc}. "
+            "Point directory to a complete, validated generated bundle."
+        ) from exc
 
 
 @dataclass(frozen=True)

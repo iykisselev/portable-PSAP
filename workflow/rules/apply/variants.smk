@@ -3,7 +3,7 @@ from shell_arguments import optional_regions_argument
 VARIANT_DIR = APPLY_OUTPUT_DIR / "variants"
 FILTERED_BCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.in_scope.bcf"
 EXCLUSION_FILTERED_VCF = VARIANT_DIR / f"{APPLY_OUTPUT_DIR.name}.filtered_pass.vcf.gz"
-CALIBRATION_FILTER_ENABLED = optional_apply_resource("calibration_regions") is not None
+CALIBRATION_FILTER_ENABLED = "calibration_regions" in APPLY_RESOURCE_REGISTRY.resources
 EXCLUSION_FILTER_ENABLED = bool(APPLY_RESOURCE_REGISTRY.exclusion_sources)
 IN_SCOPE_VCF = apply_resource("cohort").staged_data
 IN_SCOPE_VCF_INDEX = apply_resource("cohort").staged_index

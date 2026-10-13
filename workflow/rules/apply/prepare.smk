@@ -1,8 +1,8 @@
 rule prepare_vcf_resource:
     """Stage the cohort VCF at a stable BGZF target."""
     input:
-        source=vcf_resource_source,
-        source_index=vcf_resource_source_index,
+        source=apply_resource("cohort").source,
+        source_index=APPLY_RESOURCE_REGISTRY.inputs("cohort", "source_index"),
         validated=vcf_resource_validation_marker,
     output:
         data=ensure(str(PREPARED_DIR / "{resource}.vcf.gz"), non_empty=True),
@@ -69,7 +69,7 @@ rule prepare_table_resource:
         mem_mb=TABLE_RESOURCE_CALLBACKS.mem_mb,
         runtime=TABLE_RESOURCE_CALLBACKS.runtime,
     params:
-        kind=table_resource_kind,
-        tsv_layout=table_resource_tsv_layout,
+        kind=lambda wc: table_resource(wc).kind,
+        tsv_layout=lambda wc: table_resource(wc).tsv_layout or "auto",
     script:
         str(APPLY_SCRIPT_DIR / "prepare_resource.py")

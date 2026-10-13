@@ -17,7 +17,6 @@ from workflow_plan import (
     FastaBinding,
     WorkflowPlan,
     binding_data,
-    binding_index,
 )
 from workflow_bindings import as_inputs
 
@@ -58,20 +57,6 @@ class ApplyResourceRegistry:
         """Declare one enabled resource field, preserving absent optionals."""
         resource = self.resources.get(name)
         return as_inputs(getattr(resource, field)) if resource else []
-
-    def resources_with_role(self, role: str) -> tuple[ResourceSpec, ...]:
-        return tuple(
-            resource
-            for resource in self.resources.values()
-            if resource.scientific_role == role
-        )
-
-    def role_inputs(self, role: str, field: str = "source") -> list[str]:
-        return [
-            path
-            for resource in self.resources_with_role(role)
-            for path in as_inputs(getattr(resource, field))
-        ]
 
     def exclusion_specs(self) -> list[str]:
         return [
@@ -180,14 +165,13 @@ def build_apply_resource_registry(
         tsv_layout: str | None = None,
         origin: str = resource_origin,
     ) -> None:
-        source_path = binding_data(resource_binding, required=False)
-        if not source_path:
+        if resource_binding is None or not resource_binding.data:
             return
         staged_data = str(prepared_table_dir / f"{logical_name}.{kind}.gz")
         resource_specs[logical_name] = ResourceSpec(
             logical_name=logical_name,
-            source=source_path,
-            source_index=binding_index(resource_binding),
+            source=resource_binding.data,
+            source_index=resource_binding.index or "",
             kind=kind,
             scientific_role=scientific_role,
             requires_chromosome_normalization=requires_chromosome_normalization,
@@ -202,7 +186,7 @@ def build_apply_resource_registry(
     resource_specs["cohort"] = ResourceSpec(
         logical_name="cohort",
         source=cohort_vcf_source,
-        source_index=binding_index(apply_plan.inputs.vcf),
+        source_index=apply_plan.inputs.vcf.index or "",
         kind="vcf",
         scientific_role="cohort_vcf",
         requires_chromosome_normalization=False,

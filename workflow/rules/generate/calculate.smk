@@ -22,7 +22,7 @@ rule calculate_partition_null_distribution:
         ),
     log:
         str(
-            GENERATION_CONTEXT.log_dir
+            GENERATION_CONTEXT.plan.log_dir
             / "partitions"
             / "{partition}.{bucket}.calculate.log"
         ),
@@ -40,7 +40,7 @@ rule calculate_partition_null_distribution:
         score_max=WORKFLOW_PLAN.model.score_max,
         bin_width=WORKFLOW_PLAN.generation_settings.score_bin_width,
         unobserved_policy=GENERATION_CONTEXT.plan.unobserved_policy,
-        roles=GENERATION_CONTEXT.roles,
+        roles=GENERATION_CONTEXT.execution_layout.roles,
         x_af_policy=WORKFLOW_PLAN.generation_settings.x_af_policy,
         x_mutation_rate_policy=WORKFLOW_PLAN.generation_settings.x_mutation_rate_policy,
         compression=GENERATION_CONTEXT.plan.parquet_compression,
@@ -63,7 +63,7 @@ rule reduce_null_distribution_bucket:
             GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.diagnostics.tsv"
         ),
     log:
-        str(GENERATION_CONTEXT.log_dir / "buckets" / "{bucket}.reduce.log"),
+        str(GENERATION_CONTEXT.plan.log_dir / "buckets" / "{bucket}.reduce.log"),
     conda:
         env("validation")
     container:
@@ -75,7 +75,7 @@ rule reduce_null_distribution_bucket:
         mem_mb=policy_resources("reduce_null_distribution_bucket").mem_mb,
         runtime=policy_resources("reduce_null_distribution_bucket").runtime,
     params:
-        bin_count=GENERATION_CONTEXT.bin_count,
-        roles=GENERATION_CONTEXT.roles,
+        bin_count=GENERATION_CONTEXT.execution_layout.bin_count,
+        roles=GENERATION_CONTEXT.execution_layout.roles,
     script:
         str(GENERATION_SCRIPT_DIR / "reduce_partition_statistics.py")

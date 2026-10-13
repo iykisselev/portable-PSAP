@@ -89,7 +89,11 @@ def iter_bed(
     with open_text(path, errors=errors) as handle:
         for line_number, raw in enumerate(handle, start=1):
             stripped = raw.strip()
-            if not stripped or stripped.startswith(("#", "track", "browser")):
+            if (
+                not stripped
+                or stripped.startswith("#")
+                or stripped.split(None, 1)[0] in {"track", "browser"}
+            ):
                 continue
             fields = tuple(stripped.split("\t"))
             try:

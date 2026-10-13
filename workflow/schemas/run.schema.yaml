@@ -81,7 +81,7 @@ $defs:
   reference_binding_base:
     type: object
     additionalProperties: false
-    required: [fasta, exclusion, testing_unit_bed, exclusions, cadd]
+    required: [fasta, cadd]
     properties:
       fasta: {$ref: "#/$defs/fasta_binding"}
       exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
@@ -96,10 +96,18 @@ $defs:
         required: [lookup_source]
         properties:
           lookup_source: {$ref: "#/$defs/lookup_source"}
+        if:
+          properties:
+            lookup_source:
+              properties: {type: {const: bundle}}
+              required: [type]
+        else:
+          required: [exclusion, testing_unit_bed, exclusions]
   full_reference_binding:
     allOf:
       - {$ref: "#/$defs/reference_binding_base"}
       - type: object
+        required: [exclusion, testing_unit_bed, exclusions]
         properties:
           lookup_source: false
   af_source:
@@ -157,6 +165,12 @@ $defs:
           fasta: false
   lookup_source:
     oneOf:
+      - type: object
+        additionalProperties: false
+        required: [type, directory]
+        properties:
+          type: {const: bundle}
+          directory: {type: string, minLength: 1}
       - type: object
         additionalProperties: false
         required: [type, contract, tables]

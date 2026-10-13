@@ -9,6 +9,7 @@ import numpy as np
 import polars as pl
 
 from generation_partitions import GenomePartition
+from generation_prep import merge_intervals
 from genomic_contracts import read_fai
 
 try:
@@ -45,7 +46,15 @@ class ReferenceReader:
         self.fasta = Path(fasta)
         self.fai = Path(fai)
         self.contigs = read_fai(self.fai)
-        self.reader = pysam.FastaFile(str(self.fasta)) if pysam is not None else None
+        self.reader = (
+            pysam.FastaFile(str(self.fasta), filepath_index=str(self.fai))
+            if pysam is not None
+            else None
+        )
+        if self.reader is None:
+            with self.fasta.open("rb") as handle:
+                if handle.read(2) == b"\x1f\x8b":
+                    raise RuntimeError("Compressed FASTA requires pysam")
 
     def fetch(self, chromosome: str, start: int, end: int) -> str:
         """Fetch one bounded half-open interval with canonical chromosome names."""
@@ -55,7 +64,12 @@ class ReferenceReader:
                 f"Reference request is outside {chromosome!r}: {start}-{end}"
             )
         if self.reader is not None:
-            return self.reader.fetch(record.name, start, end).upper()
+            sequence = self.reader.fetch(record.name, start, end).upper()
+            if len(sequence) != end - start:
+                raise ValueError(
+                    f"FASTA is truncated or its index is stale: {self.fasta}"
+                )
+            return sequence
 
         sequence: list[bytes] = []
         position = start
@@ -68,7 +82,12 @@ class ReferenceReader:
                     + (position // record.line_bases) * record.line_bytes
                     + within_line
                 )
-                sequence.append(handle.read(take))
+                chunk = handle.read(take)
+                if len(chunk) != take:
+                    raise ValueError(
+                        f"FASTA is truncated or its index is stale: {self.fasta}"
+                    )
+                sequence.append(chunk)
                 position += take
         return b"".join(sequence).decode("ascii").upper()
 
@@ -86,6 +105,8 @@ def membership_rows(
 ) -> pl.DataFrame:
     """Generate bounded candidate SNVs and distinct allele-to-unit memberships."""
     frames: list[pl.DataFrame] = []
+    if any(mask[index - 1][1] > mask[index][0] for index in range(1, len(mask))):
+        mask = merge_intervals(mask)
     mask_starts = [start for start, _ in mask]
     # Canonical scope artifacts have disjoint masks and merged intervals for
     # each unit, so no two chunks can emit the same membership.  Retaining a
@@ -99,12 +120,6 @@ def membership_rows(
             needs_deduplication = True
             break
         greatest_end_by_unit[unit] = max(end, greatest_end_by_unit.get(unit, end))
-    greatest_mask_end = -1
-    for start, end in mask:
-        if start < greatest_mask_end:
-            needs_deduplication = True
-            break
-        greatest_mask_end = max(greatest_mask_end, end)
     for unit, start, end in intervals:
         mask_index = max(0, bisect_right(mask_starts, start) - 1)
         while mask_index < len(mask) and mask[mask_index][0] < end:

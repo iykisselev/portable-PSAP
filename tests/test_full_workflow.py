@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -30,6 +31,67 @@ class FullWorkflowFixtureTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         with BASELINE_PATH.open(encoding="utf-8") as handle:
             cls.baseline = json.load(handle)["full"]
+
+    def assert_directory_apply_matches(self, manifest_path, bundle, cohort, root):
+        """A fresh apply discovers the generated grid despite different config defaults."""
+        manifest = yaml.safe_load((ROOT / manifest_path).read_text())
+        manifest["workflow"]["mode"] = "apply"
+        manifest.pop("generation")
+        manifest["run"].pop("generation_prefix")
+        reference = manifest["bindings"]["reference"]
+        for name in ("exclusion", "exclusions", "testing_unit_bed"):
+            reference.pop(name)
+        reference["lookup_source"] = {"type": "bundle", "directory": str(bundle)}
+        # These values are intentionally different: directory bundles own the grid.
+        manifest["model"]["score_max"] = 23
+        manifest.setdefault("generation_settings", {})["score_bin_width"] = 0.2
+        run_path = root / "directory-apply.yaml"
+        run_path.write_text(yaml.safe_dump(manifest))
+        apply_out = root / "directory-output"
+        result = run_workflow(run_path, apply_out)
+        self.assertEqual(0, result.returncode, command_output(result)[-6000:])
+        applied = apply_out / "apply" / manifest["run"]["apply_prefix"]
+        for original in cohort.glob("*.tsv.gz"):
+            self.assertEqual(
+                hashlib.sha256(original.read_bytes()).hexdigest(),
+                hashlib.sha256(
+                    (applied / "cohort" / original.name).read_bytes()
+                ).hexdigest(),
+                original.name,
+            )
+        validation = json.loads((applied / "validation" / "model.json").read_text())
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["binning"]["score_max"], validation["summary"]["lookup_score_max"]
+        )
+        self.assertEqual(
+            metadata["binning"]["bin_width"], validation["summary"]["lookup_bin_width"]
+        )
+        # Discovery is not certificate verification: changed bytes fail at the barrier.
+        with (bundle / "excluded_units.tsv.gz").open("ab") as handle:
+            handle.write(b"tampered")
+        rejected = run_workflow(run_path, root / "tampered-output")
+        self.assertNotEqual(0, rejected.returncode)
+        failed_model = json.loads(
+            (
+                root
+                / "tampered-output"
+                / "apply"
+                / manifest["run"]["apply_prefix"]
+                / "validation"
+                / "model.json"
+            ).read_text()
+        )
+        self.assertTrue(any("wrong size" in error for error in failed_model["errors"]))
+        self.assertFalse(
+            (
+                root
+                / "tampered-output"
+                / "apply"
+                / manifest["run"]["apply_prefix"]
+                / "annotations"
+            ).exists()
+        )
 
     def test_full_fixture_generates_and_applies_hem_bundle(self) -> None:
         """Execute the complete DAG and verify its generated bundle is consumed."""
@@ -129,13 +191,21 @@ class FullWorkflowFixtureTests(unittest.TestCase):
             self.assertEqual(
                 self.baseline["resume_dry_run_jobs"], planned_job_count(resumed)
             )
+            self.assert_directory_apply_matches(
+                FULL_MANIFEST, bundle, cohort, temporary_root
+            )
 
     def test_full_indel_fixture_consumes_the_generated_v3_bundle(self) -> None:
         with tempfile.TemporaryDirectory(
             prefix="portable-psap-full-indel-workflow-"
         ) as temporary:
             outdir = Path(temporary) / "output"
-            result = run_workflow(FULL_INDEL_MANIFEST, outdir)
+            manifest = yaml.safe_load((ROOT / FULL_INDEL_MANIFEST).read_text())
+            manifest["model"]["score_max"] = 50
+            manifest["generation_settings"]["score_bin_width"] = 0.3
+            generation_run = Path(temporary) / "nondefault-grid.yaml"
+            generation_run.write_text(yaml.safe_dump(manifest))
+            result = run_workflow(generation_run, outdir)
             output = command_output(result)
             self.assertEqual(0, result.returncode, output[-6000:])
 
@@ -150,6 +220,12 @@ class FullWorkflowFixtureTests(unittest.TestCase):
                 "generated_bundle_v3", model_validation["summary"]["lookup_contract"]
             )
             self.assertTrue((bundle / "validation.ok").is_file())
+            self.assert_directory_apply_matches(
+                FULL_INDEL_MANIFEST,
+                bundle,
+                outdir / "apply" / "indel-fixture" / "cohort",
+                Path(temporary),
+            )
 
 
 if __name__ == "__main__":

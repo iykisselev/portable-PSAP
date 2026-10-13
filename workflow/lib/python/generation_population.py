@@ -52,6 +52,7 @@ def indexed_lines(
     overlaps; retain it only for the interval containing its one-based POS
     anchor so disjoint fetches cannot duplicate an allele state.
     """
+    chromosome = canonical_chromosome(chromosome)
     regions = [(start, end)] if intervals is None else intervals
     if not regions:
         return
@@ -61,7 +62,14 @@ def indexed_lines(
                 "Indexed generation resources require pysam in the generation environment"
             )
         with pysam.TabixFile(str(path), index=str(index)) as reader:
-            names = {canonical_chromosome(name): name for name in reader.contigs}
+            names = {}
+            for name in reader.contigs:
+                canonical = canonical_chromosome(name)
+                if canonical in names:
+                    raise ValueError(
+                        f"{path}: ambiguous chromosome aliases {names[canonical]!r} and {name!r}"
+                    )
+                names[canonical] = name
             source_chromosome = names.get(chromosome)
             if source_chromosome is not None:
                 for region_start, region_end in regions:
@@ -120,6 +128,8 @@ def population_info_definitions(
 ) -> dict[str, tuple[str, str]]:
     """Return validated INFO definitions for the requested tags in one header pass."""
     remaining = set(info_tags)
+    if not remaining:
+        return {}
     definitions: dict[str, tuple[str, str]] = {}
     with open_text(path) as handle:
         for raw in handle:
@@ -154,11 +164,6 @@ def population_info_definitions(
     raise ValueError(
         f"Population VCF has no INFO header for configured tag {missing!r}"
     )
-
-
-def population_info_definition(path: str | Path, info_tag: str) -> tuple[str, str]:
-    """Return the declared cardinality and numeric type for a selected INFO tag."""
-    return population_info_definitions(path, [info_tag])[info_tag]
 
 
 def validate_population_af_headers(path: str | Path, af_tags: dict[str, str]) -> None:
@@ -258,6 +263,7 @@ def population_rows(
     intervals: list[tuple[int, int]] | None = None,
 ) -> pl.DataFrame:
     """Extract observed/rejected population states for one genomic window."""
+    chromosome = canonical_chromosome(chromosome)
     if x_af_policy not in {"sex_specific", "overall_proxy"}:
         raise ValueError(f"Unsupported X chromosome AF policy {x_af_policy!r}")
     if not af_tags.get("overall"):
@@ -323,7 +329,7 @@ def population_rows(
             columns["state_reason"].append(state_reason)
 
     for raw in indexed_lines(path, index, chromosome, start, end, intervals=intervals):
-        if raw.startswith("#"):
+        if not raw.strip() or raw.startswith("#"):
             continue
         fields = raw.rstrip("\n").split("\t")
         if len(fields) < 8:

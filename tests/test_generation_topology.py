@@ -104,7 +104,7 @@ class GenerationTopologyTests(unittest.TestCase):
             build_workflow_plan(configuration)
         )
 
-        self.assertFalse(context.hem_enabled)
+        self.assertFalse(context.model.hemizygote)
         self.assertEqual([], context.bundle_outputs()["lookup_hem_chrX"])
         self.assertNotIn("marker", context.bundle_outputs())
 

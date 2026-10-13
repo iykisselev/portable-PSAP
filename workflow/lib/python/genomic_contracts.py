@@ -13,7 +13,6 @@ from pathlib import Path
 
 
 DNA_ALLELES = frozenset({"A", "C", "G", "T"})
-VARIANT_CLASSES = frozenset({"snv", "indel", "unsupported"})
 AUTOSOMES = tuple(str(value) for value in range(1, 23))
 GENERATION_CONTIGS = AUTOSOMES + ("X",)
 VALIDATION_CONTIGS = GENERATION_CONTIGS + ("Y",)

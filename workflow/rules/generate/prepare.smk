@@ -13,7 +13,7 @@ checkpoint prepare_generation_scope:
         masked_unit_intervals=GENERATION_CONTEXT.scope_paths["masked_unit_intervals"],
         effective_mask=GENERATION_CONTEXT.scope_paths["effective_mask"],
     log:
-        str(GENERATION_CONTEXT.log_dir / "prepare_scope.log"),
+        str(GENERATION_CONTEXT.plan.log_dir / "prepare_scope.log"),
     conda:
         env("validation")
     container:
@@ -58,7 +58,7 @@ rule prepare_generation_partition:
             GENERATION_CONTEXT.partition_dir / "{partition}.candidate_audit.parquet"
         ),
     log:
-        str(GENERATION_CONTEXT.log_dir / "partitions" / "{partition}.prepare.log"),
+        str(GENERATION_CONTEXT.plan.log_dir / "partitions" / "{partition}.prepare.log"),
     conda:
         env("validation")
     container:

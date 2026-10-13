@@ -1,5 +1,0 @@
-linters: list(
-    line_length_linter = line_length_linter(120L),
-    trailing_whitespace_linter = trailing_whitespace_linter(),
-    semicolon_linter = semicolon_linter()
-  )

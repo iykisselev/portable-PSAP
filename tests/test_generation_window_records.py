@@ -11,10 +11,46 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
-from generation_population import window_records  # noqa: E402
+from generation_population import window_records, indexed_lines, pysam  # noqa: E402
 
 
 class WindowRecordTests(unittest.TestCase):
+    @unittest.skipUnless(pysam, "pysam is required")
+    def test_indexed_queries_accept_canonical_requests_and_reject_ambiguous_aliases(
+        self,
+    ):
+        with TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            for ambiguous in (False, True):
+                with self.subTest(ambiguous=ambiguous):
+                    source = directory / "rows.tsv"
+                    source.write_text(
+                        "1\t2\tA\tG\n" + ("chr1\t3\tA\tC\n" if ambiguous else "")
+                    )
+                    compressed = directory / "rows.tsv.gz"
+                    pysam.tabix_compress(str(source), str(compressed), force=True)
+                    pysam.tabix_index(
+                        str(compressed), seq_col=0, start_col=1, end_col=1, force=True
+                    )
+                    if ambiguous:
+                        with self.assertRaisesRegex(
+                            ValueError, "ambiguous chromosome aliases"
+                        ):
+                            list(
+                                indexed_lines(
+                                    compressed, str(compressed) + ".tbi", "1", 0, 5
+                                )
+                            )
+                    else:
+                        self.assertEqual(
+                            ["1\t2\tA\tG"],
+                            list(
+                                indexed_lines(
+                                    compressed, str(compressed) + ".tbi", "chr1", 0, 5
+                                )
+                            ),
+                        )
+
     def test_skips_non_data_and_keeps_only_canonical_owner_rows(self) -> None:
         with TemporaryDirectory() as temporary:
             resource = Path(temporary) / "records.tsv"

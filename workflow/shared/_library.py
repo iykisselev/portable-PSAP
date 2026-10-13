@@ -56,7 +56,12 @@ def bind(cls: type, namespace: object):
                     f"{type(namespace).__name__} does not provide it"
                 )
             continue
-        values[field.name] = _coerce(getattr(namespace, field.name), hints[field.name])
+        try:
+            values[field.name] = _coerce(
+                getattr(namespace, field.name), hints[field.name]
+            )
+        except (TypeError, ValueError, KeyError, IndexError) as exc:
+            raise BindingError(f"{cls.__name__}.{field.name}: {exc}") from exc
     return cls(**values)
 
 
@@ -69,8 +74,12 @@ def optional_path(value: object) -> str | None:
     try:
         if len(value) == 0:  # type: ignore[arg-type]
             return None
-        return str(value[0])  # type: ignore[index]
-    except TypeError as error:
+        if len(value) == 1:  # type: ignore[arg-type]
+            return str(value[0]) or None  # type: ignore[index]
+        raise BindingError(f"Expected at most one optional path, got {value!r}")
+    except BindingError:
+        raise
+    except (TypeError, KeyError, IndexError) as error:
         raise BindingError(f"Expected an optional path, got {value!r}") from error
 
 
@@ -137,4 +146,6 @@ def _bool(value: object) -> bool:
         if normalized in {"false", "0", "no"}:
             return False
         raise BindingError(f"Expected a boolean value, got {value!r}")
-    return bool(value)
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    raise BindingError(f"Expected a boolean value, got {value!r}")

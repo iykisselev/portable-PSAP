@@ -164,6 +164,15 @@ class AnnotationLookup:
         }
         self.population_contigs = contig_lookup(list(self.population.header.contigs))
         self.af_field = af_field
+        definition = self.population.header.info.get(af_field)
+        if (
+            definition is None
+            or str(definition.number) not in {"A", "R", "1"}
+            or definition.type not in {"Float", "Integer"}
+        ):
+            self.close()
+            raise ValueError(f"INFO/{af_field} must declare numeric Number=A, R or 1")
+        self.af_number = str(definition.number)
         self.cache: dict[tuple[str, int, str, str], tuple[str, str]] = {}
 
     def close(self) -> None:
@@ -198,8 +207,10 @@ class AnnotationLookup:
                     and fields[3].upper() == alternate
                 ):
                     return format_value(fields[5])
-        except (ValueError, OSError):
-            return ""
+        except (ValueError, OSError) as exc:
+            raise ValueError(
+                f"Cannot query CADD resource {table.filename!r}: {exc}"
+            ) from exc
         return ""
 
     def _af(self, key: tuple[str, int, str, str]) -> str:
@@ -217,16 +228,29 @@ class AnnotationLookup:
                     continue
                 value = record.info[self.af_field]
                 index = alternates.index(alternate)
-                if isinstance(value, tuple):
-                    if len(value) == len(alternates):
-                        return format_value(value[index])
-                    if len(value) == 1:
-                        return format_value(value[0])
-                    return ""
-                return format_value(value) if index == 0 else ""
-        except (ValueError, OSError):
-            return ""
+                values = value if isinstance(value, tuple) else (value,)
+                if self.af_number == "A" and len(values) == len(alternates):
+                    return format_value(values[index])
+                if self.af_number == "R" and len(values) == len(alternates) + 1:
+                    return format_value(values[index + 1])
+                if self.af_number == "1" and len(alternates) == len(values) == 1:
+                    return format_value(values[0])
+                raise ValueError(
+                    f"Invalid INFO/{self.af_field} cardinality at {chromosome}:{position}"
+                )
+        except (ValueError, OSError) as exc:
+            raise ValueError(
+                f"Cannot query population resource {self.population.filename!r}: {exc}"
+            ) from exc
         return ""
+
+
+def require_distinct_output(summary: Path, output: Path) -> None:
+    """Reject identical files, including hardlinks, before opening an output."""
+    if summary.resolve() == output.resolve() or (
+        output.exists() and summary.samefile(output)
+    ):
+        raise ValueError("Output cannot overwrite the input summary")
 
 
 def annotate_summary(
@@ -238,6 +262,7 @@ def annotate_summary(
     signature_column: str,
 ) -> int:
     """Write a row-preserving, post-annotated cohort summary and return its size."""
+    require_distinct_output(summary, output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with open_text(summary, "rt") as source, open_text(output, "wt") as destination:
         reader = csv.DictReader(source, delimiter="\t")
@@ -327,10 +352,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    if args.output.resolve() == args.summary.resolve():
-        raise SystemExit(
-            "Output must be a new path; it cannot overwrite the input summary"
-        )
+    try:
+        require_distinct_output(args.summary, args.output)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     gene_names = read_gene_names(args.gtf)
     lookup = AnnotationLookup(
         args.cadd_snv, args.cadd_indel, args.population_vcf, args.af_field

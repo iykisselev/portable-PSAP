@@ -23,11 +23,6 @@ def apply_resource(name):
     return APPLY_RESOURCE_REGISTRY.resource(name)
 
 
-def optional_apply_resource(name):
-    """Return one optional resource, if this run enables it."""
-    return APPLY_RESOURCE_REGISTRY.resources.get(name)
-
-
 def table_resource(wildcards):
     return APPLY_RESOURCE_REGISTRY.table_resources[wildcards.resource]
 
@@ -56,23 +51,6 @@ def table_resource_policy_name(wildcards):
 
 
 TABLE_RESOURCE_CALLBACKS = policy_resources(table_resource_policy_name)
-
-
-def table_resource_kind(wildcards):
-    return table_resource(wildcards).kind
-
-
-def table_resource_tsv_layout(wildcards):
-    return table_resource(wildcards).tsv_layout or "auto"
-
-
-def vcf_resource_source(wildcards):
-    return APPLY_RESOURCE_REGISTRY.resource(wildcards.resource).source
-
-
-def vcf_resource_source_index(wildcards):
-    index = APPLY_RESOURCE_REGISTRY.resource(wildcards.resource).source_index
-    return as_inputs(index)
 
 
 def vcf_resource_validation_marker(wildcards):

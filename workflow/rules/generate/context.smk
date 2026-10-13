@@ -14,7 +14,7 @@ GENERATION_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "generate"
 
 def hem_artifact(value):
     """Retain a named optional hem binding while disabling its file dependency."""
-    return value if GENERATION_CONTEXT.hem_enabled else []
+    return value if GENERATION_CONTEXT.model.hemizygote else []
 
 
 def generation_scope_artifact(wildcards, artifact_name):
@@ -43,7 +43,7 @@ def generation_partition_artifacts(wildcards, artifact_name):
 
 def generation_bucket_artifacts(wildcards, artifact_name):
     """Return the requested lookup file for every discovered unit bucket."""
-    if artifact_name == "lookup_hem_chrX" and not GENERATION_CONTEXT.hem_enabled:
+    if artifact_name == "lookup_hem_chrX" and not GENERATION_CONTEXT.model.hemizygote:
         return []
     return [
         GENERATION_CONTEXT.bucket_artifact(bucket_id, artifact_name)

@@ -58,10 +58,6 @@ class GenerationRuleContext:
         return self.plan.scalable_dir / "partitions"
 
     @property
-    def log_dir(self) -> Path:
-        return self.plan.log_dir
-
-    @property
     def scope_paths(self) -> Mapping[str, str]:
         return self.scope_layout.artifacts
 
@@ -72,18 +68,6 @@ class GenerationRuleContext:
     @property
     def lookup_bucket_dir(self) -> Path:
         return self.execution_layout.lookup_bucket_dir
-
-    @property
-    def bin_count(self) -> int:
-        return self.execution_layout.bin_count
-
-    @property
-    def roles(self) -> tuple[str, ...]:
-        return self.execution_layout.roles
-
-    @property
-    def hem_enabled(self) -> bool:
-        return self.model.hemizygote
 
     @property
     def bundle_paths(self) -> Mapping[str, str]:
@@ -97,7 +81,7 @@ class GenerationRuleContext:
             if name not in {"validation", "marker", "lookup_hem_chrX"}
         }
         outputs["lookup_hem_chrX"] = (
-            self.bundle_paths["lookup_hem_chrX"] if self.hem_enabled else []
+            self.bundle_paths["lookup_hem_chrX"] if self.model.hemizygote else []
         )
         return MappingProxyType(outputs)
 
