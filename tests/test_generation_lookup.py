@@ -21,7 +21,7 @@ from generation_bindings import (  # noqa: E402
     LookupReductionOutputs,
     LookupReductionParameters,
 )
-from generation_lookup import reduce_partition_statistics  # noqa: E402
+from generation_lookup import reduce_window_statistics  # noqa: E402
 
 
 class GenerationLookupTests(unittest.TestCase):
@@ -34,14 +34,14 @@ class GenerationLookupTests(unittest.TestCase):
             buckets.write_text(
                 json.dumps(
                     {
-                        "schema_version": 2,
+                        "schema_version": 3,
                         "buckets": [
                             {
                                 "bucket_id": "00000",
                                 "ordinal": 0,
                                 "unit_count": 1,
                                 "unit_ids": ["UNIT"],
-                                "partition_ids": ["1_000000000000_000000000010"],
+                                "window_ids": ["1_000000000000_000000000010"],
                             }
                         ],
                     }
@@ -68,10 +68,8 @@ class GenerationLookupTests(unittest.TestCase):
                 orient="row",
             ).write_parquet(statistics)
 
-            reduce_partition_statistics(
-                LookupReductionInputs(
-                    buckets=buckets, partition_statistics=(statistics,)
-                ),
+            reduce_window_statistics(
+                LookupReductionInputs(buckets=buckets, window_statistics=(statistics,)),
                 LookupReductionOutputs(
                     lookup_het=directory / "het.tsv",
                     lookup_hom=directory / "hom.tsv",

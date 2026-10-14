@@ -54,8 +54,8 @@ class GenerationRuleContext:
         )
 
     @property
-    def partition_dir(self) -> Path:
-        return self.plan.scalable_dir / "partitions"
+    def window_dir(self) -> Path:
+        return self.plan.scalable_dir / "windows"
 
     @property
     def scope_paths(self) -> Mapping[str, str]:
@@ -139,7 +139,7 @@ class GenerationRuleContext:
                 "mutation_rate",
                 "mutation_rate_indel",
             ),
-            "partition": ("population_vcf", "score_snv", "score_indel", "fasta"),
+            "window": ("population_vcf", "score_snv", "score_indel", "fasta"),
             "statistics": ("mutation_rate", "mutation_rate_indel"),
         }[operation]
         bindings = self.raw_bindings()
@@ -158,7 +158,7 @@ class GenerationRuleContext:
             result[name] = binding.data_inputs()
             if name in indexed:
                 result[f"{name}_index"] = binding.index_inputs()
-        if operation in {"scope", "partition"}:
+        if operation in {"scope", "window"}:
             result["fasta_fai"] = self.plan.fasta.fai
         if operation == "scope":
             result["exclusions"] = self.exclusion_data()
@@ -180,15 +180,15 @@ class GenerationRuleContext:
             if exclusion.binding.data
         }
 
-    def partition_artifact(self, partition_id: str, artifact_name: str) -> str:
-        """Return one partition artifact path for a known artifact name."""
+    def window_artifact(self, window_id: str, artifact_name: str) -> str:
+        """Return one window artifact path for a known artifact name."""
         suffixes = {
             "allele_states": "allele_states.parquet",
             "allele_membership": "allele_membership.parquet",
             "allele_scores": "allele_scores.parquet",
             "candidate_audit": "candidate_audit.parquet",
         }
-        return str(self.partition_dir / f"{partition_id}.{suffixes[artifact_name]}")
+        return str(self.window_dir / f"{window_id}.{suffixes[artifact_name]}")
 
     def bucket_artifact(self, bucket_id: str, artifact_name: str) -> str:
         """Return one lookup-bucket artifact path for a known artifact name."""
@@ -200,6 +200,6 @@ class GenerationRuleContext:
         }
         return str(self.lookup_bucket_dir / f"{bucket_id}.{suffixes[artifact_name]}")
 
-    def statistics_artifact(self, partition_id: str, bucket_id: str) -> str:
-        """Return one partition-local statistics artifact path."""
-        return str(self.statistics_dir / f"{partition_id}.bucket-{bucket_id}.parquet")
+    def statistics_artifact(self, window_id: str, bucket_id: str) -> str:
+        """Return one window-local statistics artifact path."""
+        return str(self.statistics_dir / f"{window_id}.bucket-{bucket_id}.parquet")

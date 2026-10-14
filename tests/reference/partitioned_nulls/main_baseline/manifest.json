@@ -1,0 +1,848 @@
+{
+  "R": "R version 4.3.3 (2024-02-29) \ndata.table 1.15.4 \njsonlite 1.8.8 \nR.utils 2.12.3 \n",
+  "bcftools": "bcftools 1.20",
+  "capture_date": "2026-10-20",
+  "cases": [
+    {
+      "binning": {
+        "algorithm": "fixed_width_decimal_v1",
+        "bin_count": 1400,
+        "bin_width": 0.05,
+        "maximum_in_final_bin": true,
+        "score_max": 70.0
+      },
+      "command": [
+        "/tmp/portable-psap-refactor-conda-envs/portable-psap-ci/bin/snakemake",
+        "--workflow-profile",
+        "none",
+        "--snakefile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/main/workflow/Snakefile",
+        "--configfile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/snv_hem.yaml",
+        "--config",
+        "outdir=/tmp/psap-partitioned-baseline-xxpoy81o/snv_hem",
+        "--cores",
+        "2"
+      ],
+      "configuration": {
+        "bindings": {
+          "reference": {
+            "cadd": {
+              "snv": {
+                "data": "tests/null_distribution/generation_scores.tsv",
+                "index": null
+              }
+            },
+            "exclusion": {
+              "data": "tests/null_distribution/exclusion.bed",
+              "index": null
+            },
+            "exclusions": {
+              "encode-hg38-blacklist-v2": {
+                "data": "tests/smoke/data/exclude_full_span.bed",
+                "index": null
+              },
+              "par-regions": {
+                "data": "tests/null_distribution/par_regions.bed",
+                "index": null
+              }
+            },
+            "fasta": {
+              "data": "tests/smoke/data/reference.fa",
+              "fai": "tests/smoke/data/reference.fa.fai",
+              "gzi": null
+            },
+            "testing_unit_bed": {
+              "data": "tests/null_distribution/testing_units.bed",
+              "index": null
+            }
+          }
+        },
+        "generation": {
+          "af_source": {
+            "female": "AF_FEMALE",
+            "male": "AF_MALE",
+            "overall": "AF_CUSTOM"
+          },
+          "execution": {
+            "allow_unindexed_fixture_inputs": true
+          },
+          "population_vcf": {
+            "data": "tests/null_distribution/population_af.vcf",
+            "index": null
+          },
+          "unobserved_policy": "zero"
+        },
+        "generation_settings": {
+          "variant_classes": [
+            "snv"
+          ]
+        },
+        "inputs": {
+          "ped": null,
+          "samples": "tests/smoke/data/samples.tsv",
+          "vcf": {
+            "data": "tests/smoke/data/cohort.vcf",
+            "index": null
+          }
+        },
+        "model": {
+          "hemizygote": true,
+          "include_indels": false
+        },
+        "outdir": "/tmp/portable-psap-full-fixture",
+        "run": {
+          "apply_prefix": "fixture",
+          "generation_prefix": "fixture"
+        },
+        "workflow": {
+          "mode": "full"
+        }
+      },
+      "name": "snv_hem",
+      "output": "/tmp/psap-partitioned-baseline-xxpoy81o/snv_hem",
+      "public_sha256": {
+        "apply/fixture/cohort/cohort_candidates.tsv.gz": "5293647ae91ad9a272dd73a159b5bb0af87d17920ec9c57722633336106fd949",
+        "apply/fixture/cohort/cohort_summary.tsv.gz": "3d9b38f9d2136cfc86338d09b8ac643b5e9d13492a8c200951171958f20429ad",
+        "apply/fixture/cohort/control_variants.tsv.gz": "53d8f43c25022c77f93cbf7453420c72cca2ea9247e2fc218711f24b8cbba694",
+        "apply/fixture/scored/affected.gene.tsv.gz": "80d13b8c5d7b053f71caaa9338bc43a54fb5ab2c14083010bf115906527116d2",
+        "apply/fixture/scored/unaffected.gene.tsv.gz": "309ba2aff34f3cc29d19688f9c2cc20a841fde4cca6c88e13aad0ca9f28d5957",
+        "generate/fixture/bundle/calibration_regions.bed.gz": "61f3f8a3d3fdf691849852d0a634e2088bfa1edd33995a639df70fa962a7025d",
+        "generate/fixture/bundle/candidate_audit.tsv.gz": "fe55ddce65617807e418a1ecd701c33db15bee120c4ee2e533ffcc70e49914ef",
+        "generate/fixture/bundle/eligible_testing_units.bed.gz": "e7e011e1d1a56d9d90a26940044d4fc1b3c9d94cf30a5f1c958dd2bfcc006395",
+        "generate/fixture/bundle/excluded_alleles.tsv.gz": "358fd503bd6b85bbcb9d1f9996533828747a530d83bb2db774eda5324b8b4913",
+        "generate/fixture/bundle/excluded_units.tsv.gz": "2c1eef264d98b8750756388824ad5e9969f025f3b8a7e192062b60d63398b62c",
+        "generate/fixture/bundle/lookup_hem_chrX.tsv.gz": "7221df0127f1af93f029fcb13c05353c133d82e1a354446973c7ede71833ac0c",
+        "generate/fixture/bundle/lookup_het.tsv.gz": "73e537d996a10f1bc7b1191448f25b03d69754b37d23be0ad842209fe00f3a58",
+        "generate/fixture/bundle/lookup_hom.tsv.gz": "a16d2f32a86f209dc2e4ae17023ec6c8b2178648d16b9ba7637af82ba0e17834",
+        "generate/fixture/bundle/metadata.json": "03f353e3cad9abc7dcca5d44f8ed4487a8d4f5b96e5dfa6cdfc0b4c6af6cba89",
+        "generate/fixture/bundle/population_af_zero_imputations.tsv.gz": "9032c7e513fb6f193add8f7727ba3d6deca29e8bac519bf2f0c88c9f7d7f60e4",
+        "generate/fixture/bundle/validation.json": "7b668bd224536f8fbf7bbf8139542639bb30fb946fee460b19781eb2a3fd9519",
+        "generate/fixture/bundle/validation.ok": "5a8c337393ea12cf29dd7c60e88295cf4fe39fbb6f56257911e0beaa32b45ebb"
+      },
+      "returncode": 0,
+      "roles": [
+        "het",
+        "hom",
+        "hem_chrX"
+      ],
+      "sample_group_count": 1
+    },
+    {
+      "binning": {
+        "algorithm": "fixed_width_decimal_v1",
+        "bin_count": 1400,
+        "bin_width": 0.05,
+        "maximum_in_final_bin": true,
+        "score_max": 70.0
+      },
+      "command": [
+        "/tmp/portable-psap-refactor-conda-envs/portable-psap-ci/bin/snakemake",
+        "--workflow-profile",
+        "none",
+        "--snakefile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/main/workflow/Snakefile",
+        "--configfile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/snv_no_hem.yaml",
+        "--config",
+        "outdir=/tmp/psap-partitioned-baseline-xxpoy81o/snv_no_hem",
+        "--cores",
+        "2"
+      ],
+      "configuration": {
+        "bindings": {
+          "reference": {
+            "cadd": {
+              "snv": {
+                "data": "tests/null_distribution/generation_scores.tsv",
+                "index": null
+              }
+            },
+            "exclusion": {
+              "data": "tests/null_distribution/exclusion.bed",
+              "index": null
+            },
+            "exclusions": {
+              "encode-hg38-blacklist-v2": {
+                "data": "tests/smoke/data/exclude_full_span.bed",
+                "index": null
+              },
+              "par-regions": {
+                "data": "tests/null_distribution/par_regions.bed",
+                "index": null
+              }
+            },
+            "fasta": {
+              "data": "tests/smoke/data/reference.fa",
+              "fai": "tests/smoke/data/reference.fa.fai",
+              "gzi": null
+            },
+            "testing_unit_bed": {
+              "data": "tests/null_distribution/testing_units.bed",
+              "index": null
+            }
+          }
+        },
+        "generation": {
+          "af_source": {
+            "female": "AF_FEMALE",
+            "male": "AF_MALE",
+            "overall": "AF_CUSTOM"
+          },
+          "execution": {
+            "allow_unindexed_fixture_inputs": true
+          },
+          "population_vcf": {
+            "data": "tests/null_distribution/population_af.vcf",
+            "index": null
+          },
+          "unobserved_policy": "zero"
+        },
+        "generation_settings": {
+          "variant_classes": [
+            "snv"
+          ]
+        },
+        "inputs": {
+          "ped": null,
+          "samples": "tests/smoke/data/samples.tsv",
+          "vcf": {
+            "data": "tests/smoke/data/cohort.vcf",
+            "index": null
+          }
+        },
+        "model": {
+          "hemizygote": false,
+          "include_indels": false
+        },
+        "outdir": "/tmp/portable-psap-full-fixture",
+        "run": {
+          "apply_prefix": "fixture",
+          "generation_prefix": "fixture"
+        },
+        "workflow": {
+          "mode": "full"
+        }
+      },
+      "name": "snv_no_hem",
+      "output": "/tmp/psap-partitioned-baseline-xxpoy81o/snv_no_hem",
+      "public_sha256": {
+        "apply/fixture/cohort/cohort_candidates.tsv.gz": "5293647ae91ad9a272dd73a159b5bb0af87d17920ec9c57722633336106fd949",
+        "apply/fixture/cohort/cohort_summary.tsv.gz": "3d9b38f9d2136cfc86338d09b8ac643b5e9d13492a8c200951171958f20429ad",
+        "apply/fixture/cohort/control_variants.tsv.gz": "53d8f43c25022c77f93cbf7453420c72cca2ea9247e2fc218711f24b8cbba694",
+        "apply/fixture/scored/affected.gene.tsv.gz": "80d13b8c5d7b053f71caaa9338bc43a54fb5ab2c14083010bf115906527116d2",
+        "apply/fixture/scored/unaffected.gene.tsv.gz": "309ba2aff34f3cc29d19688f9c2cc20a841fde4cca6c88e13aad0ca9f28d5957",
+        "generate/fixture/bundle/calibration_regions.bed.gz": "61f3f8a3d3fdf691849852d0a634e2088bfa1edd33995a639df70fa962a7025d",
+        "generate/fixture/bundle/candidate_audit.tsv.gz": "fe55ddce65617807e418a1ecd701c33db15bee120c4ee2e533ffcc70e49914ef",
+        "generate/fixture/bundle/eligible_testing_units.bed.gz": "e7e011e1d1a56d9d90a26940044d4fc1b3c9d94cf30a5f1c958dd2bfcc006395",
+        "generate/fixture/bundle/excluded_alleles.tsv.gz": "358fd503bd6b85bbcb9d1f9996533828747a530d83bb2db774eda5324b8b4913",
+        "generate/fixture/bundle/excluded_units.tsv.gz": "2c1eef264d98b8750756388824ad5e9969f025f3b8a7e192062b60d63398b62c",
+        "generate/fixture/bundle/lookup_het.tsv.gz": "73e537d996a10f1bc7b1191448f25b03d69754b37d23be0ad842209fe00f3a58",
+        "generate/fixture/bundle/lookup_hom.tsv.gz": "a16d2f32a86f209dc2e4ae17023ec6c8b2178648d16b9ba7637af82ba0e17834",
+        "generate/fixture/bundle/metadata.json": "3f1c3d92ef9fecedeb0d9a6afe9b8f57f09fc522d92dc2b93ac75cfad6a23992",
+        "generate/fixture/bundle/population_af_zero_imputations.tsv.gz": "9032c7e513fb6f193add8f7727ba3d6deca29e8bac519bf2f0c88c9f7d7f60e4",
+        "generate/fixture/bundle/validation.json": "da8495121ecba379e729fc393410d7ad1c09f3414f64ddfee5a0828e4fb87814",
+        "generate/fixture/bundle/validation.ok": "56b84efcec352e453b63f163e8b92b84350933ed6ee2c2229d716d148000270e"
+      },
+      "returncode": 0,
+      "roles": [
+        "het",
+        "hom"
+      ],
+      "sample_group_count": 1
+    },
+    {
+      "binning": {
+        "algorithm": "fixed_width_decimal_v1",
+        "bin_count": 167,
+        "bin_width": 0.3,
+        "maximum_in_final_bin": true,
+        "score_max": 50.0
+      },
+      "command": [
+        "/tmp/portable-psap-refactor-conda-envs/portable-psap-ci/bin/snakemake",
+        "--workflow-profile",
+        "none",
+        "--snakefile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/main/workflow/Snakefile",
+        "--configfile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/indel_hem.yaml",
+        "--config",
+        "outdir=/tmp/psap-partitioned-baseline-xxpoy81o/indel_hem",
+        "--cores",
+        "2"
+      ],
+      "configuration": {
+        "bindings": {
+          "reference": {
+            "cadd": {
+              "indel": {
+                "data": "tests/smoke/data/cadd_indel.tsv",
+                "index": null
+              },
+              "snv": {
+                "data": "tests/null_distribution/generation_scores.tsv",
+                "index": null
+              }
+            },
+            "exclusion": {
+              "data": "tests/null_distribution/exclusion.bed",
+              "index": null
+            },
+            "exclusions": {
+              "encode-hg38-blacklist-v2": {
+                "data": "tests/smoke/data/exclude_full_span.bed",
+                "index": null
+              },
+              "par-regions": {
+                "data": "tests/null_distribution/par_regions.bed",
+                "index": null
+              }
+            },
+            "fasta": {
+              "data": "tests/smoke/data/reference.fa",
+              "fai": "tests/smoke/data/reference.fa.fai",
+              "gzi": null
+            },
+            "testing_unit_bed": {
+              "data": "tests/null_distribution/testing_units.bed",
+              "index": null
+            }
+          }
+        },
+        "generation": {
+          "af_source": {
+            "female": "AF_FEMALE",
+            "male": "AF_MALE",
+            "overall": "AF_CUSTOM"
+          },
+          "execution": {
+            "allow_unindexed_fixture_inputs": true
+          },
+          "population_vcf": {
+            "data": "tests/null_distribution/population_af.vcf",
+            "index": null
+          },
+          "unobserved_policy": "zero"
+        },
+        "generation_settings": {
+          "score_bin_width": 0.3,
+          "variant_classes": [
+            "snv",
+            "indel"
+          ]
+        },
+        "inputs": {
+          "ped": null,
+          "samples": "tests/smoke/data/samples.tsv",
+          "vcf": {
+            "data": "tests/smoke/data/cohort.vcf",
+            "index": null
+          }
+        },
+        "model": {
+          "hemizygote": true,
+          "include_indels": true,
+          "score_max": 50
+        },
+        "outdir": "/tmp/portable-psap-full-indel-fixture",
+        "run": {
+          "apply_prefix": "indel-fixture",
+          "generation_prefix": "indel-fixture"
+        },
+        "workflow": {
+          "mode": "full"
+        }
+      },
+      "name": "indel_hem",
+      "output": "/tmp/psap-partitioned-baseline-xxpoy81o/indel_hem",
+      "public_sha256": {
+        "apply/indel-fixture/cohort/cohort_candidates.tsv.gz": "5293647ae91ad9a272dd73a159b5bb0af87d17920ec9c57722633336106fd949",
+        "apply/indel-fixture/cohort/cohort_summary.tsv.gz": "3d9b38f9d2136cfc86338d09b8ac643b5e9d13492a8c200951171958f20429ad",
+        "apply/indel-fixture/cohort/control_variants.tsv.gz": "53d8f43c25022c77f93cbf7453420c72cca2ea9247e2fc218711f24b8cbba694",
+        "apply/indel-fixture/scored/affected.gene.tsv.gz": "80d13b8c5d7b053f71caaa9338bc43a54fb5ab2c14083010bf115906527116d2",
+        "apply/indel-fixture/scored/unaffected.gene.tsv.gz": "309ba2aff34f3cc29d19688f9c2cc20a841fde4cca6c88e13aad0ca9f28d5957",
+        "generate/indel-fixture/bundle/calibration_regions.bed.gz": "61f3f8a3d3fdf691849852d0a634e2088bfa1edd33995a639df70fa962a7025d",
+        "generate/indel-fixture/bundle/candidate_audit.tsv.gz": "8dba5c68a09f4c875c3042dcf10d75584c6b60cc25b5652e466c9febdb21225f",
+        "generate/indel-fixture/bundle/eligible_testing_units.bed.gz": "e7e011e1d1a56d9d90a26940044d4fc1b3c9d94cf30a5f1c958dd2bfcc006395",
+        "generate/indel-fixture/bundle/excluded_alleles.tsv.gz": "50faeac36faf84732533562ebc7d50eed095903012e326a40936c3c3eb987ca1",
+        "generate/indel-fixture/bundle/excluded_units.tsv.gz": "2c1eef264d98b8750756388824ad5e9969f025f3b8a7e192062b60d63398b62c",
+        "generate/indel-fixture/bundle/lookup_hem_chrX.tsv.gz": "74f5a042886a26aa1d4fe9f28c950d7f83f8bbf20ba38293bd535fa2f07c598f",
+        "generate/indel-fixture/bundle/lookup_het.tsv.gz": "247e82b480f610f47a8789f8b8e53680252e32e4ffb46f0bd92d765dd0453691",
+        "generate/indel-fixture/bundle/lookup_hom.tsv.gz": "3107b398ce5847eed5c8530f51f7cfc79627036e738e48d81b5e70de1baa3262",
+        "generate/indel-fixture/bundle/metadata.json": "7d44567974a6be17f16151361efb844c1530a3a98bed86ee4f672b15fec2736b",
+        "generate/indel-fixture/bundle/population_af_zero_imputations.tsv.gz": "9032c7e513fb6f193add8f7727ba3d6deca29e8bac519bf2f0c88c9f7d7f60e4",
+        "generate/indel-fixture/bundle/validation.json": "4797c46a2deb75521a564ed072bd1d7fd85d30c19abe56f0ab551c2c8f2b35a7",
+        "generate/indel-fixture/bundle/validation.ok": "9873f7de7b893546721efe4ee5775f56e3aa7405b28d93aba49ab974af0f692b"
+      },
+      "returncode": 0,
+      "roles": [
+        "het",
+        "hom",
+        "hem_chrX"
+      ],
+      "sample_group_count": 1
+    },
+    {
+      "binning": {
+        "algorithm": "fixed_width_decimal_v1",
+        "bin_count": 1400,
+        "bin_width": 0.05,
+        "maximum_in_final_bin": true,
+        "score_max": 70.0
+      },
+      "command": [
+        "/tmp/portable-psap-refactor-conda-envs/portable-psap-ci/bin/snakemake",
+        "--workflow-profile",
+        "none",
+        "--snakefile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/main/workflow/Snakefile",
+        "--configfile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/models_snv_hem.yaml",
+        "--config",
+        "outdir=/tmp/psap-partitioned-baseline-xxpoy81o/models_snv_hem",
+        "--cores",
+        "2"
+      ],
+      "configuration": {
+        "bindings": {
+          "reference": {
+            "cadd": {
+              "snv": {
+                "data": "tests/null_distribution/generation_scores.tsv",
+                "index": null
+              }
+            },
+            "exclusion": {
+              "data": "tests/null_distribution/exclusion.bed",
+              "index": null
+            },
+            "exclusions": {
+              "encode-hg38-blacklist-v2": {
+                "data": "tests/smoke/data/exclude_full_span.bed",
+                "index": null
+              },
+              "par-regions": {
+                "data": "tests/null_distribution/par_regions.bed",
+                "index": null
+              }
+            },
+            "fasta": {
+              "data": "tests/smoke/data/reference.fa",
+              "fai": "tests/smoke/data/reference.fa.fai",
+              "gzi": null
+            },
+            "testing_unit_bed": {
+              "data": "tests/null_distribution/testing_units.bed",
+              "index": null
+            }
+          }
+        },
+        "generation": {
+          "af_source": {
+            "female": "AF_FEMALE",
+            "male": "AF_MALE",
+            "overall": "AF_CUSTOM"
+          },
+          "execution": {
+            "allow_unindexed_fixture_inputs": true
+          },
+          "population_vcf": {
+            "data": "tests/reference/partitioned_nulls/main_baseline/inputs/population.vcf",
+            "index": null
+          },
+          "unobserved_policy": "zero"
+        },
+        "generation_settings": {
+          "variant_classes": [
+            "snv"
+          ]
+        },
+        "inputs": {
+          "ped": null,
+          "samples": "tests/reference/partitioned_nulls/main_baseline/inputs/samples.tsv",
+          "vcf": {
+            "data": "tests/reference/partitioned_nulls/main_baseline/inputs/cohort.vcf",
+            "index": null
+          }
+        },
+        "model": {
+          "hemizygote": true,
+          "include_indels": false
+        },
+        "outdir": "/tmp/portable-psap-full-fixture",
+        "run": {
+          "apply_prefix": "fixture",
+          "generation_prefix": "fixture"
+        },
+        "workflow": {
+          "mode": "full"
+        }
+      },
+      "name": "models_snv_hem",
+      "output": "/tmp/psap-partitioned-baseline-xxpoy81o/models_snv_hem",
+      "public_sha256": {
+        "apply/fixture/cohort/cohort_candidates.tsv.gz": "3a97e86eff21ee1577bdb54ce75fedb92ff361627fe85e83a294aa315e8286c1",
+        "apply/fixture/cohort/cohort_summary.tsv.gz": "80ea0002d94e6a8f4a70b9f1fb819ee2811f28cff7fd9b5c74a0d4d2a85f280a",
+        "apply/fixture/cohort/control_variants.tsv.gz": "53d8f43c25022c77f93cbf7453420c72cca2ea9247e2fc218711f24b8cbba694",
+        "apply/fixture/scored/female.gene.tsv.gz": "feda732ca9a6c032b08f4d39b1603c3c049c6b737e2f1181595fc5f65ebf5d49",
+        "apply/fixture/scored/male.gene.tsv.gz": "a480a120595196b387935fb01757f686b8c0d3c1a4ca82ac8a4d47bc51b75d0c",
+        "generate/fixture/bundle/calibration_regions.bed.gz": "61f3f8a3d3fdf691849852d0a634e2088bfa1edd33995a639df70fa962a7025d",
+        "generate/fixture/bundle/candidate_audit.tsv.gz": "fe55ddce65617807e418a1ecd701c33db15bee120c4ee2e533ffcc70e49914ef",
+        "generate/fixture/bundle/eligible_testing_units.bed.gz": "e7e011e1d1a56d9d90a26940044d4fc1b3c9d94cf30a5f1c958dd2bfcc006395",
+        "generate/fixture/bundle/excluded_alleles.tsv.gz": "358fd503bd6b85bbcb9d1f9996533828747a530d83bb2db774eda5324b8b4913",
+        "generate/fixture/bundle/excluded_units.tsv.gz": "2c1eef264d98b8750756388824ad5e9969f025f3b8a7e192062b60d63398b62c",
+        "generate/fixture/bundle/lookup_hem_chrX.tsv.gz": "7221df0127f1af93f029fcb13c05353c133d82e1a354446973c7ede71833ac0c",
+        "generate/fixture/bundle/lookup_het.tsv.gz": "73e537d996a10f1bc7b1191448f25b03d69754b37d23be0ad842209fe00f3a58",
+        "generate/fixture/bundle/lookup_hom.tsv.gz": "a16d2f32a86f209dc2e4ae17023ec6c8b2178648d16b9ba7637af82ba0e17834",
+        "generate/fixture/bundle/metadata.json": "a92473499c831f2666fc893841da41ad3a8fd8e57c87399564e3f440b34c7233",
+        "generate/fixture/bundle/population_af_zero_imputations.tsv.gz": "9032c7e513fb6f193add8f7727ba3d6deca29e8bac519bf2f0c88c9f7d7f60e4",
+        "generate/fixture/bundle/validation.json": "5e8ff95e55396e1ba1f306403bc7071b10374c3d695dd7aaa11d8f5c49b153e4",
+        "generate/fixture/bundle/validation.ok": "c06a8af87b9ddc728fc3380ef3387beec3f83ed72453be9b336e852c64e8a72a"
+      },
+      "returncode": 0,
+      "roles": [
+        "het",
+        "hom",
+        "hem_chrX"
+      ],
+      "sample_group_count": 5
+    },
+    {
+      "binning": {
+        "algorithm": "fixed_width_decimal_v1",
+        "bin_count": 1400,
+        "bin_width": 0.05,
+        "maximum_in_final_bin": true,
+        "score_max": 70.0
+      },
+      "command": [
+        "/tmp/portable-psap-refactor-conda-envs/portable-psap-ci/bin/snakemake",
+        "--workflow-profile",
+        "none",
+        "--snakefile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/main/workflow/Snakefile",
+        "--configfile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/models_snv_no_hem.yaml",
+        "--config",
+        "outdir=/tmp/psap-partitioned-baseline-xxpoy81o/models_snv_no_hem",
+        "--cores",
+        "2"
+      ],
+      "configuration": {
+        "bindings": {
+          "reference": {
+            "cadd": {
+              "snv": {
+                "data": "tests/null_distribution/generation_scores.tsv",
+                "index": null
+              }
+            },
+            "exclusion": {
+              "data": "tests/null_distribution/exclusion.bed",
+              "index": null
+            },
+            "exclusions": {
+              "encode-hg38-blacklist-v2": {
+                "data": "tests/smoke/data/exclude_full_span.bed",
+                "index": null
+              },
+              "par-regions": {
+                "data": "tests/null_distribution/par_regions.bed",
+                "index": null
+              }
+            },
+            "fasta": {
+              "data": "tests/smoke/data/reference.fa",
+              "fai": "tests/smoke/data/reference.fa.fai",
+              "gzi": null
+            },
+            "testing_unit_bed": {
+              "data": "tests/null_distribution/testing_units.bed",
+              "index": null
+            }
+          }
+        },
+        "generation": {
+          "af_source": {
+            "female": "AF_FEMALE",
+            "male": "AF_MALE",
+            "overall": "AF_CUSTOM"
+          },
+          "execution": {
+            "allow_unindexed_fixture_inputs": true
+          },
+          "population_vcf": {
+            "data": "tests/reference/partitioned_nulls/main_baseline/inputs/population.vcf",
+            "index": null
+          },
+          "unobserved_policy": "zero"
+        },
+        "generation_settings": {
+          "variant_classes": [
+            "snv"
+          ]
+        },
+        "inputs": {
+          "ped": null,
+          "samples": "tests/reference/partitioned_nulls/main_baseline/inputs/samples.tsv",
+          "vcf": {
+            "data": "tests/reference/partitioned_nulls/main_baseline/inputs/cohort_no_hem.vcf",
+            "index": null
+          }
+        },
+        "model": {
+          "hemizygote": false,
+          "include_indels": false
+        },
+        "outdir": "/tmp/portable-psap-full-fixture",
+        "run": {
+          "apply_prefix": "fixture",
+          "generation_prefix": "fixture"
+        },
+        "workflow": {
+          "mode": "full"
+        }
+      },
+      "name": "models_snv_no_hem",
+      "output": "/tmp/psap-partitioned-baseline-xxpoy81o/models_snv_no_hem",
+      "public_sha256": {
+        "apply/fixture/cohort/cohort_candidates.tsv.gz": "55ec85ff469da7be90d4bca41d07a7ee1465fbe895e4e325342a56530f46cb54",
+        "apply/fixture/cohort/cohort_summary.tsv.gz": "fea5ca83dc5b56384f68e12e6f2baa7fc980d457ff2db87d3fbb5421022fbbcb",
+        "apply/fixture/cohort/control_variants.tsv.gz": "53d8f43c25022c77f93cbf7453420c72cca2ea9247e2fc218711f24b8cbba694",
+        "apply/fixture/scored/female.gene.tsv.gz": "feda732ca9a6c032b08f4d39b1603c3c049c6b737e2f1181595fc5f65ebf5d49",
+        "apply/fixture/scored/male.gene.tsv.gz": "80d13b8c5d7b053f71caaa9338bc43a54fb5ab2c14083010bf115906527116d2",
+        "generate/fixture/bundle/calibration_regions.bed.gz": "61f3f8a3d3fdf691849852d0a634e2088bfa1edd33995a639df70fa962a7025d",
+        "generate/fixture/bundle/candidate_audit.tsv.gz": "fe55ddce65617807e418a1ecd701c33db15bee120c4ee2e533ffcc70e49914ef",
+        "generate/fixture/bundle/eligible_testing_units.bed.gz": "e7e011e1d1a56d9d90a26940044d4fc1b3c9d94cf30a5f1c958dd2bfcc006395",
+        "generate/fixture/bundle/excluded_alleles.tsv.gz": "358fd503bd6b85bbcb9d1f9996533828747a530d83bb2db774eda5324b8b4913",
+        "generate/fixture/bundle/excluded_units.tsv.gz": "2c1eef264d98b8750756388824ad5e9969f025f3b8a7e192062b60d63398b62c",
+        "generate/fixture/bundle/lookup_het.tsv.gz": "73e537d996a10f1bc7b1191448f25b03d69754b37d23be0ad842209fe00f3a58",
+        "generate/fixture/bundle/lookup_hom.tsv.gz": "a16d2f32a86f209dc2e4ae17023ec6c8b2178648d16b9ba7637af82ba0e17834",
+        "generate/fixture/bundle/metadata.json": "c6fca5e45a73f33bf4658c9c07555f16eb7fd1b45d066f717f7fd53e38f72f4e",
+        "generate/fixture/bundle/population_af_zero_imputations.tsv.gz": "9032c7e513fb6f193add8f7727ba3d6deca29e8bac519bf2f0c88c9f7d7f60e4",
+        "generate/fixture/bundle/validation.json": "07b03cc16f6304a7992c612d40ce436d86eaab01e65d20f3b7c42caa51b64c9a",
+        "generate/fixture/bundle/validation.ok": "ddaf3bc18a9d96db6362bcf81d66e115648ed84247f9a4d5f7c071b30b94645a"
+      },
+      "returncode": 0,
+      "roles": [
+        "het",
+        "hom"
+      ],
+      "sample_group_count": 4
+    },
+    {
+      "binning": {
+        "algorithm": "fixed_width_decimal_v1",
+        "bin_count": 167,
+        "bin_width": 0.3,
+        "maximum_in_final_bin": true,
+        "score_max": 50.0
+      },
+      "command": [
+        "/tmp/portable-psap-refactor-conda-envs/portable-psap-ci/bin/snakemake",
+        "--workflow-profile",
+        "none",
+        "--snakefile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/main/workflow/Snakefile",
+        "--configfile",
+        "/tmp/psap-partitioned-baseline-xxpoy81o/models_indel_hem.yaml",
+        "--config",
+        "outdir=/tmp/psap-partitioned-baseline-xxpoy81o/models_indel_hem",
+        "--cores",
+        "2"
+      ],
+      "configuration": {
+        "bindings": {
+          "reference": {
+            "cadd": {
+              "indel": {
+                "data": "tests/reference/partitioned_nulls/main_baseline/inputs/indel_scores.tsv",
+                "index": null
+              },
+              "snv": {
+                "data": "tests/null_distribution/generation_scores.tsv",
+                "index": null
+              }
+            },
+            "exclusion": {
+              "data": "tests/null_distribution/exclusion.bed",
+              "index": null
+            },
+            "exclusions": {
+              "encode-hg38-blacklist-v2": {
+                "data": "tests/smoke/data/exclude_full_span.bed",
+                "index": null
+              },
+              "par-regions": {
+                "data": "tests/null_distribution/par_regions.bed",
+                "index": null
+              }
+            },
+            "fasta": {
+              "data": "tests/smoke/data/reference.fa",
+              "fai": "tests/smoke/data/reference.fa.fai",
+              "gzi": null
+            },
+            "testing_unit_bed": {
+              "data": "tests/null_distribution/testing_units.bed",
+              "index": null
+            }
+          }
+        },
+        "generation": {
+          "af_source": {
+            "female": "AF_FEMALE",
+            "male": "AF_MALE",
+            "overall": "AF_CUSTOM"
+          },
+          "execution": {
+            "allow_unindexed_fixture_inputs": true
+          },
+          "population_vcf": {
+            "data": "tests/reference/partitioned_nulls/main_baseline/inputs/population.vcf",
+            "index": null
+          },
+          "unobserved_policy": "zero"
+        },
+        "generation_settings": {
+          "score_bin_width": 0.3,
+          "variant_classes": [
+            "snv",
+            "indel"
+          ]
+        },
+        "inputs": {
+          "ped": null,
+          "samples": "tests/reference/partitioned_nulls/main_baseline/inputs/samples.tsv",
+          "vcf": {
+            "data": "tests/reference/partitioned_nulls/main_baseline/inputs/cohort.vcf",
+            "index": null
+          }
+        },
+        "model": {
+          "hemizygote": true,
+          "include_indels": true,
+          "score_max": 50
+        },
+        "outdir": "/tmp/portable-psap-full-indel-fixture",
+        "run": {
+          "apply_prefix": "indel-fixture",
+          "generation_prefix": "indel-fixture"
+        },
+        "workflow": {
+          "mode": "full"
+        }
+      },
+      "name": "models_indel_hem",
+      "output": "/tmp/psap-partitioned-baseline-xxpoy81o/models_indel_hem",
+      "public_sha256": {
+        "apply/indel-fixture/cohort/cohort_candidates.tsv.gz": "a076cc5e3693dfdcd98ef76ff4491df853d4e5e6e53e72c8def939ff77b52eda",
+        "apply/indel-fixture/cohort/cohort_summary.tsv.gz": "c23c52ac638692cb4f1abfed3377666bd335bf977f6ee657b53fa7eff71f529a",
+        "apply/indel-fixture/cohort/control_variants.tsv.gz": "53d8f43c25022c77f93cbf7453420c72cca2ea9247e2fc218711f24b8cbba694",
+        "apply/indel-fixture/scored/female.gene.tsv.gz": "030b80db119a92617dff12c23b955bce018d3cacf41e3590996182cb467734a1",
+        "apply/indel-fixture/scored/male.gene.tsv.gz": "855bbf84c32c66ce478798f682b1937cfbe7298878714a50afc7740e589ab461",
+        "generate/indel-fixture/bundle/calibration_regions.bed.gz": "61f3f8a3d3fdf691849852d0a634e2088bfa1edd33995a639df70fa962a7025d",
+        "generate/indel-fixture/bundle/candidate_audit.tsv.gz": "fe55ddce65617807e418a1ecd701c33db15bee120c4ee2e533ffcc70e49914ef",
+        "generate/indel-fixture/bundle/eligible_testing_units.bed.gz": "e7e011e1d1a56d9d90a26940044d4fc1b3c9d94cf30a5f1c958dd2bfcc006395",
+        "generate/indel-fixture/bundle/excluded_alleles.tsv.gz": "358fd503bd6b85bbcb9d1f9996533828747a530d83bb2db774eda5324b8b4913",
+        "generate/indel-fixture/bundle/excluded_units.tsv.gz": "2c1eef264d98b8750756388824ad5e9969f025f3b8a7e192062b60d63398b62c",
+        "generate/indel-fixture/bundle/lookup_hem_chrX.tsv.gz": "74f5a042886a26aa1d4fe9f28c950d7f83f8bbf20ba38293bd535fa2f07c598f",
+        "generate/indel-fixture/bundle/lookup_het.tsv.gz": "e9b498f26796bb50640e40cf351a8de4cdb96af22517bff49a7da7b632557227",
+        "generate/indel-fixture/bundle/lookup_hom.tsv.gz": "b0daf8a18833a824424b46a9d93baf72554d90660ca68c2f690f1d5b1f81e512",
+        "generate/indel-fixture/bundle/metadata.json": "d6619f119f109506672af783705b83bf00302434097de9142c3b61ce74a296d0",
+        "generate/indel-fixture/bundle/population_af_zero_imputations.tsv.gz": "9032c7e513fb6f193add8f7727ba3d6deca29e8bac519bf2f0c88c9f7d7f60e4",
+        "generate/indel-fixture/bundle/validation.json": "ce53980be8e9c508ddde0b4aefc03235c86fa5bc4b5cc1a3befc298173a3461c",
+        "generate/indel-fixture/bundle/validation.ok": "ca1cd6c820ac4dfd5a4ca793a7e31a4d3afa8f2c5baae059bfeac2756f9083cb"
+      },
+      "returncode": 0,
+      "roles": [
+        "het",
+        "hom",
+        "hem_chrX"
+      ],
+      "sample_group_count": 5
+    }
+  ],
+  "commit": "b3c967cab0ca35fe537ae8a7b070d0cf6639a002",
+  "input_sha256": {
+    "config/config.yaml": "4bfdd11b406917a82deaaf2ad0d7a99de6809002a1671a0ba4b3988c7c68abe9",
+    "tests/null_distribution/exclusion.bed": "701eb804c99691fcf3cc3265fc913b35da6d5bbc38180779f9c39805ff8ce08a",
+    "tests/null_distribution/generation_scores.tsv": "06e637dbb25f4c71d3960ed73779d116af638f917d974465c463749db54acc38",
+    "tests/null_distribution/par_regions.bed": "b5b4b486ca70f908c2656c29ca9e7212bd2a56c4b2f648fb75faa41e67e416fa",
+    "tests/null_distribution/population_af.vcf": "965491b4da58474c57c879f1976d2f835ad4aad0e2ab08f728c83a1ab3616a28",
+    "tests/null_distribution/testing_units.bed": "fd2f41ac2de8f4797bec3b43b19161f9fb8b1e4edf668909ac229be4090b94a8",
+    "tests/reference/partitioned_nulls/main_baseline/inputs/cohort.vcf": "c34b63ba05e42d53dfca614e0f8195ed026af34a172f989ee3bd1073e6bd1885",
+    "tests/reference/partitioned_nulls/main_baseline/inputs/cohort_no_hem.vcf": "e07d770c3759279cc94f80551063cbe470c5275ebecd8470a6fe1d031fb1e0b5",
+    "tests/reference/partitioned_nulls/main_baseline/inputs/indel_scores.tsv": "4844726e20c7072d4a5ccf33eb31d7916e36ca6b7715958d45c805a14789f6c3",
+    "tests/reference/partitioned_nulls/main_baseline/inputs/population.vcf": "c758ee2392a82787f617b7ee76c1b3204203d365885bf2c7a279b7a78d179b3d",
+    "tests/reference/partitioned_nulls/main_baseline/inputs/samples.tsv": "cb004877bc27184f26b183be31f5053271e5ff18d4b02195f602622866506606",
+    "tests/smoke/data/cadd_indel.tsv": "23f6bf5f401e437a93aefd46edfabfb047b573ca03dfa0d11fbdb24b3394db98",
+    "tests/smoke/data/cohort.vcf": "392a89bd65ce2420f5e25238084ec46fe2d47e13272e800884f0fc49a4d2eeb4",
+    "tests/smoke/data/exclude_full_span.bed": "c6c2376118839a7d2ae0b4b0cbb6878ba9cc9262f10bb15be89b1ed326494a2f",
+    "tests/smoke/data/reference.fa": "ef506f13a7a5525b7b808d880c18109c9dc1b4a944cf0aad5a45a407dd11f23c",
+    "tests/smoke/data/reference.fa.fai": "4382ae352e40719d4a8ebb4a0823fafd2b5a89c013cdec9785792c37862af553",
+    "tests/smoke/data/samples.tsv": "95bafe66e08121f2bd0f692b2a4e3f8ca8c6e6a39f813ed6b4eef78aaa91e18b",
+    "workflow/envs/ci.yaml": "52ea72d6eacfec7ed7ab6c6a2a4fa5ed709fd0bf18bc7733a4a49f2f6654383e"
+  },
+  "python": "3.11.8 | packaged by conda-forge | (main, Feb 16 2024, 20:53:32) [GCC 12.3.0]",
+  "python_packages": {
+    "PyYAML": "6.0.1",
+    "jsonschema": "4.22.0",
+    "pandas": "3.0.6",
+    "polars": "1.44.1",
+    "pyarrow": "25.0.0",
+    "pysam": "0.24.1",
+    "snakemake": "9.23.1"
+  },
+  "reference_sha256": {
+    "indel_hem/affected.scored.tsv.gz": "80d13b8c5d7b053f71caaa9338bc43a54fb5ab2c14083010bf115906527116d2",
+    "indel_hem/lookup_hem_chrX.tsv.gz": "74f5a042886a26aa1d4fe9f28c950d7f83f8bbf20ba38293bd535fa2f07c598f",
+    "indel_hem/lookup_het.tsv.gz": "247e82b480f610f47a8789f8b8e53680252e32e4ffb46f0bd92d765dd0453691",
+    "indel_hem/lookup_hom.tsv.gz": "3107b398ce5847eed5c8530f51f7cfc79627036e738e48d81b5e70de1baa3262",
+    "indel_hem/run.yaml": "fe74cec528f8c05398c50029bf044bbcad344475ad78576418d9efec32b51501",
+    "indel_hem/sample_psaps.tsv": "200bfac71f06f1d3236b54cc6bd379a70bffdf620a35f75e8b2c384048831efa",
+    "indel_hem/unaffected.scored.tsv.gz": "309ba2aff34f3cc29d19688f9c2cc20a841fde4cca6c88e13aad0ca9f28d5957",
+    "inputs/cohort.vcf": "c34b63ba05e42d53dfca614e0f8195ed026af34a172f989ee3bd1073e6bd1885",
+    "inputs/cohort_no_hem.vcf": "e07d770c3759279cc94f80551063cbe470c5275ebecd8470a6fe1d031fb1e0b5",
+    "inputs/indel_scores.tsv": "4844726e20c7072d4a5ccf33eb31d7916e36ca6b7715958d45c805a14789f6c3",
+    "inputs/population.vcf": "c758ee2392a82787f617b7ee76c1b3204203d365885bf2c7a279b7a78d179b3d",
+    "inputs/samples.tsv": "cb004877bc27184f26b183be31f5053271e5ff18d4b02195f602622866506606",
+    "models_indel_hem/female.scored.tsv.gz": "030b80db119a92617dff12c23b955bce018d3cacf41e3590996182cb467734a1",
+    "models_indel_hem/lookup_hem_chrX.tsv.gz": "74f5a042886a26aa1d4fe9f28c950d7f83f8bbf20ba38293bd535fa2f07c598f",
+    "models_indel_hem/lookup_het.tsv.gz": "e9b498f26796bb50640e40cf351a8de4cdb96af22517bff49a7da7b632557227",
+    "models_indel_hem/lookup_hom.tsv.gz": "b0daf8a18833a824424b46a9d93baf72554d90660ca68c2f690f1d5b1f81e512",
+    "models_indel_hem/male.scored.tsv.gz": "855bbf84c32c66ce478798f682b1937cfbe7298878714a50afc7740e589ab461",
+    "models_indel_hem/run.yaml": "7e39a222d5e19d73f04049ae4427be1dd24b8f030d7ca1802cb2aea8462861ab",
+    "models_indel_hem/sample_psaps.tsv": "420f3a927e642c2500ef62548bff9808d152e96d3ab183ecb6252875d47ba34d",
+    "models_snv_hem/female.scored.tsv.gz": "feda732ca9a6c032b08f4d39b1603c3c049c6b737e2f1181595fc5f65ebf5d49",
+    "models_snv_hem/lookup_hem_chrX.tsv.gz": "7221df0127f1af93f029fcb13c05353c133d82e1a354446973c7ede71833ac0c",
+    "models_snv_hem/lookup_het.tsv.gz": "73e537d996a10f1bc7b1191448f25b03d69754b37d23be0ad842209fe00f3a58",
+    "models_snv_hem/lookup_hom.tsv.gz": "a16d2f32a86f209dc2e4ae17023ec6c8b2178648d16b9ba7637af82ba0e17834",
+    "models_snv_hem/male.scored.tsv.gz": "a480a120595196b387935fb01757f686b8c0d3c1a4ca82ac8a4d47bc51b75d0c",
+    "models_snv_hem/run.yaml": "419231effba242bf19a0b0bfbfa721d9bcfc11b1bca9e27d7733598a7335f096",
+    "models_snv_hem/sample_psaps.tsv": "d3a50eb047b07f821e5ebd5e19ddc6a06449cd1d999585d0eedd71617b92c64a",
+    "models_snv_no_hem/female.scored.tsv.gz": "feda732ca9a6c032b08f4d39b1603c3c049c6b737e2f1181595fc5f65ebf5d49",
+    "models_snv_no_hem/lookup_het.tsv.gz": "73e537d996a10f1bc7b1191448f25b03d69754b37d23be0ad842209fe00f3a58",
+    "models_snv_no_hem/lookup_hom.tsv.gz": "a16d2f32a86f209dc2e4ae17023ec6c8b2178648d16b9ba7637af82ba0e17834",
+    "models_snv_no_hem/male.scored.tsv.gz": "80d13b8c5d7b053f71caaa9338bc43a54fb5ab2c14083010bf115906527116d2",
+    "models_snv_no_hem/run.yaml": "8f72fe6eabbddfb4fd62f1b20736dbbb63ebdfe9b6bc835c902795edc06c014e",
+    "models_snv_no_hem/sample_psaps.tsv": "32268cdf1f1693bc3e6d282f302c370be0c564ee3520ab02ea71151532fbe576",
+    "snv_hem/affected.scored.tsv.gz": "80d13b8c5d7b053f71caaa9338bc43a54fb5ab2c14083010bf115906527116d2",
+    "snv_hem/lookup_hem_chrX.tsv.gz": "7221df0127f1af93f029fcb13c05353c133d82e1a354446973c7ede71833ac0c",
+    "snv_hem/lookup_het.tsv.gz": "73e537d996a10f1bc7b1191448f25b03d69754b37d23be0ad842209fe00f3a58",
+    "snv_hem/lookup_hom.tsv.gz": "a16d2f32a86f209dc2e4ae17023ec6c8b2178648d16b9ba7637af82ba0e17834",
+    "snv_hem/run.yaml": "f6c345c21f0d9e72ece8b503a66cbdb3457f482e1b2dd9d09cbd8c920e3c5dac",
+    "snv_hem/sample_psaps.tsv": "200bfac71f06f1d3236b54cc6bd379a70bffdf620a35f75e8b2c384048831efa",
+    "snv_hem/unaffected.scored.tsv.gz": "309ba2aff34f3cc29d19688f9c2cc20a841fde4cca6c88e13aad0ca9f28d5957",
+    "snv_no_hem/affected.scored.tsv.gz": "80d13b8c5d7b053f71caaa9338bc43a54fb5ab2c14083010bf115906527116d2",
+    "snv_no_hem/lookup_het.tsv.gz": "73e537d996a10f1bc7b1191448f25b03d69754b37d23be0ad842209fe00f3a58",
+    "snv_no_hem/lookup_hom.tsv.gz": "a16d2f32a86f209dc2e4ae17023ec6c8b2178648d16b9ba7637af82ba0e17834",
+    "snv_no_hem/run.yaml": "0a557087e11e458896507f4317c690fe1f5906d20d36df121697e4c647f913c5",
+    "snv_no_hem/sample_psaps.tsv": "200bfac71f06f1d3236b54cc6bd379a70bffdf620a35f75e8b2c384048831efa",
+    "snv_no_hem/unaffected.scored.tsv.gz": "309ba2aff34f3cc29d19688f9c2cc20a841fde4cca6c88e13aad0ca9f28d5957"
+  },
+  "source": "/tmp/psap-partitioned-baseline-xxpoy81o/main",
+  "source_kind": "git archive of unchanged main; additional test inputs only",
+  "workflow_profile": "none (preinstalled CI tools; no per-rule Conda installation)"
+}

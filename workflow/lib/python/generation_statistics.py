@@ -1,28 +1,28 @@
-"""Partition statistics assembled from canonical allele artifacts."""
+"""Window statistics assembled from canonical allele artifacts."""
 
 from __future__ import annotations
 
 import polars as pl
 
 from generation_bindings import (
-    PartitionStatisticsInputs,
-    PartitionStatisticsOutputs,
-    PartitionStatisticsParameters,
+    WindowStatisticsInputs,
+    WindowStatisticsOutputs,
+    WindowStatisticsParameters,
 )
 from generation_event_assembly import assign_effective_frequencies, role_event_frames
 from generation_manifests import bucket_from_manifest
-from generation_partitions import partition_from_manifest
+from generation_windows import window_from_manifest
 from generation_probability import statistics_for_role
 from generation_scores import ALLELE_COLUMNS, mutation_rate_rows
 from io_contracts import write_parquet_atomic
 
 
-def selected_partition_rows(path: str, candidate_keys: pl.DataFrame) -> pl.DataFrame:
+def selected_window_rows(path: str, candidate_keys: pl.DataFrame) -> pl.DataFrame:
     """Stream only rows whose alleles are present in a bucket's memberships.
 
     State and score files describe every candidate allele in a genomic
-    partition, whereas a calculation job handles only one unit bucket.  A
-    semi join keeps the partition files out of the job's resident working set
+    window, whereas a calculation job handles only one unit bucket.  A
+    semi join keeps the window files out of the job's resident working set
     and, unlike filtering after an eager read, bounds it by the selected
     bucket's candidate alleles.
     """
@@ -49,18 +49,18 @@ def candidate_intervals(
     ]
 
 
-def calculate_partition_statistics(
-    inputs: PartitionStatisticsInputs,
-    outputs: PartitionStatisticsOutputs,
-    params: PartitionStatisticsParameters,
-    partition_id: str,
+def calculate_window_statistics(
+    inputs: WindowStatisticsInputs,
+    outputs: WindowStatisticsOutputs,
+    params: WindowStatisticsParameters,
+    window_id: str,
     bucket_id: str,
 ) -> None:
-    """Assign absence-policy frequencies and aggregate one partition/bucket."""
-    partition = partition_from_manifest(inputs.partitions, partition_id)
+    """Assign absence-policy frequencies and aggregate one window/bucket."""
+    window = window_from_manifest(inputs.windows, window_id)
     bucket = bucket_from_manifest(inputs.buckets, bucket_id)
     # Filter the high-cardinality membership table before materializing it.
-    # A partition may cover many more units than the one bounded bucket being
+    # A window may cover many more units than the one bounded bucket being
     # reduced by this job.
     memberships = (
         pl.scan_parquet(inputs.allele_membership)
@@ -68,8 +68,8 @@ def calculate_partition_statistics(
         .collect(engine="streaming")
     )
     candidate_keys = memberships.select(ALLELE_COLUMNS).unique()
-    scores = selected_partition_rows(inputs.allele_scores, candidate_keys)
-    states = selected_partition_rows(inputs.allele_states, candidate_keys)
+    scores = selected_window_rows(inputs.allele_scores, candidate_keys)
+    states = selected_window_rows(inputs.allele_states, candidate_keys)
     events = (
         memberships.with_columns(pl.lit(bucket.ordinal).alias("unit_bucket"))
         .join(scores, on=ALLELE_COLUMNS, how="inner", suffix="_score")
@@ -83,7 +83,7 @@ def calculate_partition_statistics(
     if class_mismatch.height:
         raise ValueError(
             "Allele membership, score, and population state disagree on variant class "
-            f"in {partition.identifier}"
+            f"in {window.identifier}"
         )
     events = events.drop("variant_class_score", "variant_class_state")
     if params.unobserved_policy == "mutation_rate":
@@ -91,9 +91,9 @@ def calculate_partition_statistics(
         rates = mutation_rate_rows(
             inputs.mutation_rate,
             inputs.mutation_rate_index,
-            partition.chromosome,
-            partition.start,
-            partition.end,
+            window.chromosome,
+            window.start,
+            window.end,
             intervals=snv_intervals,
         )
         events = events.join(rates, on=ALLELE_COLUMNS, how="left")
@@ -102,9 +102,9 @@ def calculate_partition_statistics(
             indel_rates = mutation_rate_rows(
                 inputs.mutation_rate_indel,
                 inputs.mutation_rate_indel_index,
-                partition.chromosome,
-                partition.start,
-                partition.end,
+                window.chromosome,
+                window.start,
+                window.end,
                 intervals=indel_intervals,
             ).rename({"mu": "mu_indel"})
             events = events.join(indel_rates, on=ALLELE_COLUMNS, how="left")

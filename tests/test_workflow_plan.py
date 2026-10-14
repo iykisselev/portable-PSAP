@@ -308,7 +308,7 @@ class WorkflowPlanTests(unittest.TestCase):
         self.assertIsNotNone(plan.generation)
         assert plan.generation is not None
         self.assertEqual("AF_CUSTOM", plan.generation.af_source["overall"])
-        self.assertEqual(5_000_000, plan.generation.partition_size_bp)
+        self.assertEqual(5_000_000, plan.generation.window_size_bp)
 
     def test_generation_plan_exposes_staged_indel_contract_bindings(self) -> None:
         manifest = self.manifest("tests/null_distribution/generate.run.yaml")
@@ -402,7 +402,7 @@ class WorkflowPlanTests(unittest.TestCase):
         self.assertIsNone(plan.apply.effective_reference.calibration_regions)
         self.assertIsNone(plan.apply.lookup_source.calibration_mask)
 
-    def test_production_generation_requires_each_partition_resource_index(self) -> None:
+    def test_production_generation_requires_each_window_resource_index(self) -> None:
         for mode in ("generate", "full"):
             for missing in ("population", "scores", "mutation"):
                 with self.subTest(mode=mode, missing=missing):
@@ -443,7 +443,7 @@ class WorkflowPlanTests(unittest.TestCase):
                         build_workflow_plan(manifest)
                     self.assertIn(f"{key}.index is required", str(raised.exception))
                     self.assertIn(
-                        "each partition scans the entire file", str(raised.exception)
+                        "each window scans the entire file", str(raised.exception)
                     )
 
     def test_fixture_exception_never_allows_unindexed_compressed_inputs(self) -> None:
@@ -547,7 +547,7 @@ class WorkflowPlanTests(unittest.TestCase):
         plan = build_workflow_plan(manifest)
 
         assert plan.generation is not None
-        self.assertEqual(5_000_000, plan.generation.partition_size_bp)
+        self.assertEqual(5_000_000, plan.generation.window_size_bp)
         self.assertEqual(250, plan.generation.unit_bucket_size)
         self.assertEqual("zstd", plan.generation.parquet_compression)
 

@@ -102,7 +102,7 @@ class GenerationAdapterBindingTests(unittest.TestCase):
             GenerationScopeParameters,
             SimpleNamespace(
                 minimum_retained_fraction="0.75",
-                partition_size="5000000",
+                window_size="5000000",
                 unit_bucket_size="100",
                 compression=Path("zstd"),
                 af_tags={"AC": "AC"},
@@ -117,7 +117,7 @@ class GenerationAdapterBindingTests(unittest.TestCase):
         self.assertIsNone(inputs.exclusion)
         self.assertEqual(("low-complexity.bed", "blacklist.bed"), inputs.exclusions)
         self.assertEqual(0.75, parameters.minimum_retained_fraction)
-        self.assertEqual(5_000_000, parameters.partition_size)
+        self.assertEqual(5_000_000, parameters.window_size)
         self.assertFalse(parameters.include_indels)
         self.assertEqual(12, parameters.indel_max_reference_length)
 
@@ -126,7 +126,7 @@ class GenerationAdapterBindingTests(unittest.TestCase):
             LookupReductionInputs,
             SimpleNamespace(
                 buckets=Path("buckets.json"),
-                partition_statistics=[Path("one.parquet"), "two.parquet"],
+                window_statistics=[Path("one.parquet"), "two.parquet"],
             ),
         )
         outputs = bind(
@@ -139,7 +139,7 @@ class GenerationAdapterBindingTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(("one.parquet", "two.parquet"), inputs.partition_statistics)
+        self.assertEqual(("one.parquet", "two.parquet"), inputs.window_statistics)
         self.assertIsNone(outputs.lookup_hem_chrX)
 
     def test_mapping_and_tuple_parameters_are_typed(self) -> None:
@@ -182,7 +182,7 @@ class GenerationAdapterBindingTests(unittest.TestCase):
     def test_missing_indel_limit_fails_at_boundary(self) -> None:
         parameters = SimpleNamespace(
             minimum_retained_fraction=0.5,
-            partition_size=10,
+            window_size=10,
             unit_bucket_size=10,
             compression="zstd",
             af_tags={"overall": "AF"},

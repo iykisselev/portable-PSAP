@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from generation_partitions import GenomePartition
+from generation_windows import GenomeWindow
 from generation_prep import merge_intervals
 from genomic_contracts import read_fai
 
@@ -98,7 +98,7 @@ class ReferenceReader:
 
 
 def membership_rows(
-    partition: GenomePartition,
+    window: GenomeWindow,
     mask: list[tuple[int, int]],
     intervals: list[tuple[str, int, int]],
     reference: ReferenceReader,
@@ -111,7 +111,7 @@ def membership_rows(
     # Canonical scope artifacts have disjoint masks and merged intervals for
     # each unit, so no two chunks can emit the same membership.  Retaining a
     # full-frame unique operation in that normal case would create an avoidable
-    # hash table at the largest point in a partition job.  Keep the public
+    # hash table at the largest point in a window job.  Keep the public
     # distinct-row behavior for direct callers with overlapping inputs.
     greatest_end_by_unit: dict[str, int] = {}
     needs_deduplication = False
@@ -128,7 +128,7 @@ def membership_rows(
             mask_index += 1
             if overlap_start >= overlap_end:
                 continue
-            sequence = reference.fetch(partition.chromosome, overlap_start, overlap_end)
+            sequence = reference.fetch(window.chromosome, overlap_start, overlap_end)
             encoded = np.frombuffer(sequence.encode("ascii"), dtype=np.uint8)
             base_codes = _BASE_CODES[encoded]
             valid = base_codes >= 0
@@ -148,7 +148,7 @@ def membership_rows(
                 )
                 .with_columns(
                     pl.lit(unit).alias("testing_unit_id"),
-                    pl.lit(partition.chromosome).alias("CHROM"),
+                    pl.lit(window.chromosome).alias("CHROM"),
                 )
                 .select(*MEMBERSHIP_SCHEMA)
             )

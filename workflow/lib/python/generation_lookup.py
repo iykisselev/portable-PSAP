@@ -17,7 +17,7 @@ from generation_probability import (
 from io_contracts import write_tsv_atomic
 
 
-def reduce_partition_statistics(
+def reduce_window_statistics(
     inputs: LookupReductionInputs,
     outputs: LookupReductionOutputs,
     params: LookupReductionParameters,
@@ -26,7 +26,7 @@ def reduce_partition_statistics(
     """Reduce one bounded unit bucket through Polars and dense NumPy arrays."""
     units = list(bucket_from_manifest(inputs.buckets, bucket_id).unit_ids)
     statistics = aggregate_statistics_vectorized(
-        [Path(path) for path in inputs.partition_statistics]
+        [Path(path) for path in inputs.window_statistics]
     )
     lookup_rows, diagnostics = vectorized_lookup_rows(
         statistics, units, params.roles, params.bin_count

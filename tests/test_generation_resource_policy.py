@@ -74,7 +74,7 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             mutation_rate_index=None,
         )
         outputs = GenerationScopeOutputs(
-            partitions=self.path,
+            windows=self.path,
             buckets=self.path,
             units=self.path,
             unit_intervals=self.path,

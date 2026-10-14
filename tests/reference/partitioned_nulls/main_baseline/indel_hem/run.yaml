@@ -1,0 +1,58 @@
+bindings:
+  reference:
+    cadd:
+      indel:
+        data: tests/smoke/data/cadd_indel.tsv
+        index: null
+      snv:
+        data: tests/null_distribution/generation_scores.tsv
+        index: null
+    exclusion:
+      data: tests/null_distribution/exclusion.bed
+      index: null
+    exclusions:
+      encode-hg38-blacklist-v2:
+        data: tests/smoke/data/exclude_full_span.bed
+        index: null
+      par-regions:
+        data: tests/null_distribution/par_regions.bed
+        index: null
+    fasta:
+      data: tests/smoke/data/reference.fa
+      fai: tests/smoke/data/reference.fa.fai
+      gzi: null
+    testing_unit_bed:
+      data: tests/null_distribution/testing_units.bed
+      index: null
+generation:
+  af_source:
+    female: AF_FEMALE
+    male: AF_MALE
+    overall: AF_CUSTOM
+  execution:
+    allow_unindexed_fixture_inputs: true
+  population_vcf:
+    data: tests/null_distribution/population_af.vcf
+    index: null
+  unobserved_policy: zero
+generation_settings:
+  score_bin_width: 0.3
+  variant_classes:
+  - snv
+  - indel
+inputs:
+  ped: null
+  samples: tests/smoke/data/samples.tsv
+  vcf:
+    data: tests/smoke/data/cohort.vcf
+    index: null
+model:
+  hemizygote: true
+  include_indels: true
+  score_max: 50
+outdir: /tmp/portable-psap-full-indel-fixture
+run:
+  apply_prefix: indel-fixture
+  generation_prefix: indel-fixture
+workflow:
+  mode: full

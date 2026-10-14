@@ -2,11 +2,11 @@
 
 
 checkpoint prepare_generation_scope:
-    """Prepare the shared mask and testing units before partition work begins."""
+    """Prepare the shared mask and testing units before window work begins."""
     input:
         **GENERATION_CONTEXT.raw_inputs("scope"),
     output:
-        partitions=GENERATION_CONTEXT.scope_paths["partitions"],
+        windows=GENERATION_CONTEXT.scope_paths["windows"],
         buckets=GENERATION_CONTEXT.scope_paths["buckets"],
         units=GENERATION_CONTEXT.scope_paths["units"],
         unit_intervals=GENERATION_CONTEXT.scope_paths["unit_intervals"],
@@ -26,7 +26,7 @@ checkpoint prepare_generation_scope:
         runtime=policy_resources("prepare_generation_scope").runtime,
     params:
         minimum_retained_fraction=WORKFLOW_PLAN.generation_settings.minimum_retained_fraction,
-        partition_size=GENERATION_CONTEXT.plan.partition_size_bp,
+        window_size=GENERATION_CONTEXT.plan.window_size_bp,
         unit_bucket_size=GENERATION_CONTEXT.plan.unit_bucket_size,
         af_tags=dict(GENERATION_CONTEXT.plan.af_source),
         compression=GENERATION_CONTEXT.plan.parquet_compression,
@@ -36,29 +36,29 @@ checkpoint prepare_generation_scope:
         str(GENERATION_SCRIPT_DIR / "prepare_generation_scope.py")
 
 
-rule prepare_generation_partition:
+rule prepare_generation_window:
     """Create allele states, unit memberships, and scores for one genomic window."""
     input:
-        **GENERATION_CONTEXT.raw_inputs("partition"),
-        partitions=lambda wc: generation_scope_artifact(wc, "partitions"),
+        **GENERATION_CONTEXT.raw_inputs("window"),
+        windows=lambda wc: generation_scope_artifact(wc, "windows"),
         units=lambda wc: generation_scope_artifact(wc, "units"),
         unit_intervals=lambda wc: generation_scope_artifact(wc, "unit_intervals"),
         effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
     output:
         allele_states=str(
-            GENERATION_CONTEXT.partition_dir / "{partition}.allele_states.parquet"
+            GENERATION_CONTEXT.window_dir / "{window}.allele_states.parquet"
         ),
         allele_membership=str(
-            GENERATION_CONTEXT.partition_dir / "{partition}.allele_membership.parquet"
+            GENERATION_CONTEXT.window_dir / "{window}.allele_membership.parquet"
         ),
         allele_scores=str(
-            GENERATION_CONTEXT.partition_dir / "{partition}.allele_scores.parquet"
+            GENERATION_CONTEXT.window_dir / "{window}.allele_scores.parquet"
         ),
         candidate_audit=str(
-            GENERATION_CONTEXT.partition_dir / "{partition}.candidate_audit.parquet"
+            GENERATION_CONTEXT.window_dir / "{window}.candidate_audit.parquet"
         ),
     log:
-        str(GENERATION_CONTEXT.plan.log_dir / "partitions" / "{partition}.prepare.log"),
+        str(GENERATION_CONTEXT.plan.log_dir / "windows" / "{window}.prepare.log"),
     conda:
         env("validation")
     container:
@@ -67,8 +67,8 @@ rule prepare_generation_partition:
         *mod("validation"),
     threads: 1
     resources:
-        mem_mb=policy_resources("prepare_generation_partition").mem_mb,
-        runtime=policy_resources("prepare_generation_partition").runtime,
+        mem_mb=policy_resources("prepare_generation_window").mem_mb,
+        runtime=policy_resources("prepare_generation_window").runtime,
     params:
         af_tags=dict(GENERATION_CONTEXT.plan.af_source),
         x_af_policy=WORKFLOW_PLAN.generation_settings.x_af_policy,
@@ -78,4 +78,4 @@ rule prepare_generation_partition:
         indel_max_reference_length=WORKFLOW_PLAN.generation_settings.indel_max_reference_length,
         indel_max_alternate_length=WORKFLOW_PLAN.generation_settings.indel_max_alternate_length,
     script:
-        str(GENERATION_SCRIPT_DIR / "prepare_generation_partition.py")
+        str(GENERATION_SCRIPT_DIR / "prepare_generation_window.py")

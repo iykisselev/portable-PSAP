@@ -1,4 +1,4 @@
-"""Bounded, normalized indel catalog readers for generation partitions."""
+"""Bounded, normalized indel catalog readers for generation windows."""
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ INDEL_REJECTION_SCHEMA = {
 
 
 class IndelCandidateError(ValueError):
-    """Raised when an owner-partition indel catalog row is not usable."""
+    """Raised when an owner-window indel catalog row is not usable."""
 
 
 def _candidate_error(
@@ -88,9 +88,9 @@ def indel_score_rows(
     """Read and validate catalog indels owned by one anchor-position window.
 
     The score catalog uses the same six-column CADD layout as the existing
-    SNV reader.  Tabix is queried only for the owner partition ``[start, end)``
+    SNV reader.  Tabix is queried only for the owner window ``[start, end)``
     and each accepted row satisfies ``start < POS <= end``.  Genuine duplicate
-    catalog rows are intentionally retained so the later partition join can
+    catalog rows are intentionally retained so the later window join can
     report them as a structural source error.
     """
     if max_reference_length < 1 or max_alternate_length < 1:

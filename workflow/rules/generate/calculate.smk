@@ -1,30 +1,30 @@
-"""Partition-local event aggregation and bounded unit-bucket reduction."""
+"""Window-local event aggregation and bounded unit-bucket reduction."""
 
 
-rule calculate_partition_null_distribution:
-    """Aggregate events once within a genomic partition and write bucket partials."""
+rule calculate_window_null_distribution:
+    """Aggregate events once within a genomic window and write bucket partials."""
     input:
         **GENERATION_CONTEXT.raw_inputs("statistics"),
-        partitions=lambda wc: generation_scope_artifact(wc, "partitions"),
+        windows=lambda wc: generation_scope_artifact(wc, "windows"),
         buckets=lambda wc: generation_scope_artifact(wc, "buckets"),
         allele_states=str(
-            GENERATION_CONTEXT.partition_dir / "{partition}.allele_states.parquet"
+            GENERATION_CONTEXT.window_dir / "{window}.allele_states.parquet"
         ),
         allele_membership=str(
-            GENERATION_CONTEXT.partition_dir / "{partition}.allele_membership.parquet"
+            GENERATION_CONTEXT.window_dir / "{window}.allele_membership.parquet"
         ),
         allele_scores=str(
-            GENERATION_CONTEXT.partition_dir / "{partition}.allele_scores.parquet"
+            GENERATION_CONTEXT.window_dir / "{window}.allele_scores.parquet"
         ),
     output:
         statistics=str(
-            GENERATION_CONTEXT.statistics_dir / "{partition}.bucket-{bucket}.parquet"
+            GENERATION_CONTEXT.statistics_dir / "{window}.bucket-{bucket}.parquet"
         ),
     log:
         str(
             GENERATION_CONTEXT.plan.log_dir
-            / "partitions"
-            / "{partition}.{bucket}.calculate.log"
+            / "windows"
+            / "{window}.{bucket}.calculate.log"
         ),
     conda:
         env("validation")
@@ -34,8 +34,8 @@ rule calculate_partition_null_distribution:
         *mod("validation"),
     threads: 1
     resources:
-        mem_mb=policy_resources("calculate_partition_null_distribution").mem_mb,
-        runtime=policy_resources("calculate_partition_null_distribution").runtime,
+        mem_mb=policy_resources("calculate_window_null_distribution").mem_mb,
+        runtime=policy_resources("calculate_window_null_distribution").runtime,
     params:
         score_max=WORKFLOW_PLAN.model.score_max,
         bin_width=WORKFLOW_PLAN.generation_settings.score_bin_width,
@@ -45,14 +45,14 @@ rule calculate_partition_null_distribution:
         x_mutation_rate_policy=WORKFLOW_PLAN.generation_settings.x_mutation_rate_policy,
         compression=GENERATION_CONTEXT.plan.parquet_compression,
     script:
-        str(GENERATION_SCRIPT_DIR / "calculate_partition_statistics.py")
+        str(GENERATION_SCRIPT_DIR / "calculate_window_statistics.py")
 
 
 rule reduce_null_distribution_bucket:
     """Produce direct lookup rows for one bounded range of unit identifiers."""
     input:
         buckets=lambda wc: generation_scope_artifact(wc, "buckets"),
-        partition_statistics=generation_statistics_shards,
+        window_statistics=generation_statistics_shards,
     output:
         lookup_het=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.het.tsv"),
         lookup_hom=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.hom.tsv"),
@@ -78,4 +78,4 @@ rule reduce_null_distribution_bucket:
         bin_count=GENERATION_CONTEXT.execution_layout.bin_count,
         roles=GENERATION_CONTEXT.execution_layout.roles,
     script:
-        str(GENERATION_SCRIPT_DIR / "reduce_partition_statistics.py")
+        str(GENERATION_SCRIPT_DIR / "reduce_window_statistics.py")

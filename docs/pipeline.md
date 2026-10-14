@@ -459,15 +459,15 @@ combination of `unobserved_policy: mutation_rate` and
 4. Subtract the union of primary and additional interval exclusions.
 5. Calculate retained fraction per unit and mark units below
    `minimum_retained_fraction` as ineligible.
-6. Create deterministic genomic partitions and eligible-unit buckets.
+6. Create deterministic genomic windows and eligible-unit buckets.
 7. Record source paths and SHA-256 identities.
 
-Because this rule is a Snakemake checkpoint, the downstream partition and
+Because this rule is a Snakemake checkpoint, the downstream window and
 bucket wildcards do not exist until its manifests have been written.
 
-#### 2. Partition preparation
+#### 2. Window preparation
 
-`prepare_generation_partition` works on one genomic window. It enumerates the
+`prepare_generation_window` works on one genomic window. It enumerates the
 SNV alleles in callable testing-unit sequence, joins each allele to unit
 membership and CADD score, and classifies its population state as present,
 absent, or rejected. Duplicate population states, duplicate scores, invalid AF
@@ -479,17 +479,17 @@ The rule writes three Parquet shards:
 - `allele_membership`: allele-to-unit relationships;
 - `allele_scores`: CADD score per allele.
 
-#### 3. Partition-by-bucket statistics
+#### 3. Window-by-bucket statistics
 
-`calculate_partition_null_distribution` joins the three partition shards for
+`calculate_window_null_distribution` joins the three window shards for
 one bounded unit bucket. It applies the zero or mutation-rate fallback, derives
 role probabilities, maps scores to fixed-width bins, and writes additive
 no-event statistics. Storing counts and sums of `log(1-q)` allows the workflow
-to combine partitions without creating a genome-wide event table.
+to combine windows without creating a genome-wide event table.
 
 #### 4. Bucket reduction
 
-`reduce_null_distribution_bucket` combines all partition statistics for one
+`reduce_null_distribution_bucket` combines all window statistics for one
 unit bucket. It uses compensated floating-point summation, calculates event
 mass and the conditional survival row, and emits compact diagnostics.
 
@@ -654,7 +654,7 @@ binning, roles, policies, resource identities and checksums, component
 checksums, and row counts.
 
 Generation intermediates live under `scalable/prepared`,
-`scalable/partitions`, and `scalable/calculated`. They are intentionally kept
+`scalable/windows`, and `scalable/calculated`. They are intentionally kept
 as recovery points for large runs.
 
 ### Apply results
@@ -763,7 +763,7 @@ the data file is not automatically discovered. Full mode checks the shared
 The small demonstration manifests explicitly set
 `generation.execution.allow_unindexed_fixture_inputs: true`. This exception
 only permits uncompressed files up to 1 MiB; scope preparation checks that limit
-before hashing inputs or scheduling partition jobs. Leave the option unset
+before hashing inputs or scheduling window jobs. Leave the option unset
 (the default is `false`) for production runs. Coverage, testing-unit and exclusion
 BEDs are read once during scope preparation and do not need indexes for generation.
 
@@ -777,11 +777,11 @@ generation:
     parquet_compression: zstd
 ```
 
-- Smaller genomic partitions reduce memory per preparation job but create more
+- Smaller genomic windows reduce memory per preparation job but create more
   scheduler work.
 - Smaller unit buckets reduce reducer memory but increase the number of
-  partition-by-bucket jobs.
-- Keep the manifest order deterministic; changing partition or bucket sizing
+  window-by-bucket jobs.
+- Keep the manifest order deterministic; changing window or bucket sizing
   changes work layout, not the scientific calculation.
 
 Both supplied execution profiles enable `rerun-incomplete`. If a cluster job

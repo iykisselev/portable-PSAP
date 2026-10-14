@@ -16,39 +16,39 @@ sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 import generation_population
 from generation_bindings import (  # noqa: E402
-    GenerationPartitionInputs,
-    GenerationPartitionOutputs,
-    GenerationPartitionParameters,
-    PartitionStatisticsInputs,
-    PartitionStatisticsOutputs,
-    PartitionStatisticsParameters,
+    GenerationWindowInputs,
+    GenerationWindowOutputs,
+    GenerationWindowParameters,
+    WindowStatisticsInputs,
+    WindowStatisticsOutputs,
+    WindowStatisticsParameters,
 )
-from generation_partition import prepare_generation_partition  # noqa: E402
-from generation_statistics import calculate_partition_statistics  # noqa: E402
+from generation_window import prepare_generation_window  # noqa: E402
+from generation_statistics import calculate_window_statistics  # noqa: E402
 
 
 @unittest.skipUnless(
     generation_population.pysam, "pysam is required for indexed integration coverage"
 )
 class IndexedIndelGenerationTests(unittest.TestCase):
-    def test_indexed_indel_score_and_rate_cross_a_partition_boundary_once(self) -> None:
+    def test_indexed_indel_score_and_rate_cross_a_window_boundary_once(self) -> None:
         pysam = generation_population.pysam
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            partition_id = "1_000000000000_000000010000"
+            window_id = "1_000000000000_000000010000"
             fasta = directory / "reference.fa"
             sequence = list("A" * 20_000)
             sequence[9_999:10_001] = list("CA")
             fasta.write_text(">1\n" + "".join(sequence) + "\n", encoding="utf-8")
             pysam.faidx(str(fasta))
-            partitions = directory / "partitions.json"
-            partitions.write_text(
+            windows = directory / "windows.json"
+            windows.write_text(
                 json.dumps(
                     {
-                        "schema_version": 1,
-                        "partitions": [
+                        "schema_version": 2,
+                        "windows": [
                             {
-                                "partition_id": partition_id,
+                                "window_id": window_id,
                                 "chromosome": "1",
                                 "start": 0,
                                 "end": 10_000,
@@ -63,14 +63,14 @@ class IndexedIndelGenerationTests(unittest.TestCase):
             buckets.write_text(
                 json.dumps(
                     {
-                        "schema_version": 2,
+                        "schema_version": 3,
                         "buckets": [
                             {
                                 "bucket_id": "00000",
                                 "ordinal": 0,
                                 "unit_count": 1,
                                 "unit_ids": ["BOUNDARY"],
-                                "partition_ids": [partition_id],
+                                "window_ids": [window_id],
                             }
                         ],
                     }
@@ -133,15 +133,15 @@ class IndexedIndelGenerationTests(unittest.TestCase):
             pysam.tabix_compress(str(population_plain), str(population_gz), force=True)
             pysam.tabix_index(str(population_gz), preset="vcf", force=True)
 
-            outputs = GenerationPartitionOutputs(
+            outputs = GenerationWindowOutputs(
                 allele_states=directory / "states.parquet",
                 allele_membership=directory / "membership.parquet",
                 allele_scores=directory / "scores.parquet",
                 candidate_audit=directory / "audit.parquet",
             )
-            prepare_generation_partition(
-                GenerationPartitionInputs(
-                    partitions=partitions,
+            prepare_generation_window(
+                GenerationWindowInputs(
+                    windows=windows,
                     units=units,
                     unit_intervals=intervals,
                     effective_mask=mask,
@@ -155,7 +155,7 @@ class IndexedIndelGenerationTests(unittest.TestCase):
                     fasta_fai=str(fasta) + ".fai",
                 ),
                 outputs,
-                GenerationPartitionParameters(
+                GenerationWindowParameters(
                     af_tags={"overall": "AF"},
                     x_af_policy="overall_proxy",
                     hemizygote=False,
@@ -164,7 +164,7 @@ class IndexedIndelGenerationTests(unittest.TestCase):
                     indel_max_reference_length=2,
                     indel_max_alternate_length=2,
                 ),
-                partition_id,
+                window_id,
             )
             membership = pl.read_parquet(outputs.allele_membership)
             self.assertEqual(
@@ -175,9 +175,9 @@ class IndexedIndelGenerationTests(unittest.TestCase):
             )
 
             statistics = directory / "statistics.parquet"
-            calculate_partition_statistics(
-                PartitionStatisticsInputs(
-                    partitions=partitions,
+            calculate_window_statistics(
+                WindowStatisticsInputs(
+                    windows=windows,
                     buckets=buckets,
                     allele_states=outputs.allele_states,
                     allele_membership=outputs.allele_membership,
@@ -187,8 +187,8 @@ class IndexedIndelGenerationTests(unittest.TestCase):
                     mutation_rate_indel=indel_rate,
                     mutation_rate_indel_index=indel_rate_index,
                 ),
-                PartitionStatisticsOutputs(statistics=statistics),
-                PartitionStatisticsParameters(
+                WindowStatisticsOutputs(statistics=statistics),
+                WindowStatisticsParameters(
                     x_af_policy="overall_proxy",
                     unobserved_policy="mutation_rate",
                     x_mutation_rate_policy="sex_averaged_proxy",
@@ -197,7 +197,7 @@ class IndexedIndelGenerationTests(unittest.TestCase):
                     roles=("het", "hom"),
                     compression="zstd",
                 ),
-                partition_id,
+                window_id,
                 "00000",
             )
             result = pl.read_parquet(statistics)

@@ -1,4 +1,4 @@
-"""Indexed population-panel parsing for partition-local generation work."""
+"""Indexed population-panel parsing for window-local generation work."""
 
 from __future__ import annotations
 
@@ -167,7 +167,7 @@ def population_info_definitions(
 
 
 def validate_population_af_headers(path: str | Path, af_tags: dict[str, str]) -> None:
-    """Confirm every configured population AF tag is declared before partition work."""
+    """Confirm every configured population AF tag is declared before window work."""
     population_info_definitions(path, set(af_tags.values()))
 
 

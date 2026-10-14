@@ -21,7 +21,7 @@ def check_generation_index_binding(
         raise ValueError(
             f"{key}.index is required for generation resource {path!s}. "
             "Declare the matching .tbi or .csi index explicitly; adjacent indexes "
-            "are not auto-discovered. Without it, each partition scans the entire file. "
+            "are not auto-discovered. Without it, each window scans the entire file. "
             "Only uncompressed fixtures up to 1 MiB may use "
             "generation.execution.allow_unindexed_fixture_inputs: true."
         )

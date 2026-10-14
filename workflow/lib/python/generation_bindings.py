@@ -38,7 +38,7 @@ class GenerationScopeInputs:
 
 @dataclass(frozen=True)
 class GenerationScopeOutputs:
-    partitions: PathLike
+    windows: PathLike
     buckets: PathLike
     units: PathLike
     unit_intervals: PathLike
@@ -49,7 +49,7 @@ class GenerationScopeOutputs:
 @dataclass(frozen=True)
 class GenerationScopeParameters:
     minimum_retained_fraction: float
-    partition_size: int
+    window_size: int
     unit_bucket_size: int
     compression: str
     af_tags: Mapping[str, str]
@@ -58,8 +58,8 @@ class GenerationScopeParameters:
 
 
 @dataclass(frozen=True)
-class GenerationPartitionInputs:
-    partitions: PathLike
+class GenerationWindowInputs:
+    windows: PathLike
     units: PathLike
     unit_intervals: PathLike
     effective_mask: PathLike
@@ -74,7 +74,7 @@ class GenerationPartitionInputs:
 
 
 @dataclass(frozen=True)
-class GenerationPartitionOutputs:
+class GenerationWindowOutputs:
     allele_states: PathLike
     allele_membership: PathLike
     allele_scores: PathLike
@@ -82,7 +82,7 @@ class GenerationPartitionOutputs:
 
 
 @dataclass(frozen=True)
-class GenerationPartitionParameters:
+class GenerationWindowParameters:
     af_tags: Mapping[str, str]
     x_af_policy: str
     hemizygote: bool
@@ -93,8 +93,8 @@ class GenerationPartitionParameters:
 
 
 @dataclass(frozen=True)
-class PartitionStatisticsInputs:
-    partitions: PathLike
+class WindowStatisticsInputs:
+    windows: PathLike
     buckets: PathLike
     allele_states: PathLike
     allele_membership: PathLike
@@ -106,12 +106,12 @@ class PartitionStatisticsInputs:
 
 
 @dataclass(frozen=True)
-class PartitionStatisticsOutputs:
+class WindowStatisticsOutputs:
     statistics: PathLike
 
 
 @dataclass(frozen=True)
-class PartitionStatisticsParameters:
+class WindowStatisticsParameters:
     x_af_policy: str
     unobserved_policy: str
     x_mutation_rate_policy: str
@@ -124,7 +124,7 @@ class PartitionStatisticsParameters:
 @dataclass(frozen=True)
 class LookupReductionInputs:
     buckets: PathLike
-    partition_statistics: tuple[PathLike, ...]
+    window_statistics: tuple[PathLike, ...]
 
 
 @dataclass(frozen=True)

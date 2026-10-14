@@ -15,7 +15,7 @@ from polars.testing import assert_frame_equal
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
-from generation_partitions import GenomePartition  # noqa: E402
+from generation_windows import GenomeWindow  # noqa: E402
 from generation_reference import ReferenceReader, membership_rows  # noqa: E402
 
 
@@ -37,7 +37,7 @@ class GenerationReferenceTests(unittest.TestCase):
         for mask in ([(0, 10), (3, 5)], [(3, 5), (0, 10)]):
             with self.subTest(mask=mask):
                 rows = membership_rows(
-                    GenomePartition("p", "1", 0, 10, 0),
+                    GenomeWindow("p", "1", 0, 10, 0),
                     mask,
                     [("unit", 4, 10)],
                     StaticReference("A" * 10),
@@ -75,7 +75,7 @@ class GenerationReferenceTests(unittest.TestCase):
         self,
     ) -> None:
         rows = membership_rows(
-            GenomePartition("1_000000000000_000000000005", "1", 0, 5, 0),
+            GenomeWindow("1_000000000000_000000000005", "1", 0, 5, 0),
             mask=[(0, 5)],
             intervals=[("unit", 0, 5)],
             reference=StaticReference("ACGTN"),
@@ -109,7 +109,7 @@ class GenerationReferenceTests(unittest.TestCase):
 
     def test_memberships_remain_distinct_for_overlapping_direct_inputs(self) -> None:
         rows = membership_rows(
-            GenomePartition("1_000000000000_000000000002", "1", 0, 2, 0),
+            GenomeWindow("1_000000000000_000000000002", "1", 0, 2, 0),
             mask=[(0, 2)],
             intervals=[("unit", 0, 2), ("unit", 1, 2)],
             reference=StaticReference("AA"),

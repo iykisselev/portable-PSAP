@@ -39,8 +39,8 @@ class RuleResourceCallbacks:
 RULE_POLICY_NAMES = frozenset(
     {
         "prepare_generation_scope",
-        "prepare_generation_partition",
-        "calculate_partition_null_distribution",
+        "prepare_generation_window",
+        "calculate_window_null_distribution",
         "reduce_null_distribution_bucket",
         "finalize_null_distribution_bundle",
         "validate_null_distribution_bundle",
@@ -85,10 +85,10 @@ EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
         "prepare_generation_scope": ExecutionPolicy(
             baseline_mem_mb=4096, baseline_runtime_minutes=120
         ),
-        "prepare_generation_partition": ExecutionPolicy(
+        "prepare_generation_window": ExecutionPolicy(
             baseline_mem_mb=16384, baseline_runtime_minutes=360
         ),
-        "calculate_partition_null_distribution": ExecutionPolicy(
+        "calculate_window_null_distribution": ExecutionPolicy(
             baseline_mem_mb=16384, baseline_runtime_minutes=240
         ),
         "reduce_null_distribution_bucket": ExecutionPolicy(

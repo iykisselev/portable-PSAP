@@ -1,16 +1,16 @@
-"""Partition-manifest adapters for bounded null-distribution generation."""
+"""Window-manifest adapters for bounded null-distribution generation."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 
-from generation_manifests import read_partition_manifest
+from generation_manifests import read_window_manifest
 from genomic_contracts import read_fai
 
 
 @dataclass(frozen=True)
-class GenomePartition:
+class GenomeWindow:
     """One half-open genomic region with a stable output identifier."""
 
     identifier: str
@@ -21,28 +21,28 @@ class GenomePartition:
 
 
 def read_fasta_index(path: str | Path) -> dict[str, tuple[str, int]]:
-    """Compatibility view of the shared FAI records for partitioning."""
+    """Compatibility view of the shared FAI records for windowing."""
     return {
         chromosome: (record.name, record.length)
         for chromosome, record in read_fai(path).items()
     }
 
 
-def build_partitions(
+def build_windows(
     fasta_index: str | Path,
     testing_unit_intervals: list[tuple[str, int, int]],
-    partition_size: int,
+    window_size: int,
     *,
     candidate_owner_intervals: list[tuple[str, int, int]] | None = None,
-) -> list[GenomePartition]:
+) -> list[GenomeWindow]:
     """Return fixed-size windows that intersect eligible candidate intervals.
 
     ``candidate_owner_intervals`` is an optional indel anchor halo.  It is
     separate from the ordinary callable-unit intervals so downstream code can
     preserve exact span membership while still scheduling a preceding owner
-    partition for a boundary-crossing deletion.
+    window for a boundary-crossing deletion.
     """
-    if partition_size <= 0:
+    if window_size <= 0:
         raise ValueError("generation.execution.partition_size_bp must be positive")
     fasta_contigs = read_fasta_index(fasta_index)
     candidate_intervals = list(testing_unit_intervals)
@@ -65,21 +65,21 @@ def build_partitions(
             raise ValueError(
                 f"Testing-unit interval on {chromosome} extends beyond the FASTA contig"
             )
-        first_window = interval_start // partition_size
-        last_window = (interval_end - 1) // partition_size
+        first_window = interval_start // window_size
+        last_window = (interval_end - 1) // window_size
         selected_windows.setdefault(chromosome, set()).update(
             range(first_window, last_window + 1)
         )
 
-    partitions: list[GenomePartition] = []
+    windows: list[GenomeWindow] = []
     ordinal = 0
     for chromosome in sorted(selected_windows):
         _, length = fasta_contigs[chromosome]
         for window in sorted(selected_windows[chromosome]):
-            start = window * partition_size
-            end = min(start + partition_size, length)
-            partitions.append(
-                GenomePartition(
+            start = window * window_size
+            end = min(start + window_size, length)
+            windows.append(
+                GenomeWindow(
                     identifier=f"{chromosome}_{start:012d}_{end:012d}",
                     chromosome=chromosome,
                     start=start,
@@ -88,7 +88,7 @@ def build_partitions(
                 )
             )
             ordinal += 1
-    return partitions
+    return windows
 
 
 def indel_candidate_owner_intervals(
@@ -110,23 +110,23 @@ def indel_candidate_owner_intervals(
     ]
 
 
-def read_genome_partitions(path: str | Path) -> list[GenomePartition]:
-    """Load validated scope partitions into the partition-local record type."""
+def read_genome_windows(path: str | Path) -> list[GenomeWindow]:
+    """Load validated scope windows into the window-local record type."""
     return [
-        GenomePartition(
+        GenomeWindow(
             identifier=entry.identifier,
             chromosome=entry.chromosome,
             start=entry.start,
             end=entry.end,
             ordinal=entry.ordinal,
         )
-        for entry in read_partition_manifest(path)
+        for entry in read_window_manifest(path)
     ]
 
 
-def partition_from_manifest(path: str | Path, identifier: str) -> GenomePartition:
+def window_from_manifest(path: str | Path, identifier: str) -> GenomeWindow:
     """Resolve one requested wildcard without reconstructing coordinates from text."""
-    for partition in read_genome_partitions(path):
-        if partition.identifier == identifier:
-            return partition
-    raise ValueError(f"Unknown generation partition {identifier!r}")
+    for window in read_genome_windows(path):
+        if window.identifier == identifier:
+            return window
+    raise ValueError(f"Unknown generation window {identifier!r}")

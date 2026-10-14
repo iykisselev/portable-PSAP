@@ -1,15 +1,15 @@
-"""Partition-local join of reference, score, and population observations."""
+"""Window-local join of reference, score, and population observations."""
 
 from __future__ import annotations
 
 import polars as pl
 
 from generation_bindings import (
-    GenerationPartitionInputs,
-    GenerationPartitionOutputs,
-    GenerationPartitionParameters,
+    GenerationWindowInputs,
+    GenerationWindowOutputs,
+    GenerationWindowParameters,
 )
-from generation_partitions import partition_from_manifest
+from generation_windows import window_from_manifest
 from generation_population import POPULATION_SCHEMA, population_rows
 from generation_prep import intersect_intervals, merge_intervals
 from generation_reference import ReferenceReader, membership_rows
@@ -22,20 +22,20 @@ from generation_indels import (
 from io_contracts import write_parquet_atomic
 
 
-def prepare_generation_partition(
-    inputs: GenerationPartitionInputs,
-    outputs: GenerationPartitionOutputs,
-    params: GenerationPartitionParameters,
-    partition_id: str,
+def prepare_generation_window(
+    inputs: GenerationWindowInputs,
+    outputs: GenerationWindowOutputs,
+    params: GenerationWindowParameters,
+    window_id: str,
 ) -> None:
-    """Materialize canonical states, memberships, and scores for one partition."""
+    """Materialize canonical states, memberships, and scores for one window."""
     state_schema = {**POPULATION_SCHEMA, "variant_class": pl.String}
     output_score_schema = {**SCORE_SCHEMA, "variant_class": pl.String}
-    partition = partition_from_manifest(inputs.partitions, partition_id)
+    window = window_from_manifest(inputs.windows, window_id)
     halo_end = (
-        partition.end + params.indel_max_reference_length - 1
+        window.end + params.indel_max_reference_length - 1
         if params.include_indels
-        else partition.end
+        else window.end
     )
     eligible_units = (
         pl.scan_parquet(inputs.units)
@@ -46,9 +46,9 @@ def prepare_generation_partition(
     interval_frame = (
         pl.scan_parquet(inputs.unit_intervals)
         .filter(
-            (pl.col("CHROM") == partition.chromosome)
+            (pl.col("CHROM") == window.chromosome)
             & (pl.col("START") < halo_end)
-            & (pl.col("END") > partition.start)
+            & (pl.col("END") > window.start)
         )
         .join(eligible_units.lazy(), on="testing_unit_id", how="inner")
         .select("testing_unit_id", "START", "END")
@@ -57,26 +57,26 @@ def prepare_generation_partition(
     mask_frame = (
         pl.scan_parquet(inputs.effective_mask)
         .filter(
-            (pl.col("CHROM") == partition.chromosome)
+            (pl.col("CHROM") == window.chromosome)
             & (pl.col("START") < halo_end)
-            & (pl.col("END") > partition.start)
+            & (pl.col("END") > window.start)
         )
         .select("START", "END")
         .collect(engine="streaming")
     )
-    intervals = interval_frame.filter(pl.col("START") < partition.end).rows()
+    intervals = interval_frame.filter(pl.col("START") < window.end).rows()
     mask = (
-        mask_frame.filter(pl.col("START") < partition.end)
+        mask_frame.filter(pl.col("START") < window.end)
         .select(
-            pl.max_horizontal("START", pl.lit(partition.start)).alias("START"),
-            pl.min_horizontal("END", pl.lit(partition.end)).alias("END"),
+            pl.max_horizontal("START", pl.lit(window.start)).alias("START"),
+            pl.min_horizontal("END", pl.lit(window.end)).alias("END"),
         )
         .rows()
     )
     reference = ReferenceReader(inputs.fasta, inputs.fasta_fai)
     try:
         snv_memberships = membership_rows(
-            partition, mask, intervals, reference
+            window, mask, intervals, reference
         ).with_columns(pl.lit("snv").alias("variant_class"))
         indel_scores = pl.DataFrame(schema=SCORE_SCHEMA)
         indel_memberships = pl.DataFrame(schema=snv_memberships.schema)
@@ -89,9 +89,9 @@ def prepare_generation_partition(
             catalog = indel_score_rows(
                 inputs.score_indel,
                 inputs.score_indel_index,
-                partition.chromosome,
-                partition.start,
-                partition.end,
+                window.chromosome,
+                window.start,
+                window.end,
                 reference,
                 max_reference_length=params.indel_max_reference_length,
                 max_alternate_length=params.indel_max_alternate_length,
@@ -143,9 +143,9 @@ def prepare_generation_partition(
     scores = score_rows(
         inputs.score_snv,
         inputs.score_snv_index,
-        partition.chromosome,
-        partition.start,
-        partition.end,
+        window.chromosome,
+        window.start,
+        window.end,
         intervals=candidate_intervals,
     )
     scores = pl.concat([scores, indel_scores], how="vertical")
@@ -154,7 +154,7 @@ def prepare_generation_partition(
     )
     if matched_score_keys.select(ALLELE_COLUMNS).is_duplicated().any():
         raise ValueError(
-            f"Score resource has duplicate calibration alleles in {partition.identifier}"
+            f"Score resource has duplicate calibration alleles in {window.identifier}"
         )
     scored = candidates.join(scores, on=ALLELE_COLUMNS, how="inner").join(
         candidate_classes, on=ALLELE_COLUMNS, how="inner"
@@ -168,14 +168,14 @@ def prepare_generation_partition(
             for row in missing.head(10).iter_rows()
         )
         raise ValueError(
-            f"Score resource is missing {missing.height} calibration alleles in {partition.identifier}: {examples}"
+            f"Score resource is missing {missing.height} calibration alleles in {window.identifier}: {examples}"
         )
     panel = population_rows(
         inputs.population_vcf,
         inputs.population_vcf_index,
-        partition.chromosome,
-        partition.start,
-        partition.end,
+        window.chromosome,
+        window.start,
+        window.end,
         dict(params.af_tags),
         params.x_af_policy,
         params.hemizygote,
@@ -190,7 +190,7 @@ def prepare_generation_partition(
             .iter_rows()
         )
         raise ValueError(
-            f"Population VCF has duplicate allele states in {partition.identifier}: {examples}"
+            f"Population VCF has duplicate allele states in {window.identifier}: {examples}"
         )
     states = (
         candidates.join(panel, on=ALLELE_COLUMNS, how="left")
@@ -226,7 +226,7 @@ def prepare_generation_partition(
             .iter_rows()
         )
         raise ValueError(
-            f"Population VCF has invalid selected AF for {invalid.height} calibration allele(s) in {partition.identifier}: {examples}"
+            f"Population VCF has invalid selected AF for {invalid.height} calibration allele(s) in {window.identifier}: {examples}"
         )
     write_parquet_atomic(states, outputs.allele_states, params.compression)
     write_parquet_atomic(memberships, outputs.allele_membership, params.compression)

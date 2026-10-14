@@ -138,7 +138,7 @@ def _fsum_group(series: list[pl.Series]) -> float:
 
 
 def aggregate_statistics_vectorized(files: list[Path]) -> pl.DataFrame:
-    """Aggregate all partition shards with Polars and accurate group log sums."""
+    """Aggregate all window shards with Polars and accurate group log sums."""
     if not files:
         return pl.DataFrame(schema=AGGREGATED_STATISTICS_SCHEMA)
     return (
@@ -199,12 +199,12 @@ def vectorized_lookup_rows(
                 )
             except KeyError as exc:
                 raise ValueError(
-                    "Partition statistics contain a testing unit outside the requested bucket"
+                    "Window statistics contain a testing unit outside the requested bucket"
                 ) from exc
             column_indices = role_statistics["bin"].to_numpy().astype(np.intp) - 1
             if np.any(column_indices < 0) or np.any(column_indices >= bin_count):
                 raise ValueError(
-                    "Partition statistics contain a bin outside the configured range"
+                    "Window statistics contain a bin outside the configured range"
                 )
             log_none[row_indices, column_indices] = role_statistics[
                 "log_none_sum"

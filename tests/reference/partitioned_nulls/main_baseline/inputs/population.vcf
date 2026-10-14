@@ -1,0 +1,20 @@
+##fileformat=VCFv4.3
+##contig=<ID=chr1,length=100>
+##contig=<ID=chrX,length=100>
+##INFO=<ID=AF_CUSTOM,Number=A,Type=Float,Description="Configured population allele frequency">
+##INFO=<ID=AF_FEMALE,Number=A,Type=Float,Description="Female population allele frequency">
+##INFO=<ID=AF_MALE,Number=A,Type=Float,Description="Male population allele frequency">
+##INFO=<ID=AF_DECOY,Number=A,Type=Float,Description="Deliberately incorrect decoy frequency">
+##INFO=<ID=AF_R,Number=R,Type=Float,Description="Reference plus alternate frequencies">
+##INFO=<ID=AF_SCALAR,Number=1,Type=Float,Description="Biallelic-only scalar frequency">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+chr1	3	.	A	AT	.	PASS	AF_CUSTOM=0.05;AF_FEMALE=0.05;AF_MALE=0.05
+chr1	9	.	A	T	.	LowQual	AF_CUSTOM=0.2;AF_FEMALE=0.2;AF_MALE=0.2;AF_DECOY=0.9;AF_R=0.8,0.2;AF_SCALAR=0.2
+chr1	10	.	A	C,G	.	PASS	AF_CUSTOM=0.125,0.375;AF_FEMALE=0.125,0.375;AF_MALE=0.125,0.375;AF_DECOY=0.9,0.8;AF_R=0.5,0.125,0.375
+chr1	20	.	T	C	.	PASS	AF_CUSTOM=0;AF_FEMALE=0;AF_MALE=0;AF_DECOY=0.9;AF_R=1,0;AF_SCALAR=0
+chr1	30	.	G	A	.	PASS	AF_CUSTOM=.;AF_FEMALE=.;AF_MALE=.;AF_DECOY=0.9;AF_R=.,.
+chr1	40	.	C	T	.	LowQual	AF_CUSTOM=0.2;AF_FEMALE=0.2;AF_MALE=0.2;AF_DECOY=0.9;AF_R=0.8,0.2;AF_SCALAR=0.2
+chr1	50	.	A	C,G	.	PASS	AF_SCALAR=0.2
+chrX	1	.	A	C	.	PASS	AF_CUSTOM=0.2;AF_FEMALE=0.25;AF_MALE=0.4
+chrX	3	.	A	G	.	PASS	AF_CUSTOM=0.1;AF_FEMALE=0.15;AF_MALE=0.3
+chrX	7	.	A	T	.	PASS	AF_CUSTOM=0.3;AF_FEMALE=0.35;AF_MALE=0.5

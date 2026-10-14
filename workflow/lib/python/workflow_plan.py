@@ -280,7 +280,7 @@ class GenerationPlan:
     mutation_rate_indel: FileBinding | None
     unobserved_policy: str
     af_source: Mapping[str, str]
-    partition_size_bp: int
+    window_size_bp: int
     unit_bucket_size: int
     parquet_compression: str
 
@@ -760,25 +760,23 @@ def _generation_plan(
         raise WorkflowPlanError(
             "generation.execution.allow_unindexed_fixture_inputs must be a boolean"
         )
-    partition_resources = [
+    window_resources = [
         ("generation.population_vcf", population_vcf),
         (resolved.snv_key, resources.cadd_snv),
     ]
     if include_indels:
         assert resources.cadd_indel is not None
-        partition_resources.append(
+        window_resources.append(
             (
                 resolved.indel_key,
                 resources.cadd_indel,
             )
         )
     if mutation_rate is not None:
-        partition_resources.append(("generation.mutation_rate", mutation_rate))
+        window_resources.append(("generation.mutation_rate", mutation_rate))
     if mutation_rate_indel is not None:
-        partition_resources.append(
-            ("generation.mutation_rate_indel", mutation_rate_indel)
-        )
-    for key, resource in partition_resources:
+        window_resources.append(("generation.mutation_rate_indel", mutation_rate_indel))
+    for key, resource in window_resources:
         try:
             check_generation_index_binding(
                 resource.data,
@@ -805,7 +803,7 @@ def _generation_plan(
             generation.get("unobserved_policy"), "generation.unobserved_policy"
         ),
         af_source=af_source,
-        partition_size_bp=_number(
+        window_size_bp=_number(
             execution.get("partition_size_bp", 5_000_000),
             "generation.execution.partition_size_bp",
             int,

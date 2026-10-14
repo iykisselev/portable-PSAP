@@ -1,0 +1,5 @@
+pid	testing_unit_id	model	PSAP
+female	UNIT_OVERLAP	REC-hom	0.91283676703645
+female	UNIT_X_MIXED_PAR	X-linked-het	1
+female	UNIT_X_MIXED_PAR	X-linked-hom	1
+male	UNIT_OVERLAP	DOM-het	0.801335559265442

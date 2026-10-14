@@ -15,25 +15,25 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from generation_bindings import (  # noqa: E402
-    PartitionStatisticsInputs,
-    PartitionStatisticsOutputs,
-    PartitionStatisticsParameters,
+    WindowStatisticsInputs,
+    WindowStatisticsOutputs,
+    WindowStatisticsParameters,
 )
-from generation_statistics import calculate_partition_statistics  # noqa: E402
+from generation_statistics import calculate_window_statistics  # noqa: E402
 
 
 class GenerationStatisticsTests(unittest.TestCase):
     def test_calculation_selects_only_the_requested_bucket_alleles(self) -> None:
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            partition_id = "1_000000000000_000000000100"
-            (directory / "partitions.json").write_text(
+            window_id = "1_000000000000_000000000100"
+            (directory / "windows.json").write_text(
                 json.dumps(
                     {
-                        "schema_version": 1,
-                        "partitions": [
+                        "schema_version": 2,
+                        "windows": [
                             {
-                                "partition_id": partition_id,
+                                "window_id": window_id,
                                 "chromosome": "1",
                                 "start": 0,
                                 "end": 100,
@@ -47,14 +47,14 @@ class GenerationStatisticsTests(unittest.TestCase):
             (directory / "buckets.json").write_text(
                 json.dumps(
                     {
-                        "schema_version": 2,
+                        "schema_version": 3,
                         "buckets": [
                             {
                                 "bucket_id": "00000",
                                 "ordinal": 0,
                                 "unit_count": 1,
                                 "unit_ids": ["wanted"],
-                                "partition_ids": [partition_id],
+                                "window_ids": [window_id],
                             }
                         ],
                     }
@@ -102,9 +102,9 @@ class GenerationStatisticsTests(unittest.TestCase):
             ).write_parquet(states)
             output = directory / "statistics.parquet"
 
-            calculate_partition_statistics(
-                PartitionStatisticsInputs(
-                    partitions=directory / "partitions.json",
+            calculate_window_statistics(
+                WindowStatisticsInputs(
+                    windows=directory / "windows.json",
                     buckets=directory / "buckets.json",
                     allele_states=states,
                     allele_membership=membership,
@@ -112,8 +112,8 @@ class GenerationStatisticsTests(unittest.TestCase):
                     mutation_rate=None,
                     mutation_rate_index=None,
                 ),
-                PartitionStatisticsOutputs(statistics=output),
-                PartitionStatisticsParameters(
+                WindowStatisticsOutputs(statistics=output),
+                WindowStatisticsParameters(
                     x_af_policy="overall_proxy",
                     unobserved_policy="zero",
                     x_mutation_rate_policy="sex_averaged_proxy",
@@ -122,7 +122,7 @@ class GenerationStatisticsTests(unittest.TestCase):
                     roles=("het", "hom"),
                     compression="zstd",
                 ),
-                partition_id,
+                window_id,
                 "00000",
             )
 

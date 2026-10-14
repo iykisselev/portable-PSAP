@@ -1,4 +1,4 @@
-"""Partition-local score and mutation-rate readers."""
+"""Window-local score and mutation-rate readers."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def score_rows(
 
     Merge and clip intervals before fetching so overlapping testing units never
     read the same score row twice. Genuine duplicate source rows are preserved
-    for the partition's validation check.
+    for the window's validation check.
     """
     regions = (
         intersect_intervals([(start, end)], intervals)

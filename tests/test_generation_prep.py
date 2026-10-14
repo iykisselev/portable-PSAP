@@ -85,7 +85,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 fasta_fai=fasta_index,
             )
             outputs = GenerationScopeOutputs(
-                partitions=directory / "partitions.json",
+                windows=directory / "windows.json",
                 buckets=directory / "buckets.json",
                 units=directory / "units.parquet",
                 unit_intervals=directory / "unit_intervals.parquet",
@@ -181,7 +181,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
             )
             outputs = GenerationScopeOutputs(
-                partitions=directory / "partitions",
+                windows=directory / "windows",
                 buckets=directory / "buckets",
                 units=directory / "units",
                 unit_intervals=directory / "unit_intervals",
@@ -215,15 +215,13 @@ class GenerationPreparationTests(unittest.TestCase):
             self.assertEqual(rows["UNIT_X_MIXED_PAR"]["supported_bases"], 8)
             self.assertEqual(rows["UNIT_X_MIXED_PAR"]["retained_fraction"], 0.5)
             self.assertEqual(rows["UNIT_X_MIXED_PAR"]["status"], "eligible")
-            partitions = json.loads(outputs.partitions.read_text(encoding="utf-8"))[
-                "partitions"
-            ]
+            windows = json.loads(outputs.windows.read_text(encoding="utf-8"))["windows"]
             self.assertEqual(
                 ["X_000000000000_000000000010"],
-                [partition["partition_id"] for partition in partitions],
+                [window["window_id"] for window in windows],
             )
 
-    def test_indel_scope_wiring_adds_only_the_required_owner_halo_partition(self):
+    def test_indel_scope_wiring_adds_only_the_required_owner_halo_window(self):
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
             fasta = directory / "reference.fa"
@@ -261,7 +259,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 score_indel_index=None,
             )
             outputs = GenerationScopeOutputs(
-                partitions=directory / "partitions.json",
+                windows=directory / "windows.json",
                 buckets=directory / "buckets.json",
                 units=directory / "units.parquet",
                 unit_intervals=directory / "unit_intervals.parquet",
@@ -275,17 +273,15 @@ class GenerationPreparationTests(unittest.TestCase):
                     0.5, 10, 10, "zstd", {"overall": "AF"}, True, 3
                 ),
             )
-            partitions = json.loads(outputs.partitions.read_text(encoding="utf-8"))[
-                "partitions"
-            ]
+            windows = json.loads(outputs.windows.read_text(encoding="utf-8"))["windows"]
             buckets = json.loads(outputs.buckets.read_text(encoding="utf-8"))["buckets"]
         self.assertEqual(
             ["1_000000000000_000000000010", "1_000000000010_000000000020"],
-            [entry["partition_id"] for entry in partitions],
+            [entry["window_id"] for entry in windows],
         )
         self.assertEqual(
             ["1_000000000000_000000000010", "1_000000000010_000000000020"],
-            buckets[0]["partition_ids"],
+            buckets[0]["window_ids"],
         )
 
     def test_configured_info_tag_preserves_zero_and_rejects_other_states(self) -> None:
@@ -313,7 +309,7 @@ class GenerationPreparationTests(unittest.TestCase):
         )
         self.assertTrue(any("using AF=0" in str(warning.message) for warning in caught))
 
-    def test_configured_af_header_is_required_before_partition_work(self) -> None:
+    def test_configured_af_header_is_required_before_window_work(self) -> None:
         with self.assertRaisesRegex(
             ValueError, "no INFO header for configured tag 'AF_MISSING'"
         ):

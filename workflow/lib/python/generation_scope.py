@@ -1,4 +1,4 @@
-"""Build the shared scope files that every generation partition needs."""
+"""Build the shared scope files that every generation window needs."""
 
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ from generation_bindings import (
 )
 from generation_manifests import (
     BUCKET_MANIFEST_SCHEMA_VERSION,
-    PARTITION_MANIFEST_SCHEMA_VERSION,
+    WINDOW_MANIFEST_SCHEMA_VERSION,
 )
-from generation_partitions import (
-    GenomePartition,
-    build_partitions,
+from generation_windows import (
+    GenomeWindow,
+    build_windows,
     indel_candidate_owner_intervals,
     read_fasta_index,
 )
@@ -37,25 +37,25 @@ from genomic_contracts import GENERATION_CONTIGS
 from io_contracts import write_json_atomic, write_parquet_atomic
 
 
-def sparse_bucket_partitions(
-    genome_partitions: list[GenomePartition],
+def sparse_bucket_windows(
+    genome_windows: list[GenomeWindow],
     callable_unit_intervals: list[tuple[str, str, int, int]],
     bucket_by_unit: dict[str, int],
-    partition_size: int,
+    window_size: int,
     *,
     candidate_owner_intervals: list[tuple[str, str, int, int]] | None = None,
 ) -> dict[int, tuple[str, ...]]:
-    """Return only partition/bucket pairs with callable candidate overlap.
+    """Return only window/bucket pairs with callable candidate overlap.
 
     ``candidate_owner_intervals`` adds the upstream anchor halo required for
     indels.  It is optional while the active workflow remains SNV-only, so the
     existing sparse topology is byte-for-byte unchanged.
     """
-    partition_by_window = {
-        (partition.chromosome, partition.start // partition_size): partition
-        for partition in genome_partitions
+    window_by_coordinate = {
+        (window.chromosome, window.start // window_size): window
+        for window in genome_windows
     }
-    partition_ids_by_bucket: dict[int, set[str]] = {
+    window_ids_by_bucket: dict[int, set[str]] = {
         bucket_id: set() for bucket_id in set(bucket_by_unit.values())
     }
     all_intervals = list(callable_unit_intervals)
@@ -65,21 +65,19 @@ def sparse_bucket_partitions(
         bucket_id = bucket_by_unit.get(unit_id)
         if bucket_id is None:
             continue
-        first_window = start // partition_size
-        last_window = (end - 1) // partition_size
-        for window in range(first_window, last_window + 1):
-            partition = partition_by_window.get((chromosome, window))
-            if partition is None:
+        first_window = start // window_size
+        last_window = (end - 1) // window_size
+        for window_index in range(first_window, last_window + 1):
+            window = window_by_coordinate.get((chromosome, window_index))
+            if window is None:
                 raise ValueError(
-                    f"Candidate-owner interval for {unit_id!r} has no generation partition"
+                    f"Candidate-owner interval for {unit_id!r} has no generation window"
                 )
-            partition_ids_by_bucket[bucket_id].add(partition.identifier)
-    partition_ordinal = {
-        partition.identifier: partition.ordinal for partition in genome_partitions
-    }
+            window_ids_by_bucket[bucket_id].add(window.identifier)
+    window_ordinal = {window.identifier: window.ordinal for window in genome_windows}
     return {
-        bucket_id: tuple(sorted(identifiers, key=partition_ordinal.__getitem__))
-        for bucket_id, identifiers in partition_ids_by_bucket.items()
+        bucket_id: tuple(sorted(identifiers, key=window_ordinal.__getitem__))
+        for bucket_id, identifiers in window_ids_by_bucket.items()
     }
 
 
@@ -104,7 +102,7 @@ class ScopeTables:
 def _validate_scope_inputs(
     inputs: GenerationScopeInputs, params: GenerationScopeParameters
 ) -> None:
-    # Check the fixture exception before reading resources or scheduling partitions.
+    # Check the fixture exception before reading resources or scheduling windows.
     for path, index in (
         (inputs.population_vcf, inputs.population_vcf_index),
         (inputs.score_snv, inputs.score_snv_index),
@@ -227,28 +225,28 @@ def _unit_intervals(
     )
 
 
-def _partition_manifest(
-    genome_partitions: list[GenomePartition], params: GenerationScopeParameters
+def _window_manifest(
+    genome_windows: list[GenomeWindow], params: GenerationScopeParameters
 ) -> dict:
     return {
-        "schema_version": PARTITION_MANIFEST_SCHEMA_VERSION,
-        "partition_size_bp": int(params.partition_size),
-        "partitions": [
+        "schema_version": WINDOW_MANIFEST_SCHEMA_VERSION,
+        "window_size_bp": int(params.window_size),
+        "windows": [
             {
-                "partition_id": partition.identifier,
-                "chromosome": partition.chromosome,
-                "start": partition.start,
-                "end": partition.end,
-                "ordinal": partition.ordinal,
+                "window_id": window.identifier,
+                "chromosome": window.chromosome,
+                "start": window.start,
+                "end": window.end,
+                "ordinal": window.ordinal,
             }
-            for partition in genome_partitions
+            for window in genome_windows
         ],
     }
 
 
 def _bucket_manifest(
     scope: ScopeTables,
-    genome_partitions: list[GenomePartition],
+    genome_windows: list[GenomeWindow],
     indel_owner_intervals: list[UnitInterval],
     params: GenerationScopeParameters,
 ) -> dict:
@@ -265,11 +263,11 @@ def _bucket_manifest(
     unit_ids_by_bucket: dict[int, list[str]] = {}
     for unit_id, bucket_id in bucket_by_unit.items():
         unit_ids_by_bucket.setdefault(int(bucket_id), []).append(str(unit_id))
-    partition_ids_by_bucket = sparse_bucket_partitions(
-        genome_partitions,
+    window_ids_by_bucket = sparse_bucket_windows(
+        genome_windows,
         callable_unit_intervals,
         bucket_by_unit,
-        int(params.partition_size),
+        int(params.window_size),
         candidate_owner_intervals=indel_owner_intervals
         if params.include_indels
         else None,
@@ -285,7 +283,7 @@ def _bucket_manifest(
                 # Keep manifest identifiers lexically sorted even though
                 # assignment itself follows genomic order.
                 "unit_ids": sorted(unit_ids),
-                "partition_ids": list(partition_ids_by_bucket[ordinal]),
+                "window_ids": list(window_ids_by_bucket[ordinal]),
             }
             for ordinal, unit_ids in sorted(unit_ids_by_bucket.items())
         ],
@@ -340,7 +338,7 @@ def prepare_generation_scope(
     outputs: GenerationScopeOutputs,
     params: GenerationScopeParameters,
 ) -> None:
-    """Prepare masks, retention tables and sparse manifests for partition jobs."""
+    """Prepare masks, retention tables and sparse manifests for window jobs."""
     _validate_scope_inputs(inputs, params)
     masks = _scope_masks(inputs)
     scope = _unit_intervals(masks, params)
@@ -353,23 +351,21 @@ def prepare_generation_scope(
             eligible_callable_unit_intervals,
             params.indel_max_reference_length,
         )
-    genome_partitions = build_partitions(
+    genome_windows = build_windows(
         inputs.fasta_fai,
         [
             (chromosome, start, end)
             for _, chromosome, start, end in eligible_callable_unit_intervals
         ],
-        int(params.partition_size),
+        int(params.window_size),
         candidate_owner_intervals=[
             (chromosome, start, end)
             for _, chromosome, start, end in indel_owner_intervals
         ],
     )
     _write_scope_tables(scope, masks, outputs, params)
-    write_json_atomic(
-        outputs.partitions, _partition_manifest(genome_partitions, params)
-    )
+    write_json_atomic(outputs.windows, _window_manifest(genome_windows, params))
     write_json_atomic(
         outputs.buckets,
-        _bucket_manifest(scope, genome_partitions, indel_owner_intervals, params),
+        _bucket_manifest(scope, genome_windows, indel_owner_intervals, params),
     )

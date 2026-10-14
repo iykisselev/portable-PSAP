@@ -10,21 +10,21 @@ bootstrap(snakemake, configure_polars=True)
 
 from _library import bind
 
-from generation_statistics import calculate_partition_statistics
+from generation_statistics import calculate_window_statistics
 from generation_bindings import (
-    PartitionStatisticsInputs,
-    PartitionStatisticsOutputs,
-    PartitionStatisticsParameters,
+    WindowStatisticsInputs,
+    WindowStatisticsOutputs,
+    WindowStatisticsParameters,
 )
 
 
 def main() -> None:
     """Decode Snakemake bindings and delegate probability aggregation."""
-    calculate_partition_statistics(
-        bind(PartitionStatisticsInputs, snakemake.input),
-        bind(PartitionStatisticsOutputs, snakemake.output),
-        bind(PartitionStatisticsParameters, snakemake.params),
-        str(snakemake.wildcards.partition),
+    calculate_window_statistics(
+        bind(WindowStatisticsInputs, snakemake.input),
+        bind(WindowStatisticsOutputs, snakemake.output),
+        bind(WindowStatisticsParameters, snakemake.params),
+        str(snakemake.wildcards.window),
         str(snakemake.wildcards.bucket),
     )
 

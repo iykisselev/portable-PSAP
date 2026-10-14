@@ -180,7 +180,7 @@ class BundleFinalizationTests(unittest.TestCase):
                     include_variant_class_counts=True,
                 )
 
-    def test_finalization_preserves_partition_order_across_sequential_state_scans(
+    def test_finalization_preserves_window_order_across_sequential_state_scans(
         self,
     ) -> None:
         with TemporaryDirectory() as temporary:

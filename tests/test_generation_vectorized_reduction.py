@@ -67,7 +67,7 @@ def reference_rows(
 
 
 class VectorizedReductionTests(unittest.TestCase):
-    def test_seeded_random_partition_statistics_match_the_reference_within_one_ulp(
+    def test_seeded_random_window_statistics_match_the_reference_within_one_ulp(
         self,
     ) -> None:
         units = [f"UNIT_{index:02d}" for index in range(6)]

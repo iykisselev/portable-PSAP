@@ -31,14 +31,14 @@
       "generate/fixture/bundle/validation.ok"
     ],
     "important_outputs": [
-      "generate/fixture/scalable/prepared/partitions.json",
+      "generate/fixture/scalable/prepared/windows.json",
       "generate/fixture/scalable/prepared/unit_buckets.json",
       "generate/fixture/bundle/metadata.json",
       "generate/fixture/bundle/lookup_hem_chrX.tsv.gz"
     ],
     "required_rules": [
       "prepare_generation_scope",
-      "calculate_partition_null_distribution",
+      "calculate_window_null_distribution",
       "reduce_null_distribution_bucket",
       "finalize_null_distribution_bundle",
       "validate_null_distribution_bundle",

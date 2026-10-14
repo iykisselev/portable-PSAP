@@ -8,8 +8,8 @@ import json
 from pathlib import Path
 
 
-PARTITION_MANIFEST_SCHEMA_VERSION = 1
-BUCKET_MANIFEST_SCHEMA_VERSION = 2
+WINDOW_MANIFEST_SCHEMA_VERSION = 2
+BUCKET_MANIFEST_SCHEMA_VERSION = 3
 
 
 class GenerationManifestError(ValueError):
@@ -17,7 +17,7 @@ class GenerationManifestError(ValueError):
 
 
 @dataclass(frozen=True)
-class PartitionManifestEntry:
+class WindowManifestEntry:
     """One canonical half-open genomic window published by scope preparation."""
 
     identifier: str
@@ -34,7 +34,7 @@ class BucketManifestEntry:
     identifier: str
     ordinal: int
     unit_ids: tuple[str, ...]
-    partition_ids: tuple[str, ...]
+    window_ids: tuple[str, ...]
 
 
 def _load_mapping(path: str | Path, label: str) -> dict:
@@ -51,11 +51,11 @@ def _load_mapping(path: str | Path, label: str) -> dict:
     return value
 
 
-def _partition_identifier_sort_key(identifier: str) -> tuple[str, int, int]:
-    """Return the ordering used by the partition producer for one identifier."""
+def _window_identifier_sort_key(identifier: str) -> tuple[str, int, int]:
+    """Return the ordering used by the window producer for one identifier."""
     fields = identifier.rsplit("_", 2)
     if len(fields) != 3:
-        raise ValueError("Partition identifier has the wrong shape")
+        raise ValueError("Window identifier has the wrong shape")
     chromosome, raw_start, raw_end = fields
     start, end = int(raw_start), int(raw_end)
     if (
@@ -64,32 +64,30 @@ def _partition_identifier_sort_key(identifier: str) -> tuple[str, int, int]:
         or end <= start
         or identifier != f"{chromosome}_{start:012d}_{end:012d}"
     ):
-        raise ValueError("Partition identifier is noncanonical")
+        raise ValueError("Window identifier is noncanonical")
     return chromosome, start, end
 
 
-def _read_partition_manifest_uncached(
+def _read_window_manifest_uncached(
     path: str | Path,
-) -> tuple[PartitionManifestEntry, ...]:
-    """Read and validate the compact partition-discovery manifest."""
-    manifest = _load_mapping(path, "partition")
-    if manifest.get("schema_version") != PARTITION_MANIFEST_SCHEMA_VERSION:
-        raise GenerationManifestError(
-            "Unsupported generation partition manifest schema"
-        )
-    rows = manifest.get("partitions")
+) -> tuple[WindowManifestEntry, ...]:
+    """Read and validate the compact window-discovery manifest."""
+    manifest = _load_mapping(path, "window")
+    if manifest.get("schema_version") != WINDOW_MANIFEST_SCHEMA_VERSION:
+        raise GenerationManifestError("Unsupported generation window manifest schema")
+    rows = manifest.get("windows")
     if not isinstance(rows, list):
-        raise GenerationManifestError("Partition manifest needs a partitions array")
+        raise GenerationManifestError("Window manifest needs a windows array")
 
-    entries: list[PartitionManifestEntry] = []
+    entries: list[WindowManifestEntry] = []
     identifiers: set[str] = set()
-    previous: PartitionManifestEntry | None = None
+    previous: WindowManifestEntry | None = None
     for ordinal, row in enumerate(rows):
         if not isinstance(row, dict):
-            raise GenerationManifestError("Partition manifest entries must be objects")
+            raise GenerationManifestError("Window manifest entries must be objects")
         try:
-            entry = PartitionManifestEntry(
-                identifier=str(row["partition_id"]),
+            entry = WindowManifestEntry(
+                identifier=str(row["window_id"]),
                 chromosome=str(row["chromosome"]),
                 start=int(row["start"]),
                 end=int(row["end"]),
@@ -97,7 +95,7 @@ def _read_partition_manifest_uncached(
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise GenerationManifestError(
-                "Partition manifest has an invalid entry"
+                "Window manifest has an invalid entry"
             ) from exc
         expected_identifier = f"{entry.chromosome}_{entry.start:012d}_{entry.end:012d}"
         if (
@@ -107,14 +105,14 @@ def _read_partition_manifest_uncached(
             or entry.end <= entry.start
             or entry.identifier in identifiers
         ):
-            raise GenerationManifestError("Partition manifest has noncanonical entries")
+            raise GenerationManifestError("Window manifest has noncanonical entries")
         if (
             previous
             and entry.chromosome == previous.chromosome
             and entry.start < previous.end
         ):
             raise GenerationManifestError(
-                "Partition manifest contains overlapping windows"
+                "Window manifest contains overlapping windows"
             )
         identifiers.add(entry.identifier)
         entries.append(entry)
@@ -140,9 +138,9 @@ def _read_bucket_manifest_uncached(path: str | Path) -> tuple[BucketManifestEntr
             identifier = str(row["bucket_id"])
             entry_ordinal = int(row["ordinal"])
             unit_ids = tuple(str(value) for value in row["unit_ids"])
-            partition_ids = tuple(str(value) for value in row["partition_ids"])
-            partition_keys = tuple(
-                _partition_identifier_sort_key(value) for value in partition_ids
+            window_ids = tuple(str(value) for value in row["window_ids"])
+            window_keys = tuple(
+                _window_identifier_sort_key(value) for value in window_ids
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise GenerationManifestError(
@@ -155,9 +153,9 @@ def _read_bucket_manifest_uncached(path: str | Path) -> tuple[BucketManifestEntr
             or tuple(sorted(unit_ids)) != unit_ids
             or len(set(unit_ids)) != len(unit_ids)
             or seen_units.intersection(unit_ids)
-            or not partition_ids
-            or tuple(sorted(partition_keys)) != partition_keys
-            or len(set(partition_ids)) != len(partition_ids)
+            or not window_ids
+            or tuple(sorted(window_keys)) != window_keys
+            or len(set(window_ids)) != len(window_ids)
         ):
             raise GenerationManifestError("Bucket manifest has noncanonical entries")
         seen_units.update(unit_ids)
@@ -166,7 +164,7 @@ def _read_bucket_manifest_uncached(path: str | Path) -> tuple[BucketManifestEntr
                 identifier=identifier,
                 ordinal=entry_ordinal,
                 unit_ids=unit_ids,
-                partition_ids=partition_ids,
+                window_ids=window_ids,
             )
         )
     return tuple(entries)
@@ -185,12 +183,12 @@ def _manifest_cache_key(path: str | Path) -> tuple[str, int | None, int | None]:
 
 
 @lru_cache(maxsize=8)
-def _cached_partition_manifest(
+def _cached_window_manifest(
     path: str,
     mtime_ns: int | None,
     size: int | None,
-) -> tuple[PartitionManifestEntry, ...]:
-    return _read_partition_manifest_uncached(path)
+) -> tuple[WindowManifestEntry, ...]:
+    return _read_window_manifest_uncached(path)
 
 
 @lru_cache(maxsize=8)
@@ -214,9 +212,9 @@ def _cached_bucket_index(
     }
 
 
-def read_partition_manifest(path: str | Path) -> tuple[PartitionManifestEntry, ...]:
-    """Read and validate the compact partition-discovery manifest once per version."""
-    return _cached_partition_manifest(*_manifest_cache_key(path))
+def read_window_manifest(path: str | Path) -> tuple[WindowManifestEntry, ...]:
+    """Read and validate the compact window-discovery manifest once per version."""
+    return _cached_window_manifest(*_manifest_cache_key(path))
 
 
 def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
@@ -224,9 +222,9 @@ def read_bucket_manifest(path: str | Path) -> tuple[BucketManifestEntry, ...]:
     return _cached_bucket_manifest(*_manifest_cache_key(path))
 
 
-def partition_ids(path: str | Path) -> tuple[str, ...]:
-    """Return the stable wildcard values from a validated partition manifest."""
-    return tuple(entry.identifier for entry in read_partition_manifest(path))
+def window_ids(path: str | Path) -> tuple[str, ...]:
+    """Return the stable wildcard values from a validated window manifest."""
+    return tuple(entry.identifier for entry in read_window_manifest(path))
 
 
 def bucket_ids(path: str | Path) -> tuple[str, ...]:

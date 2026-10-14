@@ -10,7 +10,7 @@ bootstrap(snakemake, configure_polars=True)
 
 from _library import bind
 
-from generation_lookup import reduce_partition_statistics
+from generation_lookup import reduce_window_statistics
 from generation_bindings import (
     LookupReductionInputs,
     LookupReductionOutputs,
@@ -20,7 +20,7 @@ from generation_bindings import (
 
 def main() -> None:
     """Decode Snakemake bindings and delegate lookup rendering."""
-    reduce_partition_statistics(
+    reduce_window_statistics(
         bind(LookupReductionInputs, snakemake.input),
         bind(LookupReductionOutputs, snakemake.output),
         bind(LookupReductionParameters, snakemake.params),

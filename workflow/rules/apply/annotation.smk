@@ -42,7 +42,7 @@ rule annotate_variants:
         mem_mb=policy_resources("annotate_variants").mem_mb,
         runtime=policy_resources("annotate_variants").runtime,
     params:
-        partition_size_bp=50_000_000,
+        window_size_bp=50_000_000,
         cadd_header=(
             "##INFO=<ID=PSAP_CADD_PHRED,Number=1,Type=Float,"
             'Description="CADD PHRED score">'
@@ -71,7 +71,7 @@ rule annotate_variants:
             # regions carrying records, split into fixed-width, non-overlapping
             # one-based intervals so concat restores the original sort order.
             bcftools index --stats {input.vcf:q} |
-                awk -v width={params.partition_size_bp} '\
+                awk -v width={params.window_size_bp} '\
                     $3 > 0 {{
                         if ($2 !~ /^[0-9]+$/ || $2 <= 0) {{
                             # A valid VCF may omit a contig length. Fetch the
@@ -90,7 +90,7 @@ rule annotate_variants:
                 local region="$1"
                 local destination="$2"
                 if [[ -n "$region" ]]; then
-                    # Partition ownership is the VCF anchor POS, not an
+                    # Window ownership is the VCF anchor POS, not an
                     # indel's reference span.  That makes adjacent regions
                     # disjoint even for boundary-spanning indels.
                     bcftools view --regions "$region" --regions-overlap 0 -Ou {input.vcf:q}

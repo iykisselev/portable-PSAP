@@ -62,10 +62,10 @@ class GenerationTopologyTests(unittest.TestCase):
         self.assertEqual(
             str(
                 plan.generation.scalable_dir
-                / "partitions"
+                / "windows"
                 / "1_000000000001_000000005000.allele_states.parquet"
             ),
-            context.partition_artifact(
+            context.window_artifact(
                 "1_000000000001_000000005000",
                 "allele_states",
             ),

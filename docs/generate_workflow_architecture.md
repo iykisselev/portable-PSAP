@@ -15,7 +15,7 @@ configuration. It then builds one immutable `WorkflowPlan` in
 | --- | --- | --- |
 | Configuration plan | `workflow_plan.py` | Resolve mode, bindings, policies, output roots, and full-mode resource ownership. |
 | Rule context | `rules/generate/context.smk` | Turn the plan into paths, manifests, wildcards, roles, and callbacks. |
-| DAG stages | `rules/generate/{prepare,calculate,finalize}.smk` | Declare the checkpoint, partition/bucket jobs, bundle rendering, and certification. |
+| DAG stages | `rules/generate/{prepare,calculate,finalize}.smk` | Declare the checkpoint, window/bucket jobs, bundle rendering, and certification. |
 | Script adapters | `workflow/scripts/generate/` | Decode Snakemake values and call library code. |
 | Domain library | `workflow/lib/python/generation_*.py` | Scope construction, population parsing, probability reduction, lookup rendering, and bundle finalization. |
 | Shared adapter support | `workflow/shared/_library.py` | Add the workflow Python library to adapter import paths. |
@@ -35,7 +35,7 @@ In standalone `generate` mode, the following bindings live under `generation`:
 | `score_indel` and optional index | When `model.include_indels: true` | Normalized, finite indel candidate universe and CADD score. |
 | `exclusion` | Binding required; data may be null | Intervals to subtract, independent of source. Combined with other interval exclusions. |
 | `testing_unit_bed` | Yes | Unit intervals and stable unit IDs. |
-| `fasta` and `.fai` | Yes | Contig lengths, partitioning, and reference allele enumeration. |
+| `fasta` and `.fai` | Yes | Contig lengths, windowing, and reference allele enumeration. |
 | `par_regions` | Yes | Pseudoautosomal intervals excluded before X-role assignment. |
 | `exclusions` | Optional | Additional intervals excluded from calibration. |
 | `mutation_rate` and optional index | Conditional | Required for an unobserved `mutation_rate` policy. |
@@ -44,8 +44,8 @@ In standalone `generate` mode, the following bindings live under `generation`:
 
 The current scope supports SNVs and, when enabled, normalized indels on contigs
 `1`–`22` and `X`. Every calibration allele must have exactly one score row.
-Indel candidates are owned by their anchor-position partition, while a bounded
-right halo ensures a REF span crossing that partition boundary is evaluated
+Indel candidates are owned by their anchor-position window, while a bounded
+right halo ensures a REF span crossing that window boundary is evaluated
 once against the complete mask and testing-unit span. Invalid selected AF
 values, duplicate population states, duplicate scores, and missing SNV mutation
 rates when they are needed are all hard failures.
@@ -61,16 +61,16 @@ exclusion. `WorkflowPlan` enforces this while the DAG is being built.
 
 ## DAG and transformations
 
-The scope checkpoint discovers the partition and bucket wildcards. Every later
+The scope checkpoint discovers the window and bucket wildcards. Every later
 rule reads those JSON manifests instead of trying to rediscover work from the
 filesystem.
 
 | Rule | Inputs | Transformation | Outputs |
 | --- | --- | --- | --- |
-| `prepare_generation_scope` (checkpoint) | FASTA index, units, exclusion/PAR/other exclusions, population/score bindings | Build supported non-PAR scope; subtract all other interval exclusions; measure retained fractions; partition the genome; assign eligible-unit buckets; capture input checksums. | Partition and bucket manifests; provisional unit/interval/mask Parquet files; resource-identity JSON. |
-| `prepare_generation_partition` | One partition plus scope artifacts, FASTA, population VCF, and scores | Enumerate calibrated SNV alleles and, when enabled, anchor-owned indel catalog entries; validate spans, join unit membership, score, and population state. | One each of `allele_states`, `allele_membership`, `allele_scores`, and indel candidate-audit Parquet shards. |
-| `calculate_partition_null_distribution` | One partition shard set and one unit bucket | Assign the absent-allele policy and role-specific effective AF; bin scores; aggregate additive no-event statistics and class-specific event counts. | One partition-by-bucket statistics Parquet shard. |
-| `reduce_null_distribution_bucket` | All statistics shards for one bucket | Compensated reduction across partitions; calculate conditional score-bin survival rows and diagnostics. | HET/HOM and optional HEM lookup rows plus diagnostics TSV with total, SNV, and indel event counts. |
+| `prepare_generation_scope` (checkpoint) | FASTA index, units, exclusion/PAR/other exclusions, population/score bindings | Build supported non-PAR scope; subtract all other interval exclusions; measure retained fractions; divide the genome into windows; assign eligible-unit buckets; capture input checksums. | Window and bucket manifests; provisional unit/interval/mask Parquet files; resource-identity JSON. |
+| `prepare_generation_window` | One window plus scope artifacts, FASTA, population VCF, and scores | Enumerate calibrated SNV alleles and, when enabled, anchor-owned indel catalog entries; validate spans, join unit membership, score, and population state. | One each of `allele_states`, `allele_membership`, `allele_scores`, and indel candidate-audit Parquet shards. |
+| `calculate_window_null_distribution` | One window shard set and one unit bucket | Assign the absent-allele policy and role-specific effective AF; bin scores; aggregate additive no-event statistics and class-specific event counts. | One window-by-bucket statistics Parquet shard. |
+| `reduce_null_distribution_bucket` | All statistics shards for one bucket | Compensated reduction across windows; calculate conditional score-bin survival rows and diagnostics. | HET/HOM and optional HEM lookup rows plus diagnostics TSV with total, SNV, and indel event counts. |
 | `finalize_null_distribution_bundle` | All bucket rows/diagnostics plus scope and state artifacts | Retain only units with positive mass for every applicable role; stream public bundle components and metadata. | Gzipped lookup, scope, exclusion, and metadata files. |
 | `validate_null_distribution_bundle` | Finalized bundle and schema | Validate component checksums, row coverage, contracts, and semantics. | `validation.json` and `validation.ok`. |
 
@@ -90,9 +90,14 @@ These checkpoint artifacts are part of the internal DAG contract:
 - `unit_intervals.parquet` preserves merged raw unit intervals; the masked
   counterpart preserves only callable, supported, non-excluded segments.
 - `effective_calibration_mask.parquet` records the exact calibration intervals.
-- `partitions.json` and `unit_buckets.json` are versioned, sorted manifests;
-  they are the only source of partition and bucket wildcards.
-- Partition `allele_states` holds `present`, `absent`, `rejected`, or invalid
+- `windows.json` and `unit_buckets.json` are versioned, sorted manifests;
+  they are the only source of window and bucket wildcards.
+  The window manifest uses schema version 2, a `windows` array, `window_id`, and
+  `window_size_bp`; the bucket manifest uses schema version 3 and `window_ids`.
+  Older execution-partition manifests must be regenerated. The public config
+  key remains `generation.execution.partition_size_bp`, resolved once into the
+  internal `window_size_bp` plan field.
+- Window `allele_states` holds `present`, `absent`, `rejected`, or invalid
   population state information. `allele_membership` maps alleles to units, and
   `allele_scores` supplies the matching score.
 - Statistics shards are additive per `testing_unit_id`, role, and score bin.
@@ -137,10 +142,10 @@ but do not reinterpret an older bundle as v3. Downstream apply rules should use
 1. **One binding set per full run.** In full mode, do not add a second
    generation-only reference source. Change the plan resolver if a new shared
    resource is needed.
-2. **Determinism.** Unit IDs are sorted before bucket assignment; partitions
+2. **Determinism.** Unit IDs are sorted before bucket assignment; windows
    and reductions are manifest ordered. Preserve that ordering when adding
    parallel work.
-3. **Bounded memory.** Partition jobs only read one genomic window; bucket
+3. **Bounded memory.** Window jobs only read one genomic window; bucket
    reduction reads one bounded unit range. Avoid collecting genome-wide allele
    or event tables in a new rule.
 4. **Explicit policies.** A new absence, chromosome, score-binning, or
@@ -156,7 +161,7 @@ but do not reinterpret an older bundle as v3. Downstream apply rules should use
 
 | Change | Main implementation points | Required follow-through |
 | --- | --- | --- |
-| Add a generation input | `workflow_plan.py`, config schema, `context.smk`, scope/partition adapter and library | Include it in resource identities and bundle metadata; add fixture coverage. |
+| Add a generation input | `workflow_plan.py`, config schema, `context.smk`, scope/window adapter and library | Include it in resource identities and bundle metadata; add fixture coverage. |
 | Add a role | Generation settings/model plan, `generation_probability.py`, context roles, lookup/finalization validation | Define compatible chromosomes/genotypes, table filename, certificate semantics, and apply support. |
 | Change binning | `generation_probability.py` and contract constants | Version the contract if compatibility changes; update apply lookup validation. |
 | Change a public artifact | `bundle_contract.py`, finalization, validation schema/library | Preserve backward compatibility or deliberately version the contract. |

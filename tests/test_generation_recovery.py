@@ -39,7 +39,7 @@ class GenerationRecoveryTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, output[-6000:])
         return output
 
-    def test_missing_partition_state_statistics_shard_and_lookup_bucket_recover(
+    def test_missing_window_state_statistics_shard_and_lookup_bucket_recover(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(
@@ -52,32 +52,32 @@ class GenerationRecoveryTests(unittest.TestCase):
             bundle = generation / "bundle"
             expected_bundle = bundle_digests(bundle)
             prepared = generation / "scalable" / "prepared"
-            partitions = json.loads(
-                (prepared / "partitions.json").read_text(encoding="utf-8")
+            windows = json.loads(
+                (prepared / "windows.json").read_text(encoding="utf-8")
             )
             buckets = json.loads(
                 (prepared / "unit_buckets.json").read_text(encoding="utf-8")
             )
-            partition_ids = [row["partition_id"] for row in partitions["partitions"]]
+            window_ids = [row["window_id"] for row in windows["windows"]]
             first_bucket = buckets["buckets"][0]
             bucket_id = first_bucket["bucket_id"]
-            statistics_partition_id = first_bucket["partition_ids"][0]
-            self.assertGreaterEqual(len(partition_ids), 2)
+            statistics_window_id = first_bucket["window_ids"][0]
+            self.assertGreaterEqual(len(window_ids), 2)
 
             state = (
                 generation
                 / "scalable"
-                / "partitions"
-                / f"{partition_ids[0]}.allele_states.parquet"
+                / "windows"
+                / f"{window_ids[0]}.allele_states.parquet"
             )
             state.unlink()
             state_plan = self.run_workflow_assert(
                 GENERATE_MANIFEST, outdir, dry_run=True
             )
-            self.assertIn("rule prepare_generation_partition:", state_plan)
-            self.assertEqual(1, state_plan.count("rule prepare_generation_partition:"))
+            self.assertIn("rule prepare_generation_window:", state_plan)
+            self.assertEqual(1, state_plan.count("rule prepare_generation_window:"))
             self.assertIn(str(state), state_plan)
-            self.assertNotIn(f"wildcards: partition={partition_ids[1]}", state_plan)
+            self.assertNotIn(f"wildcards: window={window_ids[1]}", state_plan)
             self.run_workflow_assert(GENERATE_MANIFEST, outdir)
             self.assertEqual(expected_bundle, bundle_digests(bundle))
 
@@ -85,17 +85,15 @@ class GenerationRecoveryTests(unittest.TestCase):
                 generation
                 / "scalable"
                 / "calculated"
-                / "partition_statistics"
-                / f"{statistics_partition_id}.bucket-{bucket_id}.parquet"
+                / "window_statistics"
+                / f"{statistics_window_id}.bucket-{bucket_id}.parquet"
             )
             statistics.unlink()
             statistics_plan = self.run_workflow_assert(
                 GENERATE_MANIFEST, outdir, dry_run=True
             )
-            self.assertIn(
-                "rule calculate_partition_null_distribution:", statistics_plan
-            )
-            self.assertNotIn("rule prepare_generation_partition:", statistics_plan)
+            self.assertIn("rule calculate_window_null_distribution:", statistics_plan)
+            self.assertNotIn("rule prepare_generation_window:", statistics_plan)
             self.run_workflow_assert(GENERATE_MANIFEST, outdir)
             self.assertEqual(expected_bundle, bundle_digests(bundle))
 
@@ -111,8 +109,8 @@ class GenerationRecoveryTests(unittest.TestCase):
                 GENERATE_MANIFEST, outdir, dry_run=True
             )
             self.assertIn("rule reduce_null_distribution_bucket:", lookup_plan)
-            self.assertNotIn("rule calculate_partition_null_distribution:", lookup_plan)
-            self.assertNotIn("rule prepare_generation_partition:", lookup_plan)
+            self.assertNotIn("rule calculate_window_null_distribution:", lookup_plan)
+            self.assertNotIn("rule prepare_generation_window:", lookup_plan)
             self.run_workflow_assert(GENERATE_MANIFEST, outdir)
             self.assertEqual(expected_bundle, bundle_digests(bundle))
 

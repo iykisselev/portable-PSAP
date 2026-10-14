@@ -42,7 +42,7 @@ def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArt
     return GenerationScopeArtifacts(
         artifacts=MappingProxyType(
             {
-                "partitions": str(prepared_dir / "partitions.json"),
+                "windows": str(prepared_dir / "windows.json"),
                 "buckets": str(prepared_dir / "unit_buckets.json"),
                 "units": str(prepared_dir / "provisional_units.parquet"),
                 "unit_intervals": str(prepared_dir / "unit_intervals.parquet"),
@@ -64,7 +64,7 @@ def build_generation_execution_layout(
 ) -> GenerationExecutionLayout:
     """Choose reproducible output paths and work buckets from the run plan."""
     calculated_dir = plan.scalable_dir / "calculated"
-    statistics_dir = calculated_dir / "partition_statistics"
+    statistics_dir = calculated_dir / "window_statistics"
     lookup_bucket_dir = calculated_dir / "lookup_buckets"
     bin_count = fixed_width_bin_count(model.score_max, settings.score_bin_width)
     return GenerationExecutionLayout(

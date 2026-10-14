@@ -1,4 +1,4 @@
-"""Candidate-scoped score reads and empty partition artifact contracts."""
+"""Candidate-scoped score reads and empty window artifact contracts."""
 
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 import generation_population
 from generation_bindings import (  # noqa: E402
-    GenerationPartitionInputs,
-    GenerationPartitionOutputs,
-    GenerationPartitionParameters,
+    GenerationWindowInputs,
+    GenerationWindowOutputs,
+    GenerationWindowParameters,
 )
-from generation_partition import prepare_generation_partition
+from generation_window import prepare_generation_window
 from generation_population import POPULATION_SCHEMA
 from generation_scores import (
     ALLELE_COLUMNS,
@@ -31,14 +31,14 @@ from generation_scores import (
 )
 
 
-class GenerationPartitionTests(unittest.TestCase):
+class GenerationWindowTests(unittest.TestCase):
     def setUp(self):
         temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
-        self.partition_id = "1_000000000000_000000000010"
-        self.inputs = GenerationPartitionInputs(
-            partitions=self.directory / "partitions",
+        self.window_id = "1_000000000000_000000000010"
+        self.inputs = GenerationWindowInputs(
+            windows=self.directory / "windows",
             units=self.directory / "units",
             unit_intervals=self.directory / "unit_intervals",
             effective_mask=self.directory / "mask",
@@ -49,13 +49,13 @@ class GenerationPartitionTests(unittest.TestCase):
             population_vcf=self.directory / "population_vcf",
             population_vcf_index=None,
         )
-        self.outputs = GenerationPartitionOutputs(
+        self.outputs = GenerationWindowOutputs(
             allele_states=self.directory / "allele_states.parquet",
             allele_membership=self.directory / "allele_membership.parquet",
             allele_scores=self.directory / "allele_scores.parquet",
             candidate_audit=self.directory / "candidate_audit.parquet",
         )
-        self.params = GenerationPartitionParameters(
+        self.params = GenerationWindowParameters(
             compression="zstd",
             af_tags={"overall": "AF"},
             x_af_policy="overall_proxy",
@@ -64,13 +64,13 @@ class GenerationPartitionTests(unittest.TestCase):
             indel_max_reference_length=50,
             indel_max_alternate_length=50,
         )
-        self.inputs.partitions.write_text(
+        self.inputs.windows.write_text(
             json.dumps(
                 {
-                    "schema_version": 1,
-                    "partitions": [
+                    "schema_version": 2,
+                    "windows": [
                         {
-                            "partition_id": self.partition_id,
+                            "window_id": self.window_id,
                             "chromosome": "1",
                             "start": 0,
                             "end": 10,
@@ -118,8 +118,8 @@ class GenerationPartitionTests(unittest.TestCase):
         ).write_parquet(self.inputs.effective_mask)
 
     def prepare(self):
-        prepare_generation_partition(
-            self.inputs, self.outputs, self.params, self.partition_id
+        prepare_generation_window(
+            self.inputs, self.outputs, self.params, self.window_id
         )
 
     def test_plain_scores_merge_clip_and_filter_intervals(self):
@@ -202,11 +202,11 @@ class GenerationPartitionTests(unittest.TestCase):
         )
         self.assertEqual(rates["POS"].to_list(), [1, 2, 5, 6])
 
-    def test_partition_limits_scores_to_eligible_masked_units(self):
+    def test_window_limits_scores_to_eligible_masked_units(self):
         with (
-            patch("generation_partition.score_rows", wraps=score_rows) as read_scores,
+            patch("generation_window.score_rows", wraps=score_rows) as read_scores,
             patch(
-                "generation_partition.population_rows",
+                "generation_window.population_rows",
                 wraps=generation_population.population_rows,
             ) as read_population,
         ):
@@ -244,7 +244,7 @@ class GenerationPartitionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing 1 calibration alleles"):
             self.prepare()
 
-    def test_partition_outputs_match_full_window_score_read(self):
+    def test_window_outputs_match_full_window_score_read(self):
         self.prepare()
         optimized = {
             name: pl.read_parquet(path) for name, path in vars(self.outputs).items()
@@ -253,7 +253,7 @@ class GenerationPartitionTests(unittest.TestCase):
         def read_full_window(*args, **kwargs):
             return score_rows(*args)
 
-        with patch("generation_partition.score_rows", side_effect=read_full_window):
+        with patch("generation_window.score_rows", side_effect=read_full_window):
             self.prepare()
         for name, path in vars(self.outputs).items():
             with self.subTest(artifact=name):
@@ -263,7 +263,7 @@ class GenerationPartitionTests(unittest.TestCase):
                     original.sort(original.columns),
                 )
 
-    def test_partition_outputs_match_full_window_population_read(self):
+    def test_window_outputs_match_full_window_population_read(self):
         self.prepare()
         optimized = {
             name: pl.read_parquet(path) for name, path in vars(self.outputs).items()
@@ -273,9 +273,7 @@ class GenerationPartitionTests(unittest.TestCase):
             kwargs.pop("intervals")
             return generation_population.population_rows(*args, **kwargs)
 
-        with patch(
-            "generation_partition.population_rows", side_effect=read_full_window
-        ):
+        with patch("generation_window.population_rows", side_effect=read_full_window):
             self.prepare()
         for name, path in vars(self.outputs).items():
             with self.subTest(artifact=name):
@@ -308,14 +306,14 @@ class GenerationPartitionTests(unittest.TestCase):
     def test_indel_candidate_is_added_with_span_overlap_membership(self):
         indels = self.directory / "score_indel"
         indels.write_text("1\t1\tA\tAT\t0\t21\n", encoding="utf-8")
-        self.inputs = GenerationPartitionInputs(
+        self.inputs = GenerationWindowInputs(
             **{
                 **vars(self.inputs),
                 "score_indel": indels,
                 "score_indel_index": None,
             }
         )
-        self.params = GenerationPartitionParameters(
+        self.params = GenerationWindowParameters(
             **{
                 **vars(self.params),
                 "include_indels": True,
@@ -367,14 +365,14 @@ class GenerationPartitionTests(unittest.TestCase):
         )
         indels = self.directory / "score_indel"
         indels.write_text("1\t1\tACA\tA\t0\t21\n", encoding="utf-8")
-        self.inputs = GenerationPartitionInputs(
+        self.inputs = GenerationWindowInputs(
             **{
                 **vars(self.inputs),
                 "score_indel": indels,
                 "score_indel_index": None,
             }
         )
-        self.params = GenerationPartitionParameters(
+        self.params = GenerationWindowParameters(
             **{
                 **vars(self.params),
                 "include_indels": True,
@@ -383,7 +381,7 @@ class GenerationPartitionTests(unittest.TestCase):
             }
         )
         with patch(
-            "generation_partition.population_rows",
+            "generation_window.population_rows",
             wraps=generation_population.population_rows,
         ) as read_population:
             self.prepare()
@@ -397,14 +395,14 @@ class GenerationPartitionTests(unittest.TestCase):
     def test_indel_span_rejection_is_retained_in_candidate_audit(self):
         indels = self.directory / "score_indel"
         indels.write_text("1\t1\tAAA\tA\t0\t21\n", encoding="utf-8")
-        self.inputs = GenerationPartitionInputs(
+        self.inputs = GenerationWindowInputs(
             **{
                 **vars(self.inputs),
                 "score_indel": indels,
                 "score_indel_index": None,
             }
         )
-        self.params = GenerationPartitionParameters(
+        self.params = GenerationWindowParameters(
             **{
                 **vars(self.params),
                 "include_indels": True,
@@ -431,8 +429,8 @@ class GenerationPartitionTests(unittest.TestCase):
                         pl.lit("retained_fraction_below_minimum").alias("status")
                     ).write_parquet(self.inputs.units)
                 with (
-                    patch("generation_partition.score_rows") as scores,
-                    patch("generation_partition.population_rows") as population,
+                    patch("generation_window.score_rows") as scores,
+                    patch("generation_window.population_rows") as population,
                 ):
                     self.prepare()
                     scores.assert_not_called()
