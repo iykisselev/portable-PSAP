@@ -32,13 +32,19 @@ class GenomicContractTests(unittest.TestCase):
         rscript = shutil.which("Rscript")
         if rscript is None:
             self.skipTest("Rscript is unavailable")
-        expression = 'source(commandArgs(TRUE)[1]); cat(paste(model_roles(FALSE), collapse=","), "\\n", paste(model_roles(TRUE), collapse=","), sep="")'
+        catalog_source = ROOT / "workflow" / "lib" / "r" / "model_catalog.R"
+        catalog = ROOT / "workflow" / "model_catalog.json"
+        expression = (
+            f"source({catalog_source.as_posix()!r}); "
+            f"PSAP_MODEL_CATALOG <- read_model_catalog({catalog.as_posix()!r}); "
+            'cat(paste(model_roles(FALSE), collapse=","), "\\n", '
+            'paste(model_roles(TRUE), collapse=","), sep="")'
+        )
         result = subprocess.run(
             [
                 rscript,
                 "-e",
                 expression,
-                str(ROOT / "workflow/lib/r/bundle_contracts.R"),
             ],
             capture_output=True,
             text=True,

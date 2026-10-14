@@ -7,6 +7,8 @@ test_dir <- dirname(normalizePath(sub("^--file=", "", script_arg)))
 repo_dir <- normalizePath(file.path(test_dir, ".."))
 
 source(file.path(repo_dir, "workflow", "lib", "r", "common.R"))
+source(file.path(repo_dir, "workflow", "lib", "r", "model_catalog.R"))
+PSAP_MODEL_CATALOG <- read_model_catalog(file.path(repo_dir, "workflow", "model_catalog.json"))
 source(file.path(repo_dir, "workflow", "lib", "r", "table_contracts.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "genomic_contracts.R"))
 source(file.path(repo_dir, "workflow", "lib", "r", "genotypes.R"))

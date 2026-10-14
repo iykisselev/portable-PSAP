@@ -26,11 +26,21 @@ from bundle_contract import (
     model_roles,
 )
 from io_contracts import GzipTsvAtomicWriter, write_gzip_tsv_atomic, write_json_atomic
+from model_catalog import models_for_chromosome, validate_status
 
 
 def applicable_roles(unit_row, hemizygote: bool) -> tuple[str, ...]:
     """Return roles needed to score a testing unit under the X-only HEM contract."""
-    return model_roles(hemizygote and unit_row["CHROM"] == "X")
+    # Unit fixtures and pre-window internal callers historically did not retain
+    # chromosome information.  Production provisional-unit rows always do; the
+    # fallback preserves the generic role contract for those small callers.
+    if "CHROM" not in unit_row:
+        return model_roles(hemizygote)
+    models = models_for_chromosome(unit_row["CHROM"], hemizygote)
+    roles = {model.role for model in models}
+    if not roles:
+        raise ValueError(f"No disease models apply to chromosome {unit_row['CHROM']!r}")
+    return tuple(role for role in GENERATED_ROLES if role in roles)
 
 
 def classify_units(units, diagnostics, hemizygote: bool = False):
@@ -47,6 +57,7 @@ def classify_units(units, diagnostics, hemizygote: bool = False):
             raise ValueError(
                 f"Distribution diagnostics contain unsupported role {role!r}"
             )
+        validate_status(status, "role", role=role)
         if role in by_unit[unit]:
             raise ValueError(f"Duplicate distribution diagnostic for {unit}/{role}")
         try:
@@ -63,10 +74,6 @@ def classify_units(units, diagnostics, hemizygote: bool = False):
             )
         if status == "numerical_failure":
             raise ValueError(f"Numerical distribution failure for {unit}/{role}")
-        if status not in {"ok", "zero_event_mass", "numerical_failure"}:
-            raise ValueError(
-                f"Unsupported distribution status {status!r} for {unit}/{role}"
-            )
         by_unit[unit][role] = status
     eligible, excluded = [], []
     for row in units:

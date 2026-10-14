@@ -120,37 +120,39 @@ score_model <- function(variants, model, genotype_class, lookup, lookup_source) 
 }
 
 
+score_lookup_models <- function(variants, definitions, lookup_source, lookup_name) {
+  # This scope owns the only dense lookup. Results contain scalar PSAPs, never
+  # a reference to the matrix, so the next role can reclaim this allocation.
+  lookup <- read_prepared_lookup(lookup_source$paths[[lookup_name]])
+  lapply(seq_len(nrow(definitions)), function(index) {
+    definition <- definitions[index, ]
+    selected <- variants
+    if (definition$is_hem) {
+      selected <- variants[canonical_chromosome(CHROM) == definition$required_chromosome]
+    }
+    score_model(selected, definition$model, definition$genotype_class, lookup, lookup_source)
+  })
+}
+
+
 score_variants <- function(variants, lookup_source, hemizygote_model) {
   variants <- copy(variants)
   variants[, .testing_unit_id := clean_identifier(unit)]
   variants[, gt_class := tolower(trimws(as.character(gt_class)))]
-  definitions <- standard_disease_models()
-  lookup_names <- unique(definitions$lookup)
-  lookups <- setNames(
-    lapply(lookup_names, function(name) {
-      read_prepared_lookup(lookup_source$paths[[name]])
-    }),
-    lookup_names
-  )
-  results <- lapply(seq_len(nrow(definitions)), function(index) {
-    definition <- definitions[index, ]
-    score_model(variants, definition$model, definition$genotype_class, lookups[[definition$lookup]], lookup_source)
-  })
-  if (hemizygote_model) {
-    hem_variants <- copy(variants)
-    hem_variants[, .chromosome := canonical_chromosome(CHROM)]
-    hem_definition <- hem_disease_model()
-    hem_lookup <- read_prepared_lookup(lookup_source$paths[[hem_definition$lookup]])
-    selected_hem <- hem_variants[
-      .chromosome == hem_definition$required_chromosome & gt_class == hem_definition$genotype_class
-    ]
-    results <- c(results, list(score_model(
-      selected_hem, hem_definition$model, hem_definition$genotype_class, hem_lookup, lookup_source
-    )))
+  definitions <- DISEASE_MODELS[hemizygote_model | !DISEASE_MODELS$is_hem, , drop = FALSE]
+  results <- list()
+  for (lookup_name in unique(definitions$lookup)) {
+    selected_models <- definitions[definitions$lookup == lookup_name, , drop = FALSE]
+    results <- c(results, score_lookup_models(variants, selected_models, lookup_source, lookup_name))
+    # Reclaim the previous matrix before allocating another one. Merely replacing
+    # a list entry allows unused matrices to accumulate until R chooses to collect.
+    gc(verbose = FALSE)
   }
   results <- Filter(Negate(is.null), results)
-  if (length(results) == 0) return(empty_scoring_output())
+  if (length(results) == 0L) return(empty_scoring_output())
   output <- rbindlist(results, use.names = TRUE, fill = FALSE)
+  # Reading by lookup role must not change model/tie order in the public reports.
+  output <- output[order(match(output$Dz.Model, definitions$model))]
   setcolorder(output, SCORING_OUTPUT_COLUMNS)
   output
 }

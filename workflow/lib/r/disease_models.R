@@ -1,31 +1,17 @@
-DISEASE_MODELS <- data.frame(
-  model = c(
-    "DOM-het",
-    "REC-hom",
-    "X-linked-hom",
-    "X-linked-het",
-    "X-linked-hem"
-  ),
-  genotype_class = c(
-    "het",
-    "hom",
-    "hom_female",
-    "het_female",
-    "hem"
-  ),
-  lookup = c("het", "hom", "hom", "het", "hem_chrX"),
-  tag = c("DOM", "REC_HOM", "XL_HOM", "XL_HET", "XL_HEM"),
-  is_hem = c(FALSE, FALSE, FALSE, FALSE, TRUE),
-  required_chromosome = c(NA, NA, NA, NA, "X"),
-  compatible_models = I(list(
-    c("DOM-het", "REC-hom", "X-linked-hom", "X-linked-het", "X-linked-hem"),
-    "REC-hom",
-    "X-linked-hom",
-    "X-linked-het",
-    "X-linked-hem"
-  )),
-  stringsAsFactors = FALSE
-)
+# Preserve catalog order for model selection, reporting, and control matching.
+DISEASE_MODELS <- do.call(rbind, lapply(PSAP_MODEL_CATALOG$models, function(model) {
+  data.frame(
+    model = model$id,
+    genotype_class = model$genotype_class,
+    lookup = model$role,
+    tag = model$tag,
+    is_hem = model$requires_hemizygote,
+    required_chromosome = if (model$scope == "non_PAR_chrX") "X" else NA_character_,
+    compatible_models = I(list(model$compatible_control_models)),
+    chromosome_scope = model$scope,
+    stringsAsFactors = FALSE
+  )
+}))
 
 
 disease_model_names <- function() {

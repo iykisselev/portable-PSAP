@@ -49,6 +49,7 @@ combine_id_lists <- function(value) {
 
 
 validation_priority <- function(value) {
+  for (status in unique(value)) validate_status(status, "triage")
   if ("control_match" %in% value) "control_match" else if (all(value == "no_controls")) "no_controls" else "ok"
 }
 

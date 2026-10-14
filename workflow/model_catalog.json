@@ -1,0 +1,317 @@
+{
+  "schema_version": 1,
+  "roles": [
+    "het",
+    "hom",
+    "hem_chrX"
+  ],
+  "models": [
+    {
+      "id": "DOM-het",
+      "role": "het",
+      "scope": "autosomal",
+      "genotype_class": "het",
+      "tag": "DOM",
+      "requires_hemizygote": false,
+      "compatible_control_models": [
+        "DOM-het",
+        "REC-hom",
+        "X-linked-hom",
+        "X-linked-het",
+        "X-linked-hem"
+      ]
+    },
+    {
+      "id": "REC-hom",
+      "role": "hom",
+      "scope": "autosomal",
+      "genotype_class": "hom",
+      "tag": "REC_HOM",
+      "requires_hemizygote": false,
+      "compatible_control_models": [
+        "REC-hom"
+      ]
+    },
+    {
+      "id": "X-linked-hom",
+      "role": "hom",
+      "scope": "non_PAR_chrX",
+      "genotype_class": "hom_female",
+      "tag": "XL_HOM",
+      "requires_hemizygote": false,
+      "compatible_control_models": [
+        "X-linked-hom"
+      ]
+    },
+    {
+      "id": "X-linked-het",
+      "role": "het",
+      "scope": "non_PAR_chrX",
+      "genotype_class": "het_female",
+      "tag": "XL_HET",
+      "requires_hemizygote": false,
+      "compatible_control_models": [
+        "X-linked-het"
+      ]
+    },
+    {
+      "id": "X-linked-hem",
+      "role": "hem_chrX",
+      "scope": "non_PAR_chrX",
+      "genotype_class": "hem",
+      "tag": "XL_HEM",
+      "requires_hemizygote": true,
+      "compatible_control_models": [
+        "X-linked-hem"
+      ]
+    }
+  ],
+  "statuses": [
+    {
+      "code": "eligible",
+      "domains": [
+        "scope"
+      ],
+      "required_payload": {
+        "scope": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "empty_after_priority",
+      "domains": [
+        "scope",
+        "partition"
+      ],
+      "required_payload": {
+        "scope": [],
+        "partition": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "no_calibration_scope",
+      "domains": [
+        "scope",
+        "partition"
+      ],
+      "required_payload": {
+        "scope": [],
+        "partition": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "fully_excluded",
+      "domains": [
+        "scope",
+        "partition"
+      ],
+      "required_payload": {
+        "scope": [],
+        "partition": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "retained_fraction_below_minimum",
+      "domains": [
+        "scope",
+        "partition"
+      ],
+      "required_payload": {
+        "scope": [],
+        "partition": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "zero_event_mass",
+      "domains": [
+        "role",
+        "scope",
+        "partition"
+      ],
+      "required_payload": {
+        "role": [
+          "role"
+        ],
+        "scope": [
+          "failed_roles"
+        ],
+        "partition": [
+          "failed_roles"
+        ]
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "numerical_failure",
+      "domains": [
+        "role"
+      ],
+      "required_payload": {
+        "role": [
+          "role"
+        ]
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "scored",
+      "domains": [
+        "partition"
+      ],
+      "required_payload": {
+        "partition": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "no_compatible_variant",
+      "domains": [
+        "partition"
+      ],
+      "required_payload": {
+        "partition": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "unit_absent",
+      "domains": [
+        "partition"
+      ],
+      "required_payload": {
+        "partition": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "no_contributing_partitions",
+      "domains": [
+        "aggregation"
+      ],
+      "required_payload": {
+        "aggregation": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "zero_and_one_partition_psap",
+      "domains": [
+        "aggregation"
+      ],
+      "required_payload": {
+        "aggregation": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "zero_partition_psap",
+      "domains": [
+        "aggregation"
+      ],
+      "required_payload": {
+        "aggregation": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "single_partition_one",
+      "domains": [
+        "aggregation"
+      ],
+      "required_payload": {
+        "aggregation": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "single_partition",
+      "domains": [
+        "aggregation"
+      ],
+      "required_payload": {
+        "aggregation": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "ok",
+      "domains": [
+        "role",
+        "aggregation",
+        "triage"
+      ],
+      "required_payload": {
+        "role": [
+          "role"
+        ],
+        "aggregation": [],
+        "triage": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "mid_p_exact_one_adjusted",
+      "domains": [
+        "aggregation"
+      ],
+      "required_payload": {
+        "aggregation": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "ok_mid_p",
+      "domains": [
+        "aggregation"
+      ],
+      "required_payload": {
+        "aggregation": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "upper_endpoint_unresolved",
+      "domains": [
+        "aggregation"
+      ],
+      "required_payload": {
+        "aggregation": []
+      },
+      "diagnostic_only": true
+    },
+    {
+      "code": "control_match",
+      "domains": [
+        "triage"
+      ],
+      "required_payload": {
+        "triage": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "no_controls",
+      "domains": [
+        "triage"
+      ],
+      "required_payload": {
+        "triage": []
+      },
+      "diagnostic_only": false
+    },
+    {
+      "code": "not_evaluated",
+      "domains": [
+        "triage"
+      ],
+      "required_payload": {
+        "triage": []
+      },
+      "diagnostic_only": false
+    }
+  ]
+}

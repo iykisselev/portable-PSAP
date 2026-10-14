@@ -13,6 +13,8 @@ import sys
 from types import MappingProxyType
 from typing import Mapping
 
+from model_catalog import GENERATED_ROLES, model_roles  # noqa: F401
+
 
 CURRENT_GENERATED_BUNDLE_CONTRACT = "generated_bundle_v2"
 CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION = 2
@@ -56,14 +58,6 @@ BUNDLE_INPUT_COMPONENTS = MappingProxyType(
     }
 )
 HEM_COMPONENT = "lookup_hem_chrX"
-GENERATED_ROLES = ("het", "hom", "hem_chrX")
-
-
-def model_roles(hemizygote: bool) -> tuple[str, ...]:
-    """Return enabled lookup roles in the published contract order."""
-    return GENERATED_ROLES if hemizygote else GENERATED_ROLES[:2]
-
-
 class BundleContractError(ValueError):
     """Raised when a bundle cannot be read or upgraded under this release."""
 
