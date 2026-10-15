@@ -17,6 +17,7 @@ PSAP_R_LIB_DIR <- file.path(psap_find_workflow_root(PSAP_SCRIPT_DIR), "lib", "r"
 source(file.path(PSAP_R_LIB_DIR, "common.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "model_catalog.R"), local = FALSE)
 PSAP_MODEL_CATALOG <- read_model_catalog(file.path(dirname(dirname(PSAP_R_LIB_DIR)), "model_catalog.json"))
+source(file.path(PSAP_R_LIB_DIR, "acat.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "table_contracts.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "genomic_contracts.R"), local = FALSE)
 source(file.path(PSAP_R_LIB_DIR, "variant_identity.R"), local = FALSE)
