@@ -62,3 +62,31 @@ belongs to the complete N = 1 contract migration, with its consumers and tests.
 
 This iteration is the prerequisite refactor, not completion of the biological
 partition or ACAT feature. Real-bundle upper-tail measurements are still pending.
+
+## Iteration 2: shared models, statuses, ACAT, and explicit N = 1 inputs
+
+Completed on 2026-10-21:
+
+- Added `workflow/model_catalog.json` as the single source for the five public
+  disease models, their roles/scopes/genotype classes, control compatibility,
+  and the full shared status registry. Python and R load and validate the same
+  catalog; finalization and reporting no longer keep separate status lists.
+- Added the pure interior ACAT implementation and the endpoint-policy wrapper.
+  It validates inputs before endpoint handling, gives raw zero precedence over
+  a simultaneous one, preserves singleton values, and marks unresolved
+  multi-partition upper endpoints explicitly. The mid-p code path is present
+  for the required evaluation, but production policy remains intentionally
+  unselected pending bundle measurements.
+- Replaced the implicit/default testing-unit BED with an ordered list of safe
+  partition bindings and exact identity-map matching in generate/full mode.
+  Apply rejects both partition identities and physical partition overrides.
+  Identities no longer live in `config/config.yaml`, preventing deep-merge
+  leakage into apply runs. Active generation/full fixtures and examples now
+  use a single explicit `cds` partition.
+- Retained the existing internal single-BED scope adapter only for the N = 1
+  migration point. It deliberately raises for N > 1 until the next iteration
+  makes the scope, membership, bucket, and reduction tables partition-aware.
+
+Focused verification passed: cross-language catalog/finalization/scoring tests,
+the ACAT analytic and endpoint tests, direct generate/full plan resolution for
+all active null-distribution fixtures, and the generate workflow test (2 tests).
