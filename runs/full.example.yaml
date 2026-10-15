@@ -13,6 +13,10 @@ model:
   include_indels: true
   hemizygote: true
 
+reference:
+  testing_unit_partitions:
+    cds: {id: gencode-grch38-v50-cds}
+
 generation_settings:
   variant_classes: [snv, indel]
 
@@ -28,7 +32,9 @@ bindings:
       fai: tests/smoke/data/reference.fa.fai
       gzi: null
     exclusion: {data: tests/null_distribution/exclusion.bed, index: null}
-    testing_unit_bed: {data: tests/null_distribution/testing_units.bed, index: null}
+    testing_unit_partitions:
+      - id: cds
+        bed: {data: tests/null_distribution/testing_units.bed, index: null}
     exclusions:
       encode-hg38-blacklist-v2: {data: tests/smoke/data/exclude_full_span.bed, index: null}
       par-regions: {data: tests/null_distribution/par_regions.bed, index: null}

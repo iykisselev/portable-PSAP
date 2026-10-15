@@ -91,7 +91,10 @@ class GenerationRuleContext:
         identities = {
             "fasta": self.reference.fasta_id,
             "exclusion": self.reference.exclusion_id,
-            "testing_units": self.reference.testing_unit_id,
+            "testing_units": self.reference.testing_unit_partitions.get(
+                self.plan.testing_unit_partitions[0].identifier,
+                "testing_units",
+            ),
             "score_snv": self.reference.cadd_snv_id,
             "score_indel": self.reference.cadd_indel_id or "score_indel",
             "population_vcf": f"population_vcf:{self.plan.af_source['overall']}",

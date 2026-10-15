@@ -52,6 +52,16 @@ $defs:
     properties:
       data: {type: string, minLength: 1}
       index: {type: [string, "null"], minLength: 1}
+  testing_unit_partition_binding:
+    type: object
+    additionalProperties: false
+    required: [id, bed]
+    properties:
+      id:
+        type: string
+        minLength: 1
+        pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+      bed: {$ref: "#/$defs/indexed_genomic_binding"}
   optional_indexed_genomic_binding:
     type: object
     additionalProperties: false
@@ -85,7 +95,10 @@ $defs:
     properties:
       fasta: {$ref: "#/$defs/fasta_binding"}
       exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
-      testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
+      testing_unit_partitions:
+        type: array
+        minItems: 1
+        items: {$ref: "#/$defs/testing_unit_partition_binding"}
       exclusions: {$ref: "#/$defs/exclusion_bindings"}
       cadd: {$ref: "#/$defs/cadd_bindings"}
       lookup_source: {$ref: "#/$defs/lookup_source"}
@@ -102,12 +115,12 @@ $defs:
               properties: {type: {const: bundle}}
               required: [type]
         else:
-          required: [exclusion, testing_unit_bed, exclusions]
+          required: [exclusion, exclusions]
   full_reference_binding:
     allOf:
       - {$ref: "#/$defs/reference_binding_base"}
       - type: object
-        required: [exclusion, testing_unit_bed, exclusions]
+        required: [exclusion, exclusions, testing_unit_partitions]
         properties:
           lookup_source: false
   af_source:
@@ -140,7 +153,10 @@ $defs:
       score_snv: {$ref: "#/$defs/indexed_genomic_binding"}
       score_indel: {$ref: "#/$defs/indexed_genomic_binding"}
       exclusion: {$ref: "#/$defs/optional_indexed_genomic_binding"}
-      testing_unit_bed: {$ref: "#/$defs/indexed_genomic_binding"}
+      testing_unit_partitions:
+        type: array
+        minItems: 1
+        items: {$ref: "#/$defs/testing_unit_partition_binding"}
       par_regions: {$ref: "#/$defs/indexed_genomic_binding"}
       exclusions:
         type: array
@@ -150,7 +166,7 @@ $defs:
     allOf:
       - {$ref: "#/$defs/generation_binding_base"}
       - type: object
-        required: [score_snv, exclusion, testing_unit_bed, par_regions, fasta]
+        required: [score_snv, exclusion, testing_unit_partitions, par_regions, fasta]
   full_generation_binding:
     allOf:
       - {$ref: "#/$defs/generation_binding_base"}
@@ -159,7 +175,7 @@ $defs:
           score_snv: false
           score_indel: false
           exclusion: false
-          testing_unit_bed: false
+          testing_unit_partitions: false
           par_regions: false
           exclusions: false
           fasta: false

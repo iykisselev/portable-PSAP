@@ -13,9 +13,9 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import re
 from types import MappingProxyType
 from typing import Any, Mapping, TypeVar
-import warnings
 
 from generation_resource_policy import check_generation_index_binding
 from config_validation import ConfigurationValidationError, validate_configuration
@@ -36,18 +36,8 @@ class WorkflowPlanError(ValueError):
 
 
 def normalize_run_config(config: Mapping[str, Any]) -> dict[str, Any]:
-    """Copy a legacy manifest into the explicit apply-mode configuration shape."""
-    normalized = deepcopy(dict(config))
-    if "workflow" not in normalized:
-        warnings.warn(
-            "Run manifests without workflow.mode are deprecated and currently "
-            "default to apply mode; add workflow: {mode: apply} before workflow "
-            "configuration contract v2, when workflow.mode becomes mandatory.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        normalized["workflow"] = {"mode": "apply"}
-    return normalized
+    """Copy a manifest without applying removed configuration migrations."""
+    return deepcopy(dict(config))
 
 
 def _reject_legacy_exclusion_lists(config: Mapping[str, Any]) -> None:
@@ -153,6 +143,60 @@ class FileBinding:
 
 
 @dataclass(frozen=True)
+class TestingUnitPartition:
+    """One ordered biological partition and its source BED binding."""
+
+    identifier: str
+    bed: FileBinding
+
+
+def _testing_unit_partitions(value: Any, key: str) -> tuple[TestingUnitPartition, ...]:
+    if not isinstance(value, list) or not value:
+        raise WorkflowPlanError(f"{key} must be a nonempty ordered list")
+    partitions: list[TestingUnitPartition] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        item_key = f"{key}[{index}]"
+        mapping = _mapping(item, item_key)
+        identifier = _required(mapping.get("id"), f"{item_key}.id")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", identifier):
+            raise WorkflowPlanError(
+                f"{item_key}.id must match ^[A-Za-z0-9][A-Za-z0-9_-]*$"
+            )
+        if identifier in seen:
+            raise WorkflowPlanError(f"{key} contains duplicate partition ID {identifier!r}")
+        seen.add(identifier)
+        partitions.append(
+            TestingUnitPartition(
+                identifier=identifier,
+                bed=FileBinding.from_config(mapping.get("bed"), f"{item_key}.bed"),
+            )
+        )
+    return tuple(partitions)
+
+
+def _validate_partition_identity_set(
+    identities: Mapping[str, str],
+    partitions: tuple[TestingUnitPartition, ...],
+    *,
+    identity_key: str,
+    binding_key: str,
+) -> None:
+    identity_ids, binding_ids = set(identities), {item.identifier for item in partitions}
+    missing, extra = sorted(binding_ids - identity_ids), sorted(identity_ids - binding_ids)
+    if missing or extra:
+        details = []
+        if missing:
+            details.append("missing identities: " + ", ".join(missing))
+        if extra:
+            details.append("identities without bindings: " + ", ".join(extra))
+        raise WorkflowPlanError(
+            f"{identity_key} and {binding_key} must have exactly the same IDs; "
+            + "; ".join(details)
+        )
+
+
+@dataclass(frozen=True)
 class FastaBinding:
     """One reference FASTA and its explicitly declared companion indexes."""
 
@@ -198,7 +242,7 @@ class ReferenceMetadata:
     fasta_id: str
     exclusion_id: str
     exclusion_kind: str
-    testing_unit_id: str
+    testing_unit_partitions: Mapping[str, str]
     cadd_snv_id: str
     cadd_indel_id: str | None
     exclusions: Mapping[str, ExclusionMetadata]
@@ -210,11 +254,20 @@ class ReferenceBindings:
 
     fasta: FastaBinding
     exclusion: FileBinding
-    testing_unit_bed: FileBinding
+    testing_unit_partitions: tuple[TestingUnitPartition, ...]
     exclusions: Mapping[str, FileBinding]
     cadd_snv: FileBinding
     cadd_indel: FileBinding | None
     calibration_regions: FileBinding | None = None
+
+    @property
+    def testing_unit_bed(self) -> FileBinding:
+        """Expose the sole N=1 partition to pre-partition pipeline adapters."""
+        if len(self.testing_unit_partitions) != 1:
+            raise WorkflowPlanError(
+                "This pipeline stage must be updated to consume partitioned testing units"
+            )
+        return self.testing_unit_partitions[0].bed
 
 
 @dataclass(frozen=True)
@@ -272,7 +325,7 @@ class GenerationPlan:
     score_snv: FileBinding
     score_indel: FileBinding | None
     exclusion: FileBinding
-    testing_unit_bed: FileBinding
+    testing_unit_partitions: tuple[TestingUnitPartition, ...]
     fasta: FastaBinding
     par_regions: FileBinding
     exclusions: tuple[ExclusionBinding, ...]
@@ -283,6 +336,15 @@ class GenerationPlan:
     window_size_bp: int
     unit_bucket_size: int
     parquet_compression: str
+
+    @property
+    def testing_unit_bed(self) -> FileBinding:
+        """Expose the sole N=1 partition while generation is migrated in stages."""
+        if len(self.testing_unit_partitions) != 1:
+            raise WorkflowPlanError(
+                "Generation requires partition-aware scope preparation for N > 1"
+            )
+        return self.testing_unit_partitions[0].bed
 
     @property
     def scalable_dir(self) -> Path:
@@ -362,6 +424,10 @@ def _reference_metadata(config: Mapping[str, Any]) -> ReferenceMetadata:
     }
     cadd = _mapping(reference.get("cadd"), "reference.cadd")
     indel = cadd.get("indel")
+    partition_identities = _mapping(
+        reference.get("testing_unit_partitions", {}),
+        "reference.testing_unit_partitions",
+    )
     return ReferenceMetadata(
         assembly=_required(reference.get("assembly"), "reference.assembly"),
         fasta_id=_required(
@@ -376,11 +442,16 @@ def _reference_metadata(config: Mapping[str, Any]) -> ReferenceMetadata:
             _mapping(reference.get("exclusion"), "reference.exclusion").get("kind"),
             "reference.exclusion.kind",
         ),
-        testing_unit_id=_required(
-            _mapping(
-                reference.get("testing_unit_bed"), "reference.testing_unit_bed"
-            ).get("id"),
-            "reference.testing_unit_bed.id",
+        testing_unit_partitions=_frozen_mapping(
+            {
+                identifier: _required(
+                    _mapping(value, f"reference.testing_unit_partitions.{identifier}").get(
+                        "id"
+                    ),
+                    f"reference.testing_unit_partitions.{identifier}.id",
+                )
+                for identifier, value in partition_identities.items()
+            }
         ),
         cadd_snv_id=_required(
             _mapping(cadd.get("snv"), "reference.cadd.snv").get("id"),
@@ -416,10 +487,13 @@ def _reference_bindings(
             f"{key}.exclusion",
             required=False,
         ),
-        testing_unit_bed=FileBinding.from_config(
-            reference.get("testing_unit_bed", {"data": None}),
-            f"{key}.testing_unit_bed",
-            required=not bundle,
+        testing_unit_partitions=(
+            _testing_unit_partitions(
+                reference.get("testing_unit_partitions"),
+                f"{key}.testing_unit_partitions",
+            )
+            if not bundle
+            else ()
         ),
         exclusions=_frozen_mapping(
             {
@@ -665,8 +739,9 @@ def _standalone_resources(generation: Mapping[str, Any]) -> GenerationResources:
         exclusion=FileBinding.from_config(
             generation.get("exclusion"), "generation.exclusion", required=False
         ),
-        testing_unit_bed=FileBinding.from_config(
-            generation.get("testing_unit_bed"), "generation.testing_unit_bed"
+        testing_unit_partitions=_testing_unit_partitions(
+            generation.get("testing_unit_partitions"),
+            "generation.testing_unit_partitions",
         ),
         exclusions=_frozen_mapping({}),
         cadd_snv=FileBinding.from_config(
@@ -722,6 +797,20 @@ def _generation_plan(
         else _standalone_resources(generation)
     )
     resources = resolved.resources
+    if not reference_metadata.testing_unit_partitions:
+        raise WorkflowPlanError(
+            "reference.testing_unit_partitions is required in generate and full modes"
+        )
+    _validate_partition_identity_set(
+        reference_metadata.testing_unit_partitions,
+        resources.testing_unit_partitions,
+        identity_key="reference.testing_unit_partitions",
+        binding_key=(
+            "bindings.reference.testing_unit_partitions"
+            if mode == "full"
+            else "generation.testing_unit_partitions"
+        ),
+    )
     par_regions = resolved.par_regions
     exclusions = resolved.exclusions
     af_source = _frozen_mapping(
@@ -793,7 +882,7 @@ def _generation_plan(
         score_snv=resources.cadd_snv,
         score_indel=resources.cadd_indel,
         exclusion=resources.exclusion,
-        testing_unit_bed=resources.testing_unit_bed,
+        testing_unit_partitions=resources.testing_unit_partitions,
         fasta=resources.fasta,
         par_regions=par_regions,
         exclusions=exclusions,
@@ -868,7 +957,7 @@ def _effective_bundle_reference(
             fasta=configured_reference.fasta,
             exclusion=FileBinding(None),
             calibration_regions=FileBinding(lookup_source.calibration_mask),
-            testing_unit_bed=FileBinding(lookup_source.eligible_units),
+            testing_unit_partitions=(),
             exclusions=_frozen_mapping(
                 {
                     exclusion.identifier: exclusion.binding
@@ -1051,6 +1140,29 @@ def build_workflow_plan(config: Mapping[str, Any]) -> WorkflowPlan:
     )
     if mode not in {"apply", "generate", "full"}:
         raise WorkflowPlanError(f"Unsupported workflow.mode: {mode!r}")
+    reference_config = _mapping(normalized.get("reference"), "reference")
+    if mode == "apply" and "testing_unit_partitions" in reference_config:
+        raise WorkflowPlanError(
+            "apply mode forbids reference.testing_unit_partitions; use the certified bundle"
+        )
+    if mode == "apply":
+        generation_config = normalized.get("generation")
+        bindings_config = normalized.get("bindings")
+        bound_reference = (
+            bindings_config.get("reference", {})
+            if isinstance(bindings_config, Mapping)
+            else {}
+        )
+        if (
+            isinstance(generation_config, Mapping)
+            and "testing_unit_partitions" in generation_config
+        ) or (
+            isinstance(bound_reference, Mapping)
+            and "testing_unit_partitions" in bound_reference
+        ):
+            raise WorkflowPlanError(
+                "apply mode forbids physical testing-unit partition bindings"
+            )
     output_root = Path(_required(normalized.get("outdir"), "outdir"))
     model = _model_plan(normalized)
     settings = _generation_settings(normalized, mode, model)

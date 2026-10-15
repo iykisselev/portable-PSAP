@@ -18,7 +18,7 @@ properties:
   reference:
     type: object
     additionalProperties: false
-    required: [assembly, fasta, exclusion, testing_unit_bed, exclusions, cadd]
+    required: [assembly, fasta, exclusion, exclusions, cadd]
     properties:
       assembly: {enum: [GRCh37, GRCh38]}
       fasta: {$ref: "#/$defs/resource_identity"}
@@ -29,7 +29,11 @@ properties:
         properties:
           id: {type: string, minLength: 1}
           kind: {enum: [bed, tsv]}
-      testing_unit_bed: {$ref: "#/$defs/resource_identity"}
+      testing_unit_partitions:
+        type: object
+        minProperties: 1
+        propertyNames: {$ref: "#/$defs/partition_id"}
+        additionalProperties: {$ref: "#/$defs/resource_identity"}
       exclusions:
         type: object
         propertyNames: {$ref: "#/$defs/resource_id"}
@@ -101,6 +105,10 @@ $defs:
     type: string
     minLength: 1
     pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+  partition_id:
+    type: string
+    minLength: 1
+    pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$"
   resource_identity:
     type: object
     required: [id]

@@ -13,8 +13,8 @@ reference:
   exclusion:
     id: excluded-regions  # source-neutral identity for intervals to remove
     kind: bed  # file layout; BED intervals
-  testing_unit_bed:
-    id: gencode-grch38-v50-cds  # testing-unit annotation release identifier
+  # testing_unit_partitions belongs in each generate/full run manifest. It is
+  # deliberately absent from defaults so partitions cannot leak into apply runs.
   # Each key is a stable scientific identity; bindings use the same key.
   exclusions:
     encode-hg38-blacklist-v2:
