@@ -32,6 +32,7 @@ from generation_prep import (
     supported_scope_mask,
 )
 from generation_probability import unit_bucket_frame
+from partition_scope import build_partition_scope
 from generation_resource_policy import check_unindexed_fixture
 from genomic_contracts import GENERATION_CONTIGS
 from io_contracts import write_json_atomic, write_parquet_atomic
@@ -333,6 +334,48 @@ def _write_scope_tables(
     )
 
 
+def _write_partition_scope_artifacts(
+    inputs: GenerationScopeInputs,
+    outputs: GenerationScopeOutputs,
+    masks: ScopeMasks,
+    params: GenerationScopeParameters,
+) -> None:
+    """Materialize pair ownership/statuses without changing the legacy N=1 path."""
+    paths = inputs.testing_unit_partitions or (inputs.testing_units,)
+    identifiers = params.partition_ids or tuple(f"partition_{i}" for i in range(len(paths)))
+    if len(paths) != len(identifiers):
+        raise ValueError("Partition IDs and testing-unit BED inputs must have equal length")
+    partitions = [(identifier, read_bed_units(path)) for identifier, path in zip(identifiers, paths, strict=True)]
+    scope = build_partition_scope(
+        partitions,
+        masks.supported_scope,
+        masks.calibration_mask,
+        float(params.minimum_retained_fraction),
+    )
+    resolved_rows = [
+        (unit, partition, chromosome, start, end)
+        for partition, units in scope.resolved.items()
+        for unit, intervals in units.items()
+        for chromosome, start, end in intervals
+    ]
+    if outputs.resolved_partition_intervals is not None:
+        write_parquet_atomic(
+            pl.DataFrame(
+                resolved_rows,
+                schema=["testing_unit_id", "partition_id", "CHROM", "START", "END"],
+                orient="row",
+            ).sort("CHROM", "START", "END", "testing_unit_id", "partition_id"),
+            outputs.resolved_partition_intervals,
+            params.compression,
+        )
+    if outputs.partition_statuses is not None:
+        write_parquet_atomic(
+            pl.DataFrame(list(scope.rows)).sort("testing_unit_id", "partition_id"),
+            outputs.partition_statuses,
+            params.compression,
+        )
+
+
 def prepare_generation_scope(
     inputs: GenerationScopeInputs,
     outputs: GenerationScopeOutputs,
@@ -341,6 +384,7 @@ def prepare_generation_scope(
     """Prepare masks, retention tables and sparse manifests for window jobs."""
     _validate_scope_inputs(inputs, params)
     masks = _scope_masks(inputs)
+    _write_partition_scope_artifacts(inputs, outputs, masks, params)
     scope = _unit_intervals(masks, params)
     eligible_callable_unit_intervals = scope.eligible_intervals
     indel_owner_intervals: list[UnitInterval] = []

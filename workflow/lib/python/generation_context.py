@@ -121,7 +121,7 @@ class GenerationRuleContext:
             "score_snv": self.plan.score_snv,
             "score_indel": self.plan.score_indel or FileBinding(None),
             "exclusion": self.plan.exclusion,
-            "testing_units": self.plan.testing_unit_bed,
+            "testing_units": self.plan.testing_unit_partitions[0].bed,
             "par_regions": self.plan.par_regions,
             "fasta": FileBinding(self.plan.fasta.data),
             "mutation_rate": self.plan.mutation_rate or FileBinding(None),
@@ -161,6 +161,12 @@ class GenerationRuleContext:
             result[name] = binding.data_inputs()
             if name in indexed:
                 result[f"{name}_index"] = binding.index_inputs()
+        if operation == "scope":
+            result["testing_unit_partitions"] = [
+                partition.bed.data
+                for partition in self.plan.testing_unit_partitions
+                if partition.bed.data
+            ]
         if operation in {"scope", "window"}:
             result["fasta_fai"] = self.plan.fasta.fai
         if operation == "scope":

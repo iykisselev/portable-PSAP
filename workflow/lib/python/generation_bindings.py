@@ -34,6 +34,7 @@ class GenerationScopeInputs:
     score_indel_index: PathLike | None = None
     mutation_rate_indel: PathLike | None = None
     mutation_rate_indel_index: PathLike | None = None
+    testing_unit_partitions: tuple[PathLike, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,8 @@ class GenerationScopeOutputs:
     unit_intervals: PathLike
     masked_unit_intervals: PathLike
     effective_mask: PathLike
+    resolved_partition_intervals: PathLike | None = None
+    partition_statuses: PathLike | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,7 @@ class GenerationScopeParameters:
     af_tags: Mapping[str, str]
     include_indels: bool
     indel_max_reference_length: int
+    partition_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

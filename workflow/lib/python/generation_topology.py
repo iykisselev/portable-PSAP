@@ -52,6 +52,10 @@ def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArt
                 "effective_mask": str(
                     prepared_dir / "effective_calibration_mask.parquet"
                 ),
+                "resolved_partition_intervals": str(
+                    prepared_dir / "resolved_partition_intervals.parquet"
+                ),
+                "partition_statuses": str(prepared_dir / "unit_partition_status.parquet"),
             }
         ),
     )
