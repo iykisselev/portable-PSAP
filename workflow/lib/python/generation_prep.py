@@ -98,6 +98,47 @@ def subtract_intervals(
     return remaining
 
 
+def resolve_partition_ownership(
+    partitions: list[tuple[str, dict[str, list[tuple[str, int, int]]]]],
+) -> dict[str, dict[str, list[tuple[str, int, int]]]]:
+    """Assign overlapping unit bases to the earliest configured partition.
+
+    Inputs retain testing-unit identity, so subtraction can never remove an
+    interval from a different gene that happens to overlap genomic coordinates.
+    The returned mapping preserves the supplied partition order and includes
+    empty lists for a later partition that loses all of a unit's bases.
+    """
+    claimed: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    known_chromosome: dict[str, str] = {}
+    resolved: dict[str, dict[str, list[tuple[str, int, int]]]] = {}
+    seen_partitions: set[str] = set()
+    for partition_id, units in partitions:
+        if partition_id in seen_partitions:
+            raise ValueError(f"Duplicate partition ID {partition_id!r}")
+        seen_partitions.add(partition_id)
+        output: dict[str, list[tuple[str, int, int]]] = {}
+        for unit_id, intervals in units.items():
+            chromosomes = {chromosome for chromosome, _, _ in intervals}
+            if len(chromosomes) > 1:
+                raise ValueError(f"Testing unit {unit_id!r} spans chromosomes")
+            if not chromosomes:
+                output[unit_id] = []
+                continue
+            chromosome = next(iter(chromosomes))
+            previous = known_chromosome.setdefault(unit_id, chromosome)
+            if previous != chromosome:
+                raise ValueError(
+                    f"Testing unit {unit_id!r} uses conflicting chromosomes across partitions"
+                )
+            raw = merge_intervals([(start, end) for _, start, end in intervals])
+            key = (unit_id, chromosome)
+            owned = subtract_intervals(raw, claimed.get(key, []))
+            output[unit_id] = [(chromosome, start, end) for start, end in owned]
+            claimed[key] = merge_intervals([*claimed.get(key, []), *raw])
+        resolved[partition_id] = output
+    return resolved
+
+
 def supported_scope_mask(
     contig_lengths: dict[str, int],
     excluded: dict[str, list[tuple[int, int]]],

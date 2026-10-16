@@ -24,6 +24,7 @@ from generation_prep import (  # noqa: E402
     read_intervals,
     supported_scope_mask,
     subtract_intervals,
+    resolve_partition_ownership,
 )
 from generation_population import (  # noqa: E402
     population_info_definitions,
@@ -41,6 +42,44 @@ from generation_scope import prepare_generation_scope
 
 
 class GenerationPreparationTests(unittest.TestCase):
+    def test_partition_ownership_subtracts_only_within_each_testing_unit(self):
+        resolved = resolve_partition_ownership(
+            [
+                (
+                    "cds",
+                    {
+                        "GENE1": [("1", 100, 200)],
+                        "GENE2": [("1", 300, 350)],
+                    },
+                ),
+                (
+                    "intronic",
+                    {
+                        "GENE1": [("1", 50, 250)],
+                        "GENE2": [("1", 300, 360)],
+                        "GENE3": [("1", 120, 180)],
+                    },
+                ),
+            ]
+        )
+        self.assertEqual(
+            resolved["cds"]["GENE1"], [("1", 100, 200)]
+        )
+        self.assertEqual(
+            resolved["intronic"]["GENE1"], [("1", 50, 100), ("1", 200, 250)]
+        )
+        self.assertEqual(resolved["intronic"]["GENE2"], [("1", 350, 360)])
+        self.assertEqual(resolved["intronic"]["GENE3"], [("1", 120, 180)])
+
+    def test_partition_ownership_rejects_a_cross_partition_chromosome_conflict(self):
+        with self.assertRaisesRegex(ValueError, "conflicting chromosomes"):
+            resolve_partition_ownership(
+                [
+                    ("cds", {"GENE1": [("1", 0, 10)]}),
+                    ("intronic", {"GENE1": [("X", 0, 10)]}),
+                ]
+            )
+
     def test_unit_buckets_allow_an_empty_scope(self):
         units = pl.DataFrame([], schema=["testing_unit_id", "status"], orient="row")
         intervals = pl.DataFrame(
