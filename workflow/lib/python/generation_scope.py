@@ -345,7 +345,17 @@ def _write_partition_scope_artifacts(
     identifiers = params.partition_ids or tuple(f"partition_{i}" for i in range(len(paths)))
     if len(paths) != len(identifiers):
         raise ValueError("Partition IDs and testing-unit BED inputs must have equal length")
-    partitions = [(identifier, read_bed_units(path)) for identifier, path in zip(identifiers, paths, strict=True)]
+    partitions = [
+        (
+            identifier,
+            {
+                unit_id: intervals
+                for unit_id, intervals in read_bed_units(path).items()
+                if intervals[0][0] in GENERATION_CONTIGS
+            },
+        )
+        for identifier, path in zip(identifiers, paths, strict=True)
+    ]
     scope = build_partition_scope(
         partitions,
         masks.supported_scope,

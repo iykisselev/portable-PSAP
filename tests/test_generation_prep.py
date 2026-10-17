@@ -130,6 +130,8 @@ class GenerationPreparationTests(unittest.TestCase):
                 unit_intervals=directory / "unit_intervals.parquet",
                 masked_unit_intervals=directory / "masked.parquet",
                 effective_mask=directory / "mask.parquet",
+                resolved_partition_intervals=directory / "resolved.parquet",
+                partition_statuses=directory / "partition_statuses.parquet",
             )
             with self.assertWarnsRegex(
                 RuntimeWarning, "Ignoring testing-unit contigs.*MT, Y"
@@ -149,6 +151,12 @@ class GenerationPreparationTests(unittest.TestCase):
             self.assertEqual(
                 ["1"],
                 pl.read_parquet(outputs.unit_intervals)["CHROM"].unique().to_list(),
+            )
+            self.assertEqual(
+                [("AUTOSOMAL", "partition_0")],
+                pl.read_parquet(outputs.partition_statuses)
+                .select("testing_unit_id", "partition_id")
+                .rows(),
             )
 
     def test_unit_buckets_follow_genomic_order_not_unit_id(self):
