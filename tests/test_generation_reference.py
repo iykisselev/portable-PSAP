@@ -16,7 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
 from generation_windows import GenomeWindow  # noqa: E402
-from generation_reference import ReferenceReader, membership_rows  # noqa: E402
+from generation_reference import (  # noqa: E402
+    ReferenceReader,
+    membership_rows,
+    partition_membership_rows,
+)
 
 
 class StaticReference:
@@ -33,6 +37,16 @@ class StaticReference:
 
 
 class GenerationReferenceTests(unittest.TestCase):
+    def test_partition_memberships_keep_overlapping_gene_pairs_separate(self):
+        rows = partition_membership_rows(
+            GenomeWindow("window", "1", 0, 2, 0),
+            [(0, 2)],
+            [("GENE", "cds", 0, 2), ("GENE", "intronic", 0, 2)],
+            StaticReference("AA"),
+        )
+        self.assertEqual({"cds", "intronic"}, set(rows["partition_id"]))
+        self.assertEqual(12, rows.height)
+
     def test_nested_and_unsorted_masks_do_not_omit_callable_bases(self):
         for mask in ([(0, 10), (3, 5)], [(3, 5), (0, 10)]):
             with self.subTest(mask=mask):

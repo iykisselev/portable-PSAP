@@ -25,6 +25,7 @@ MEMBERSHIP_SCHEMA = {
     "REF": pl.String,
     "ALT": pl.String,
 }
+PARTITION_MEMBERSHIP_SCHEMA = {**MEMBERSHIP_SCHEMA, "partition_id": pl.String}
 _BASE_CODES = np.full(256, -1, dtype=np.int8)
 _BASE_CODES[[ord("A"), ord("C"), ord("G"), ord("T")]] = np.arange(4, dtype=np.int8)
 _BASES = np.array(["A", "C", "G", "T"])
@@ -158,3 +159,23 @@ def membership_rows(
     return (
         memberships.unique(maintain_order=True) if needs_deduplication else memberships
     )
+
+
+def partition_membership_rows(
+    window: GenomeWindow,
+    mask: list[tuple[int, int]],
+    intervals: list[tuple[str, str, int, int]],
+    reference: ReferenceReader,
+) -> pl.DataFrame:
+    """Build SNV memberships while retaining the unit/partition relationship."""
+    frames = []
+    by_partition: dict[str, list[tuple[str, int, int]]] = {}
+    for unit, partition, start, end in intervals:
+        by_partition.setdefault(partition, []).append((unit, start, end))
+    for partition, partition_intervals in by_partition.items():
+        rows = membership_rows(window, mask, partition_intervals, reference)
+        if not rows.is_empty():
+            frames.append(rows.with_columns(pl.lit(partition).alias("partition_id")))
+    if not frames:
+        return pl.DataFrame(schema=PARTITION_MEMBERSHIP_SCHEMA)
+    return pl.concat(frames, how="vertical").select(*PARTITION_MEMBERSHIP_SCHEMA)
