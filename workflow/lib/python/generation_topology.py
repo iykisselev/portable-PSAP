@@ -56,6 +56,9 @@ def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArt
                     prepared_dir / "resolved_partition_intervals.parquet"
                 ),
                 "partition_statuses": str(prepared_dir / "unit_partition_status.parquet"),
+                "testing_unit_id_overlap": str(
+                    prepared_dir / "testing_unit_id_overlap.parquet"
+                ),
             }
         ),
     )

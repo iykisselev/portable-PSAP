@@ -47,6 +47,7 @@ class GenerationScopeOutputs:
     effective_mask: PathLike
     resolved_partition_intervals: PathLike | None = None
     partition_statuses: PathLike | None = None
+    testing_unit_id_overlap: PathLike | None = None
 
 
 @dataclass(frozen=True)

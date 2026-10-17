@@ -32,6 +32,7 @@ from generation_prep import (
     supported_scope_mask,
 )
 from generation_probability import unit_bucket_frame
+from partition_audit import partition_id_overlap_rows
 from partition_scope import build_partition_scope
 from generation_resource_policy import check_unindexed_fixture
 from genomic_contracts import GENERATION_CONTIGS
@@ -382,6 +383,26 @@ def _write_partition_scope_artifacts(
         write_parquet_atomic(
             pl.DataFrame(list(scope.rows)).sort("testing_unit_id", "partition_id"),
             outputs.partition_statuses,
+            params.compression,
+        )
+    if outputs.testing_unit_id_overlap is not None:
+        audit_rows = partition_id_overlap_rows(partitions)
+        schema = {
+            "left_partition_id": pl.String,
+            "right_partition_id": pl.String,
+            "left_unique_id_count": pl.Int64,
+            "right_unique_id_count": pl.Int64,
+            "intersection_count": pl.Int64,
+            "union_count": pl.Int64,
+            "left_overlap_fraction": pl.Float64,
+            "right_overlap_fraction": pl.Float64,
+            "minimum_overlap_fraction": pl.Float64,
+            "empty_set_status": pl.String,
+            "low_overlap_warning": pl.Boolean,
+        }
+        write_parquet_atomic(
+            pl.DataFrame(audit_rows, schema=schema, strict=False),
+            outputs.testing_unit_id_overlap,
             params.compression,
         )
 

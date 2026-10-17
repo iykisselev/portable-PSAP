@@ -132,6 +132,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 effective_mask=directory / "mask.parquet",
                 resolved_partition_intervals=directory / "resolved.parquet",
                 partition_statuses=directory / "partition_statuses.parquet",
+                testing_unit_id_overlap=directory / "id_overlap.parquet",
             )
             with self.assertWarnsRegex(
                 RuntimeWarning, "Ignoring testing-unit contigs.*MT, Y"
@@ -158,6 +159,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 .select("testing_unit_id", "partition_id")
                 .rows(),
             )
+            self.assertEqual(0, pl.read_parquet(outputs.testing_unit_id_overlap).height)
 
     def test_unit_buckets_follow_genomic_order_not_unit_id(self):
         units = pl.DataFrame(

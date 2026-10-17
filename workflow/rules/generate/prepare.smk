@@ -14,6 +14,7 @@ checkpoint prepare_generation_scope:
         effective_mask=GENERATION_CONTEXT.scope_paths["effective_mask"],
         resolved_partition_intervals=GENERATION_CONTEXT.scope_paths["resolved_partition_intervals"],
         partition_statuses=GENERATION_CONTEXT.scope_paths["partition_statuses"],
+        testing_unit_id_overlap=GENERATION_CONTEXT.scope_paths["testing_unit_id_overlap"],
     log:
         str(GENERATION_CONTEXT.plan.log_dir / "prepare_scope.log"),
     conda:
