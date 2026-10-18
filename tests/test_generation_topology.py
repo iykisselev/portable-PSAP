@@ -49,6 +49,10 @@ class GenerationTopologyTests(unittest.TestCase):
         )
         self.assertEqual(1400, layout.bin_count)
         self.assertEqual(("het", "hom", "hem_chrX"), layout.roles)
+        self.assertEqual(
+            str(plan.generation.bundle_dir / "lookup.cds.DOM-het.tsv.gz"),
+            layout.partition_lookup_paths[("cds", "DOM-het")],
+        )
 
     def test_rule_context_keeps_generation_layout_and_inputs_together(self) -> None:
         configuration = merge(

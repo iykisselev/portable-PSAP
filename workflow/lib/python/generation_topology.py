@@ -8,6 +8,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from bundle_contract import fixed_width_bin_count, model_roles
+from partitioned_bundle_contract import bundle_component_paths
 from workflow_plan import (
     GenerationPlan,
     GenerationSettings,
@@ -33,6 +34,7 @@ class GenerationExecutionLayout:
     bin_count: int
     roles: tuple[str, ...]
     bundle_paths: Mapping[str, str]
+    partition_lookup_paths: Mapping[tuple[str, str], str]
 
 
 def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArtifacts:
@@ -81,4 +83,9 @@ def build_generation_execution_layout(
         bin_count=bin_count,
         roles=model_roles(model.hemizygote),
         bundle_paths=generated_bundle_paths(plan.bundle_dir),
+        partition_lookup_paths=bundle_component_paths(
+            plan.bundle_dir,
+            tuple(partition.identifier for partition in plan.testing_unit_partitions),
+            model.hemizygote,
+        ),
     )
