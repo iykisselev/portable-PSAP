@@ -364,8 +364,8 @@ def _write_partition_scope_artifacts(
         float(params.minimum_retained_fraction),
     )
     resolved_rows = [
-        (unit, partition, chromosome, start, end)
-        for partition, units in scope.resolved.items()
+        (unit, partition, order, chromosome, start, end)
+        for order, (partition, units) in enumerate(scope.resolved.items())
         for unit, intervals in units.items()
         for chromosome, start, end in intervals
     ]
@@ -373,7 +373,7 @@ def _write_partition_scope_artifacts(
         write_parquet_atomic(
             pl.DataFrame(
                 resolved_rows,
-                schema=["testing_unit_id", "partition_id", "CHROM", "START", "END"],
+                schema=["testing_unit_id", "partition_id", "partition_order", "CHROM", "START", "END"],
                 orient="row",
             ).sort("CHROM", "START", "END", "testing_unit_id", "partition_id"),
             outputs.resolved_partition_intervals,

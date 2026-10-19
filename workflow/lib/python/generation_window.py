@@ -18,6 +18,7 @@ from generation_indels import (
     INDEL_REJECTION_SCHEMA,
     indel_candidate_memberships,
     indel_score_rows,
+    partitioned_indel_candidate_memberships,
 )
 from io_contracts import write_parquet_atomic
 
@@ -58,7 +59,7 @@ def prepare_generation_window(
             & (pl.col("END") > window.start)
         )
         .join(eligible_pairs.lazy(), on=( ["testing_unit_id", "partition_id"] if partitioned else "testing_unit_id"), how="inner")
-        .select(*(["testing_unit_id", "partition_id", "START", "END"] if partitioned else ["testing_unit_id", "START", "END"]))
+        .select(*(["testing_unit_id", "partition_id", "partition_order", "START", "END"] if partitioned else ["testing_unit_id", "START", "END"]))
         .collect(engine="streaming")
     )
     mask_frame = (
@@ -83,7 +84,12 @@ def prepare_generation_window(
     reference = ReferenceReader(inputs.fasta, inputs.fasta_fai)
     try:
         snv_memberships = (
-            partition_membership_rows(window, mask, intervals, reference)
+            partition_membership_rows(
+                window,
+                mask,
+                [(unit, partition, start, end) for unit, partition, _, start, end in intervals],
+                reference,
+            )
             if partitioned else membership_rows(window, mask, intervals, reference)
         ).with_columns(pl.lit("snv").alias("variant_class"))
         indel_scores = pl.DataFrame(schema=SCORE_SCHEMA)
@@ -92,8 +98,6 @@ def prepare_generation_window(
         if params.include_indels:
             if inputs.score_indel is None:
                 raise ValueError("Indel generation requires an indel score resource")
-            if partitioned and interval_frame.select("partition_id").n_unique() > 1:
-                raise ValueError("Indel partition ownership requires partition-aware candidate assignment")
             all_intervals = interval_frame.select("testing_unit_id", "START", "END").rows()
             indel_mask = mask_frame.rows()
             catalog = indel_score_rows(
@@ -106,14 +110,11 @@ def prepare_generation_window(
                 max_reference_length=params.indel_max_reference_length,
                 max_alternate_length=params.indel_max_alternate_length,
             )
-            indel_memberships, indel_rejections = indel_candidate_memberships(
-                catalog, indel_mask, all_intervals
+            indel_memberships, indel_rejections = (
+                partitioned_indel_candidate_memberships(catalog, indel_mask, interval_frame.rows())
+                if partitioned
+                else indel_candidate_memberships(catalog, indel_mask, all_intervals)
             )
-            if partitioned:
-                partition_id = interval_frame["partition_id"][0] if interval_frame.height else ""
-                indel_memberships = indel_memberships.with_columns(
-                    pl.lit(partition_id).alias("partition_id")
-                )
             indel_scores = catalog.select(*ALLELE_COLUMNS, "score")
     finally:
         reference.close()

@@ -19,6 +19,7 @@ from generation_indels import (  # noqa: E402
     INDEL_SCORE_SCHEMA,
     IndelCandidateError,
     indel_candidate_memberships,
+    partitioned_indel_candidate_memberships,
     indel_score_rows,
 )
 
@@ -92,6 +93,20 @@ class GenerationIndelTests(unittest.TestCase):
             ["span_not_contained_in_calibration_mask"],
             rejected["rejection_reason"].to_list(),
         )
+
+    def test_partitioned_membership_uses_the_earliest_overlapping_owner(self) -> None:
+        candidates = pl.DataFrame(
+            [("1", 10, "AAA", "A", 9, 12, 20.0)], schema=INDEL_SCORE_SCHEMA, orient="row"
+        )
+        memberships, _ = partitioned_indel_candidate_memberships(
+            candidates,
+            mask=[(8, 13)],
+            intervals=[
+                ("unit-a", "cds", 0, 10, 11),
+                ("unit-a", "intronic", 1, 11, 13),
+            ],
+        )
+        self.assertEqual(["cds"], memberships["partition_id"].to_list())
 
 
 if __name__ == "__main__":

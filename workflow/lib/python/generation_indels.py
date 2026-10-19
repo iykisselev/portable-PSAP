@@ -47,6 +47,7 @@ INDEL_MEMBERSHIP_SCHEMA = {
     "SPAN_END": pl.Int64,
     "variant_class": pl.String,
 }
+PARTITIONED_INDEL_MEMBERSHIP_SCHEMA = {**INDEL_MEMBERSHIP_SCHEMA, "partition_id": pl.String}
 
 INDEL_REJECTION_SCHEMA = {
     "CHROM": pl.String,
@@ -238,4 +239,33 @@ def indel_candidate_memberships(
         pl.DataFrame(rejected, schema=INDEL_REJECTION_SCHEMA, strict=False).unique(
             maintain_order=True
         ),
+    )
+
+
+def partitioned_indel_candidate_memberships(
+    candidates: pl.DataFrame,
+    mask: list[tuple[int, int]],
+    intervals: list[tuple[str, str, int, int, int]],
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Assign a span to the earliest resolved partition for each testing unit."""
+    base, rejected = indel_candidate_memberships(
+        candidates, mask, [(unit, start, end) for unit, _, _, start, end in intervals]
+    )
+    memberships = []
+    for row in base.iter_rows(named=True):
+        span_start, span_end = int(row["SPAN_START"]), int(row["SPAN_END"])
+        owners = [
+            (order, partition)
+            for unit, partition, order, start, end in intervals
+            if unit == row["testing_unit_id"] and span_start < end and span_end > start
+        ]
+        if not owners:
+            raise ValueError("Indel membership lost its resolved partition owner")
+        _, partition = min(owners)
+        memberships.append({**row, "partition_id": partition})
+    return (
+        pl.DataFrame(memberships, schema=PARTITIONED_INDEL_MEMBERSHIP_SCHEMA, strict=False).unique(
+            maintain_order=True
+        ),
+        rejected,
     )
