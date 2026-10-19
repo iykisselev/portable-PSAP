@@ -47,6 +47,8 @@ rule prepare_generation_window:
         windows=lambda wc: generation_scope_artifact(wc, "windows"),
         units=lambda wc: generation_scope_artifact(wc, "units"),
         unit_intervals=lambda wc: generation_scope_artifact(wc, "unit_intervals"),
+        resolved_partition_intervals=lambda wc: generation_scope_artifact(wc, "resolved_partition_intervals"),
+        partition_statuses=lambda wc: generation_scope_artifact(wc, "partition_statuses"),
         effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
     output:
         allele_states=str(

@@ -12,7 +12,7 @@ from generation_bindings import (
 from generation_windows import window_from_manifest
 from generation_population import POPULATION_SCHEMA, population_rows
 from generation_prep import intersect_intervals, merge_intervals
-from generation_reference import ReferenceReader, membership_rows
+from generation_reference import ReferenceReader, membership_rows, partition_membership_rows
 from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
 from generation_indels import (
     INDEL_REJECTION_SCHEMA,
@@ -37,21 +37,28 @@ def prepare_generation_window(
         if params.include_indels
         else window.end
     )
-    eligible_units = (
-        pl.scan_parquet(inputs.units)
+    partitioned = (
+        inputs.resolved_partition_intervals is not None
+        and inputs.partition_statuses is not None
+    )
+    interval_source = inputs.resolved_partition_intervals if partitioned else inputs.unit_intervals
+    eligible_pairs = (
+        pl.scan_parquet(inputs.partition_statuses)
         .filter(pl.col("status") == "eligible")
-        .select("testing_unit_id")
+        .select("testing_unit_id", "partition_id")
         .collect(engine="streaming")
+        if partitioned
+        else pl.scan_parquet(inputs.units).filter(pl.col("status") == "eligible").select("testing_unit_id").collect(engine="streaming")
     )
     interval_frame = (
-        pl.scan_parquet(inputs.unit_intervals)
+        pl.scan_parquet(interval_source)
         .filter(
             (pl.col("CHROM") == window.chromosome)
             & (pl.col("START") < halo_end)
             & (pl.col("END") > window.start)
         )
-        .join(eligible_units.lazy(), on="testing_unit_id", how="inner")
-        .select("testing_unit_id", "START", "END")
+        .join(eligible_pairs.lazy(), on=( ["testing_unit_id", "partition_id"] if partitioned else "testing_unit_id"), how="inner")
+        .select(*(["testing_unit_id", "partition_id", "START", "END"] if partitioned else ["testing_unit_id", "START", "END"]))
         .collect(engine="streaming")
     )
     mask_frame = (
@@ -75,8 +82,9 @@ def prepare_generation_window(
     )
     reference = ReferenceReader(inputs.fasta, inputs.fasta_fai)
     try:
-        snv_memberships = membership_rows(
-            window, mask, intervals, reference
+        snv_memberships = (
+            partition_membership_rows(window, mask, intervals, reference)
+            if partitioned else membership_rows(window, mask, intervals, reference)
         ).with_columns(pl.lit("snv").alias("variant_class"))
         indel_scores = pl.DataFrame(schema=SCORE_SCHEMA)
         indel_memberships = pl.DataFrame(schema=snv_memberships.schema)
@@ -84,7 +92,9 @@ def prepare_generation_window(
         if params.include_indels:
             if inputs.score_indel is None:
                 raise ValueError("Indel generation requires an indel score resource")
-            all_intervals = interval_frame.rows()
+            if partitioned and interval_frame.select("partition_id").n_unique() > 1:
+                raise ValueError("Indel partition ownership requires partition-aware candidate assignment")
+            all_intervals = interval_frame.select("testing_unit_id", "START", "END").rows()
             indel_mask = mask_frame.rows()
             catalog = indel_score_rows(
                 inputs.score_indel,
@@ -99,6 +109,11 @@ def prepare_generation_window(
             indel_memberships, indel_rejections = indel_candidate_memberships(
                 catalog, indel_mask, all_intervals
             )
+            if partitioned:
+                partition_id = interval_frame["partition_id"][0] if interval_frame.height else ""
+                indel_memberships = indel_memberships.with_columns(
+                    pl.lit(partition_id).alias("partition_id")
+                )
             indel_scores = catalog.select(*ALLELE_COLUMNS, "score")
     finally:
         reference.close()
@@ -126,7 +141,7 @@ def prepare_generation_window(
         )
         return
     candidate_intervals = intersect_intervals(
-        [(start, end) for _, start, end in intervals], mask
+        [(row[-2], row[-1]) for row in intervals], mask
     )
     # Indel membership can be earned by a span that overlaps a unit even when
     # its VCF anchor is just outside that unit's callable bases.  Retain each

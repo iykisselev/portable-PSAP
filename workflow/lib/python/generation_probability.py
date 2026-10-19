@@ -87,7 +87,7 @@ def statistics_for_role(
             probability.alias("q"), fixed_width_bin_expression(score_max, bin_width)
         )
         .filter(pl.col("q") > 0)
-        .group_by("testing_unit_id", "unit_bucket", "bin")
+        .group_by("testing_unit_id", "partition_id", "unit_bucket", "bin")
         .agg(
             (pl.col("q") == 1).cast(pl.Int64).sum().alias("certain_count"),
             pl.when(pl.col("q") < 1)
@@ -108,6 +108,7 @@ def statistics_for_role(
         .with_columns(pl.lit(role).alias("role"))
         .select(
             "testing_unit_id",
+            "partition_id",
             "unit_bucket",
             "role",
             "bin",
@@ -122,6 +123,7 @@ def statistics_for_role(
 
 AGGREGATED_STATISTICS_SCHEMA = {
     "testing_unit_id": pl.String,
+    "partition_id": pl.String,
     "role": pl.String,
     "bin": pl.Int64,
     "certain_count": pl.Int64,
@@ -143,7 +145,7 @@ def aggregate_statistics_vectorized(files: list[Path]) -> pl.DataFrame:
         return pl.DataFrame(schema=AGGREGATED_STATISTICS_SCHEMA)
     return (
         pl.concat([pl.scan_parquet(path) for path in files], how="vertical")
-        .group_by("testing_unit_id", "role", "bin")
+        .group_by("testing_unit_id", "partition_id", "role", "bin")
         .agg(
             pl.col("certain_count").sum().alias("certain_count"),
             pl.map_groups(

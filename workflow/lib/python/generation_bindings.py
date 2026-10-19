@@ -74,6 +74,8 @@ class GenerationWindowInputs:
     score_snv_index: PathLike | None
     fasta: PathLike
     fasta_fai: PathLike
+    resolved_partition_intervals: PathLike | None = None
+    partition_statuses: PathLike | None = None
     score_indel: PathLike | None = None
     score_indel_index: PathLike | None = None
 
