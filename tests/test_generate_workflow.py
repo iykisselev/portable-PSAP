@@ -44,6 +44,11 @@ class GenerateWorkflowFixtureTests(unittest.TestCase):
                 metadata["model_assumptions"]["x_chromosome"]["mutation_rate_policy"],
             )
             self.assertIn("population_af_zero_imputations", metadata["components"])
+            partition_lookups = [
+                key for key in metadata["components"] if key.startswith("lookup.cds.")
+            ]
+            self.assertEqual(5, len(partition_lookups))
+            self.assertTrue((bundle / "lookup.cds.DOM-het.tsv.gz").is_file())
             self.assertTrue(
                 (bundle / "population_af_zero_imputations.tsv.gz").is_file()
             )

@@ -171,6 +171,7 @@ class BundleFinalizationOutputs:
     population_af_zero_imputations: PathLike
     excluded_units: PathLike
     metadata: PathLike
+    partition_lookups: tuple[PathLike, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -194,6 +195,7 @@ class BundleFinalizationParameters:
     indel_mask_policy: str
     indel_max_reference_length: int
     indel_max_alternate_length: int
+    partition_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

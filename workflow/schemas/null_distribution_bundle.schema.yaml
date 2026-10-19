@@ -93,6 +93,8 @@ properties:
   components:
     type: object
     additionalProperties: false
+    patternProperties:
+      "^lookup\\.[A-Za-z0-9][A-Za-z0-9_-]*\\.(DOM-het|REC-hom|X-linked-hom|X-linked-het|X-linked-hem)$": {$ref: "#/$defs/component"}
     required:
       - lookup_het
       - lookup_hom

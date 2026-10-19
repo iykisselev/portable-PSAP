@@ -26,7 +26,7 @@ from bundle_contract import (
     model_roles,
 )
 from io_contracts import GzipTsvAtomicWriter, write_gzip_tsv_atomic, write_json_atomic
-from model_catalog import models_for_chromosome, validate_status
+from model_catalog import enabled_models, models_for_chromosome, validate_status
 
 
 def applicable_roles(unit_row, hemizygote: bool) -> tuple[str, ...]:
@@ -358,6 +358,32 @@ def finalize_generated_bundle(
             raise ValueError(
                 "HEM lookup rows do not exactly cover surviving chromosome-X testing units"
             )
+    expected_lookup_count = len(params.partition_ids) * len(enabled_models(params.hemizygote))
+    if outputs.partition_lookups and len(outputs.partition_lookups) != expected_lookup_count:
+        raise ValueError("Partition/model lookup output count does not match the bundle layout")
+    partition_components = {}
+    if outputs.partition_lookups:
+        if len(params.partition_ids) != 1:
+            raise ValueError("Partition-aware finalization is required for N > 1")
+        partition_id = params.partition_ids[0]
+        role_inputs = {
+            "het": inputs.lookup_het,
+            "hom": inputs.lookup_hom,
+            "hem_chrX": inputs.lookup_hem_chrX,
+        }
+        model_outputs = iter(outputs.partition_lookups)
+        for model in enabled_models(params.hemizygote):
+            allowed_units = eligible_x_units if model.scope == "non_PAR_chrX" else (
+                eligible_set - eligible_x_units
+            )
+            _, inventory = write_gzip_tsv_atomic(
+                next(model_outputs),
+                header,
+                lookup_rows(role_inputs[model.role], allowed_units),
+            )
+            # Keep the descriptor materialized in metadata until the complete
+            # partitioned certificate replaces the role-based contract.
+            partition_components[f"lookup.{partition_id}.{model.identifier}"] = inventory
     _, excluded_units = write_gzip_tsv_atomic(
         outputs.excluded_units, ["testing_unit_id", "exclusion_reason"], excluded
     )
@@ -397,6 +423,7 @@ def finalize_generated_bundle(
     if params.hemizygote:
         assert lookup_hem_chrX is not None
         components["lookup_hem_chrX"] = lookup_hem_chrX
+    components.update(partition_components)
     metadata = {
         "schema_version": (
             INDEL_GENERATED_BUNDLE_SCHEMA_VERSION

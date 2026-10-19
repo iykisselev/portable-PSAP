@@ -20,6 +20,10 @@ rule finalize_null_distribution_bundle:
             name: ensure(path, non_empty=True) if path else []
             for name, path in GENERATION_CONTEXT.bundle_outputs().items()
         },
+        partition_lookups=[
+            ensure(path, non_empty=True)
+            for path in GENERATION_CONTEXT.execution_layout.partition_lookup_paths.values()
+        ],
     log:
         str(GENERATION_CONTEXT.plan.log_dir / "finalize.log"),
     conda:
@@ -55,6 +59,7 @@ rule finalize_null_distribution_bundle:
             name: dict(identity)
             for name, identity in GENERATION_CONTEXT.bundle_resource_identities.items()
         },
+        partition_ids=tuple(partition.identifier for partition in GENERATION_CONTEXT.plan.testing_unit_partitions),
     script:
         str(GENERATION_SCRIPT_DIR / "finalize_bundle.py")
 
