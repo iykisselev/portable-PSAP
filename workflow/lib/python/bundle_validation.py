@@ -12,12 +12,8 @@ import yaml
 
 from generation_bindings import BundleValidationInputs, BundleValidationOutputs
 from bundle_certificate import BundleCertificateError, validate_bundle_component
-from bundle_contract import (
-    HEM_COMPONENT,
-    fixed_width_bin_count,
-)
-from indel_bundle_contract import validate_indel_bundle_metadata
-from genomic_contracts import canonical_chromosome
+from bundle_contract import fixed_width_bin_count
+from model_catalog import enabled_models, models_for_chromosome
 from io_contracts import open_text, sha256_file, write_text_atomic
 
 
@@ -70,60 +66,84 @@ def validate_generated_bundle(
     inputs: BundleValidationInputs, outputs: BundleValidationOutputs
 ) -> None:
     """Verify bytes and semantic row contracts before writing the marker last."""
+    if inputs.metadata is None or inputs.schema is None:
+        raise ValueError("Partitioned bundle validation requires metadata and schema")
     metadata_path = Path(inputs.metadata)
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     schema = yaml.safe_load(Path(inputs.schema).read_text(encoding="utf-8"))
     jsonschema.Draft202012Validator(schema).validate(metadata)
-    if metadata["contract"] == "generated_bundle_v3":
-        validate_indel_bundle_metadata(metadata)
+    if metadata["contract"] != "partitioned_null_bundle_v1":
+        raise ValueError("Only partitioned_null_bundle_v1 may be certified")
     binning = metadata["binning"]
     expected_count = fixed_width_bin_count(binning["score_max"], binning["bin_width"])
     if binning["bin_count"] != expected_count:
         raise ValueError(
             "Bundle bin_count is inconsistent with score_max and bin_width"
         )
+    partitions = metadata["partitions"]
+    partition_ids = [entry["id"] for entry in partitions]
+    if partition_ids != list(dict.fromkeys(partition_ids)):
+        raise ValueError("Bundle partition IDs must be unique and ordered")
+    if [entry["order"] for entry in partitions] != list(range(len(partitions))):
+        raise ValueError("Bundle partition orders must be contiguous from zero")
+    hemizygote = "hem_chrX" in metadata["model_assumptions"]["roles"]
+    expected_lookup_count = len(partitions) * len(enabled_models(hemizygote))
+    if len(inputs.partition_lookups) != expected_lookup_count:
+        raise ValueError("Partition/model lookup input count does not match metadata")
+    if len(inputs.resolved_partitions) != len(partitions) or len(inputs.eligible_partitions) != len(partitions):
+        raise ValueError("Partition BED input count does not match metadata")
+    if inputs.partition_statuses is None or inputs.testing_unit_id_overlap is None:
+        raise ValueError("Partitioned bundle validation requires scope audit components")
     components = {
-        "lookup_het": inputs.lookup_het,
-        "lookup_hom": inputs.lookup_hom,
-        "eligible_testing_units": inputs.eligible_bed,
         "calibration_regions": inputs.calibration_regions,
         "excluded_alleles": inputs.excluded_alleles,
         "candidate_audit": inputs.candidate_audit,
         "population_af_zero_imputations": inputs.population_af_zero_imputations,
-        "excluded_units": inputs.excluded_units,
+        "unit_partition_status": inputs.partition_statuses,
+        "testing_unit_id_overlap": inputs.testing_unit_id_overlap,
     }
-    hemizygote = "hem_chrX" in metadata["model_assumptions"]["roles"]
-    if hemizygote:
-        components[HEM_COMPONENT] = inputs.lookup_hem_chrX
+    lookup_inputs = iter(inputs.partition_lookups)
+    resolved_inputs = iter(inputs.resolved_partitions)
+    eligible_inputs = iter(inputs.eligible_partitions)
+    for partition in partitions:
+        components[partition["resolved_component"]] = next(resolved_inputs)
+        components[partition["eligible_component"]] = next(eligible_inputs)
+        for model in enabled_models(hemizygote):
+            components[partition["lookups"].get(model.identifier)] = next(lookup_inputs)
     for name, path in components.items():
         try:
             validate_bundle_component(name, path, metadata)
         except BundleCertificateError as exc:
             raise ValueError(str(exc)) from exc
-    lookup_ids = {
-        role: validate_lookup(components[f"lookup_{role}"], binning["bin_count"])
-        for role in ("het", "hom")
-    }
-    unit_chromosomes = eligible_units(components["eligible_testing_units"])
-    expected_ids = set(unit_chromosomes)
-    if not expected_ids:
-        raise ValueError("Bundle contains no eligible testing units")
-    if lookup_ids["het"] != expected_ids or lookup_ids["hom"] != expected_ids:
-        raise ValueError("Lookup role IDs do not exactly match eligible testing units")
-    if hemizygote:
-        expected_x_ids = {
-            unit
-            for unit, chromosomes in unit_chromosomes.items()
-            if chromosomes == {"X"}
+    status_rows = []
+    with open_text(inputs.partition_statuses, newline="", require_gzip=True) as handle:
+        status_rows = list(csv.DictReader(handle, delimiter="\t"))
+    eligible_by_partition = {
+        partition: {
+            row["testing_unit_id"]: row["CHROM"]
+            for row in status_rows
+            if row["partition_id"] == partition and row["status"] == "eligible"
         }
-        hem_ids = validate_lookup(components[HEM_COMPONENT], binning["bin_count"])
-        if not expected_x_ids or hem_ids != expected_x_ids:
-            raise ValueError(
-                "HEM lookup IDs do not exactly match eligible non-PAR chromosome-X testing units"
-            )
+        for partition in partition_ids
+    }
+    for partition in partitions:
+        ids_by_model = {
+            model.identifier: validate_lookup(
+                components[partition["lookups"][model.identifier]], binning["bin_count"]
+            ) for model in enabled_models(hemizygote)
+        }
+        for model in enabled_models(hemizygote):
+            expected = {
+                unit for unit, chromosome in eligible_by_partition[partition["id"]].items()
+                if any(item.identifier == model.identifier for item in models_for_chromosome(chromosome, hemizygote))
+            }
+            if ids_by_model[model.identifier] != expected:
+                raise ValueError(
+                    f"Lookup membership differs from eligible scope for {partition['id']}/{model.identifier}"
+                )
     observed_counts = {
-        "eligible_units": len(expected_ids),
-        "excluded_units": data_row_count(components["excluded_units"]),
+        "eligible_pairs": sum(len(value) for value in eligible_by_partition.values()),
+        "declared_pairs": len(status_rows),
         "excluded_alleles": data_row_count(components["excluded_alleles"]),
         "calibration_intervals": data_row_count(components["calibration_regions"]),
         "population_af_zero_imputations": data_row_count(

@@ -63,6 +63,9 @@ rule reduce_null_distribution_bucket:
         diagnostics=str(
             GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.diagnostics.tsv"
         ),
+        partition_model_diagnostics=str(
+            GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.partition-model-diagnostics.tsv"
+        ),
         partition_model_lookups=[
             str(GENERATION_CONTEXT.lookup_bucket_dir / f"{{bucket}}.{partition_id}.{model_id}.tsv")
             for partition_id, model_id in GENERATION_CONTEXT.execution_layout.partition_lookup_paths

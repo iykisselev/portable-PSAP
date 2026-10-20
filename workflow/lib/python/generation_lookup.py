@@ -31,32 +31,29 @@ def reduce_window_statistics(
     statistics = aggregate_statistics_vectorized(
         [Path(path) for path in inputs.window_statistics]
     )
-    lookup_rows, diagnostics = vectorized_lookup_rows(
-        statistics, units, params.roles, params.bin_count
-    )
     header = [
         "testing_unit_id",
         *[str(value) for value in range(1, params.bin_count + 1)],
     ]
+    # The old role-wide files cannot represent the same testing unit in more
+    # than one biological partition.  Keep them as empty compatibility
+    # artifacts only while the Snakemake graph is migrated; publication uses
+    # the partition/model rows below.
+    if statistics.get_column("partition_id").n_unique() <= 1:
+        lookup_rows, diagnostics = vectorized_lookup_rows(
+            statistics.drop("partition_id"), units, params.roles, params.bin_count
+        )
+    else:
+        lookup_rows = {role: [] for role in params.roles}
+        diagnostics = []
     write_tsv_atomic(outputs.lookup_het, header, lookup_rows["het"])
     write_tsv_atomic(outputs.lookup_hom, header, lookup_rows["hom"])
     if outputs.lookup_hem_chrX:
-        write_tsv_atomic(
-            outputs.lookup_hem_chrX, header, lookup_rows.get("hem_chrX", [])
-        )
-    write_tsv_atomic(
-        outputs.diagnostics,
-        [
-            "testing_unit_id",
-            "role",
-            "event_mass",
-            "status",
-            "event_count",
-            "snv_event_count",
-            "indel_event_count",
-        ],
-        diagnostics,
-    )
+        write_tsv_atomic(outputs.lookup_hem_chrX, header, lookup_rows.get("hem_chrX", []))
+    write_tsv_atomic(outputs.diagnostics, [
+        "testing_unit_id", "role", "event_mass", "status", "event_count",
+        "snv_event_count", "indel_event_count",
+    ], diagnostics)
     if outputs.partition_model_lookups:
         if len(outputs.partition_model_lookups) != len(params.partition_lookup_keys):
             raise ValueError("Partition/model bucket lookup outputs do not match keys")
@@ -72,7 +69,7 @@ def reduce_window_statistics(
             .collect(engine="streaming")
             .to_dicts()
         )
-        model_rows, _ = partition_model_lookup_rows(
+        model_rows, model_diagnostics = partition_model_lookup_rows(
             statistics, pairs, hemizygote="hem_chrX" in params.roles, bin_count=params.bin_count
         )
         for path, key in zip(
@@ -80,3 +77,16 @@ def reduce_window_statistics(
         ):
             partition_id, model_id = key.split("\t", 1)
             write_tsv_atomic(path, header, model_rows[(partition_id, model_id)])
+        if outputs.partition_model_diagnostics is None:
+            raise ValueError("Partition/model lookup reduction requires diagnostics output")
+        write_tsv_atomic(
+            outputs.partition_model_diagnostics,
+            [
+                "partition_id", "model", "testing_unit_id", "role", "event_mass",
+                "status", "event_count", "snv_event_count", "indel_event_count",
+            ],
+            ([row[column] for column in (
+                "partition_id", "model", "testing_unit_id", "role", "event_mass",
+                "status", "event_count", "snv_event_count", "indel_event_count",
+            )] for row in model_diagnostics),
+        )

@@ -142,6 +142,7 @@ class LookupReductionOutputs:
     lookup_hem_chrX: PathLike | None
     diagnostics: PathLike
     partition_model_lookups: tuple[PathLike, ...] = ()
+    partition_model_diagnostics: PathLike | None = None
 
 
 @dataclass(frozen=True)
@@ -153,30 +154,28 @@ class LookupReductionParameters:
 
 @dataclass(frozen=True)
 class BundleFinalizationInputs:
-    lookup_het: tuple[PathLike, ...]
-    lookup_hom: tuple[PathLike, ...]
-    lookup_hem_chrX: tuple[PathLike, ...]
-    diagnostics: tuple[PathLike, ...]
-    units: PathLike
-    masked_unit_intervals: PathLike
     allele_states: tuple[PathLike, ...]
     candidate_audit: tuple[PathLike, ...]
     effective_mask: PathLike
+    partition_model_lookups: tuple[PathLike, ...] = ()
+    partition_model_diagnostics: tuple[PathLike, ...] = ()
+    resolved_partition_intervals: PathLike | None = None
+    partition_statuses: PathLike | None = None
+    testing_unit_id_overlap: PathLike | None = None
 
 
 @dataclass(frozen=True)
 class BundleFinalizationOutputs:
-    lookup_het: PathLike
-    lookup_hom: PathLike
-    lookup_hem_chrX: PathLike | None
-    eligible_bed: PathLike
     calibration_regions: PathLike
     excluded_alleles: PathLike
     candidate_audit: PathLike
     population_af_zero_imputations: PathLike
-    excluded_units: PathLike
     metadata: PathLike
     partition_lookups: tuple[PathLike, ...] = ()
+    resolved_partitions: tuple[PathLike, ...] = ()
+    eligible_partitions: tuple[PathLike, ...] = ()
+    partition_statuses: PathLike | None = None
+    testing_unit_id_overlap: PathLike | None = None
 
 
 @dataclass(frozen=True)
@@ -201,21 +200,22 @@ class BundleFinalizationParameters:
     indel_max_reference_length: int
     indel_max_alternate_length: int
     partition_ids: tuple[str, ...] = ()
+    partition_lookup_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class BundleValidationInputs:
-    lookup_het: PathLike
-    lookup_hom: PathLike
-    lookup_hem_chrX: PathLike | None
-    eligible_bed: PathLike
     calibration_regions: PathLike
     excluded_alleles: PathLike
     candidate_audit: PathLike
     population_af_zero_imputations: PathLike
-    excluded_units: PathLike
     metadata: PathLike
     schema: PathLike
+    partition_statuses: PathLike
+    testing_unit_id_overlap: PathLike
+    partition_lookups: tuple[PathLike, ...] = ()
+    resolved_partitions: tuple[PathLike, ...] = ()
+    eligible_partitions: tuple[PathLike, ...] = ()
 
 
 @dataclass(frozen=True)

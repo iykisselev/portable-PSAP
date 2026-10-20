@@ -61,7 +61,12 @@ def partition_model_lookup_rows(
                     "partition_id": partition_id,
                     "model": model.identifier,
                     "testing_unit_id": row[0],
+                    "role": row[1],
+                    "event_mass": row[2],
                     "status": row[3],
+                    "event_count": row[4],
+                    "snv_event_count": row[5],
+                    "indel_event_count": row[6],
                 }
                 for row in model_diagnostics
             )

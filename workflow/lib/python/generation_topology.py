@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from bundle_contract import fixed_width_bin_count, model_roles
-from partitioned_bundle_contract import bundle_component_paths
+from partitioned_bundle_contract import bundle_component_paths, require_partition_id
 from workflow_plan import (
     GenerationPlan,
     GenerationSettings,
@@ -35,6 +35,8 @@ class GenerationExecutionLayout:
     roles: tuple[str, ...]
     bundle_paths: Mapping[str, str]
     partition_lookup_paths: Mapping[tuple[str, str], str]
+    resolved_partition_paths: Mapping[str, str]
+    eligible_partition_paths: Mapping[str, str]
 
 
 def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArtifacts:
@@ -87,5 +89,21 @@ def build_generation_execution_layout(
             plan.bundle_dir,
             tuple(partition.identifier for partition in plan.testing_unit_partitions),
             model.hemizygote,
+        ),
+        resolved_partition_paths=MappingProxyType(
+            {
+                partition.identifier: str(
+                    plan.bundle_dir / f"resolved.{require_partition_id(partition.identifier)}.bed.gz"
+                )
+                for partition in plan.testing_unit_partitions
+            }
+        ),
+        eligible_partition_paths=MappingProxyType(
+            {
+                partition.identifier: str(
+                    plan.bundle_dir / f"eligible.{require_partition_id(partition.identifier)}.bed.gz"
+                )
+                for partition in plan.testing_unit_partitions
+            }
         ),
     )

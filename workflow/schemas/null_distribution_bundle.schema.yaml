@@ -1,34 +1,15 @@
 $schema: "https://json-schema.org/draft/2020-12/schema"
-title: Portable PSAP generated null-distribution bundle
+title: Portable PSAP partitioned null-distribution bundle
 type: object
 additionalProperties: false
-required:
-  - schema_version
-  - contract
-  - assembly
-  - contig_convention
-  - testing_unit_type
-  - binning
-  - model_assumptions
-  - counts
-  - resource_identities
-  - components
-  - validation_artifacts
+required: [schema_version, contract, assembly, contig_convention, testing_unit_type, binning, model_assumptions, partitions, overlap_policy, indel_assignment_policy, counts, resource_identities, components, validation_artifacts]
 properties:
-  schema_version: {enum: [1, 2, 3]}
-  contract: {enum: [generated_bundle_v1, generated_bundle_v2, generated_bundle_v3]}
+  schema_version: {const: 1}
+  contract: {const: partitioned_null_bundle_v1}
   assembly: {enum: [GRCh37, GRCh38]}
   contig_convention: {const: canonical_without_chr_prefix}
   testing_unit_type: {enum: [gene, cadd_region, coding_cadd_region]}
-  af_info_tag: {type: string, minLength: 1}
-  af_info_tags:
-    type: object
-    additionalProperties: false
-    required: [overall]
-    properties:
-      overall: {type: string, minLength: 1}
-      female: {type: [string, "null"]}
-      male: {type: [string, "null"]}
+  af_info_tags: {type: object, required: [overall]}
   binning:
     type: object
     additionalProperties: false
@@ -39,98 +20,45 @@ properties:
       bin_width: {type: number, exclusiveMinimum: 0}
       bin_count: {type: integer, minimum: 1}
       maximum_in_final_bin: {const: true}
-  model_assumptions:
-    type: object
-    additionalProperties: false
-    required:
-      - roles
-      - variant_classes
-      - unobserved_policy
-      - mutation_conversion
-      - allele_events_independent
-      - par_policy
-      - hemizygote_role
-    properties:
-      roles:
-        type: array
-        items: {enum: [het, hom, hem_chrX]}
-        minItems: 2
-        uniqueItems: true
-      variant_classes:
-        type: array
-        oneOf:
-          - const: [snv]
-          - const: [snv, indel]
-      unobserved_policy: {enum: [zero, mutation_rate]}
-      mutation_conversion: {type: [string, "null"]}
-      allele_events_independent: {const: true}
-      par_policy: {const: excluded_before_event_assignment}
-      minimum_retained_fraction: {type: number, minimum: 0, maximum: 1}
-      retention_denominator: {const: supported_non_PAR_unit_bases_before_interval_exclusions}
-      hemizygote_role: {type: [string, "null"], minLength: 1}
-      x_chromosome:
-        type: object
-        additionalProperties: false
-        required: [af_policy, mutation_rate_policy, hemizygote_scope]
-        properties:
-          af_policy: {enum: [sex_specific, overall_proxy]}
-          mutation_rate_policy: {enum: [reject, sex_averaged_proxy]}
-          hemizygote_scope: {const: non_PAR_chrX_only}
+  model_assumptions: {type: object}
+  partitions:
+    type: array
+    minItems: 1
+    items:
+      type: object
+      additionalProperties: false
+      required: [id, order, source_identity, resolved_component, eligible_component, lookups, pair_counts]
+      properties:
+        id: {type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$"}
+        order: {type: integer, minimum: 0}
+        source_identity: {type: string, minLength: 1}
+        resolved_component: {type: string, pattern: "^resolved\\."}
+        eligible_component: {type: string, pattern: "^eligible\\."}
+        lookups: {type: object, minProperties: 4}
+        pair_counts:
+          type: object
+          additionalProperties: false
+          required: [declared, eligible]
+          properties:
+            declared: {type: integer, minimum: 0}
+            eligible: {type: integer, minimum: 0}
+  overlap_policy: {const: earlier_partition_owns_overlapping_bases_v1}
+  indel_assignment_policy: {const: first_overlapping_resolved_partition_v1}
   counts:
     type: object
     additionalProperties: false
-    required: [eligible_units, excluded_units, excluded_alleles, calibration_intervals]
+    required: [eligible_pairs, declared_pairs, excluded_alleles, calibration_intervals, population_af_zero_imputations]
     properties:
-      eligible_units: {type: integer, minimum: 0}
-      excluded_units: {type: integer, minimum: 0}
+      eligible_pairs: {type: integer, minimum: 0}
+      declared_pairs: {type: integer, minimum: 0}
       excluded_alleles: {type: integer, minimum: 0}
       calibration_intervals: {type: integer, minimum: 0}
       population_af_zero_imputations: {type: integer, minimum: 0}
-  resource_identities:
-    type: object
-    minProperties: 6
-    additionalProperties: {$ref: "#/$defs/resource"}
+  resource_identities: {type: object}
   components:
     type: object
-    additionalProperties: false
-    patternProperties:
-      "^lookup\\.[A-Za-z0-9][A-Za-z0-9_-]*\\.(DOM-het|REC-hom|X-linked-hom|X-linked-het|X-linked-hem)$": {$ref: "#/$defs/component"}
-    required:
-      - lookup_het
-      - lookup_hom
-      - eligible_testing_units
-      - calibration_regions
-      - excluded_alleles
-      - excluded_units
-    properties:
-      lookup_het: {$ref: "#/$defs/component"}
-      lookup_hom: {$ref: "#/$defs/component"}
-      lookup_hem_chrX: {$ref: "#/$defs/component"}
-      eligible_testing_units: {$ref: "#/$defs/component"}
-      calibration_regions: {$ref: "#/$defs/component"}
-      excluded_alleles: {$ref: "#/$defs/component"}
-      population_af_zero_imputations: {$ref: "#/$defs/component"}
-      candidate_audit: {$ref: "#/$defs/component"}
-      excluded_units: {$ref: "#/$defs/component"}
-  indel_universe:
-    type: object
-    additionalProperties: false
-    required: [candidate_universe, normalization, reference_span, membership, mask_policy, max_reference_length, max_alternate_length]
-    properties:
-      candidate_universe: {const: score_resource}
-      normalization: {const: vcf_minimal_left_aligned_v1}
-      reference_span: {const: zero_based_half_open_ref_span_v1}
-      membership: {const: reference_span_overlap}
-      mask_policy: {const: reference_span_contained}
-      max_reference_length: {type: integer, minimum: 1}
-      max_alternate_length: {type: integer, minimum: 1}
-  variant_class_counts:
-    type: object
-    additionalProperties: false
-    required: [snv, indel]
-    properties:
-      snv: {$ref: "#/$defs/variant_class_count"}
-      indel: {$ref: "#/$defs/variant_class_count"}
+    minProperties: 1
+    additionalProperties: {$ref: "#/$defs/component"}
   validation_artifacts:
     type: object
     additionalProperties: false
@@ -139,79 +67,11 @@ properties:
       report: {const: validation.json}
       marker: {const: validation.ok}
 $defs:
-  sha256: {type: string, pattern: "^[0-9a-f]{64}$"}
-  resource:
-    type: object
-    additionalProperties: false
-    required: [identity, path]
-    properties:
-      identity: {type: string, minLength: 1}
-      path: {type: string, minLength: 1}
-      # Older bundles may carry this optional source digest; new bundles do not
-      # hash large raw inputs before publication.
-      sha256: {$ref: "#/$defs/sha256"}
   component:
     type: object
     additionalProperties: false
     required: [path, sha256, bytes]
     properties:
       path: {type: string, minLength: 1, pattern: "^[^/]+$"}
-      sha256: {$ref: "#/$defs/sha256"}
+      sha256: {type: string, pattern: "^[0-9a-f]{64}$"}
       bytes: {type: integer, minimum: 1}
-  variant_class_count:
-    type: object
-    additionalProperties: false
-    required: [retained, rejected, observed, absent]
-    properties:
-      retained: {type: integer, minimum: 0}
-      rejected: {type: integer, minimum: 0}
-      observed: {type: integer, minimum: 0}
-      absent: {type: integer, minimum: 0}
-allOf:
-  - if:
-      properties: {contract: {const: generated_bundle_v1}}
-      required: [contract]
-    then:
-      required: [af_info_tag]
-      properties: {schema_version: {const: 1}}
-  - if:
-      properties: {contract: {const: generated_bundle_v2}}
-      required: [contract]
-    then:
-      required: [af_info_tags]
-      properties:
-        schema_version: {const: 2}
-        model_assumptions: {required: [x_chromosome]}
-  - if:
-      properties: {contract: {const: generated_bundle_v3}}
-      required: [contract]
-    then:
-      required: [indel_universe, variant_class_counts]
-      properties:
-        schema_version: {const: 3}
-        model_assumptions:
-          properties: {variant_classes: {const: [snv, indel]}}
-        resource_identities: {required: [score_snv, score_indel]}
-        components: {required: [candidate_audit]}
-  - if:
-      properties:
-        model_assumptions:
-          properties:
-            roles: {contains: {const: hem_chrX}}
-          required: [roles]
-      required: [model_assumptions]
-    then:
-      properties:
-        components: {required: [lookup_hem_chrX]}
-        model_assumptions:
-          properties: {hemizygote_role: {const: hem_chrX}}
-  - if:
-      properties:
-        components: {required: [lookup_hem_chrX]}
-      required: [components]
-    then:
-      properties:
-        model_assumptions:
-          properties:
-            roles: {contains: {const: hem_chrX}}
-          required: [roles]

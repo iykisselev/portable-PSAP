@@ -4,17 +4,14 @@
 rule finalize_null_distribution_bundle:
     """Render public bundle files from direct bucket lookup rows."""
     input:
-        lookup_het=lambda wc: generation_bucket_artifacts(wc, "lookup_het"),
-        lookup_hom=lambda wc: generation_bucket_artifacts(wc, "lookup_hom"),
-        lookup_hem_chrX=lambda wc: generation_bucket_artifacts(wc, "lookup_hem_chrX"),
-        diagnostics=lambda wc: generation_bucket_artifacts(wc, "diagnostics"),
-        units=lambda wc: generation_scope_artifact(wc, "units"),
-        masked_unit_intervals=lambda wc: generation_scope_artifact(
-            wc, "masked_unit_intervals"
-        ),
         allele_states=lambda wc: generation_window_artifacts(wc, "allele_states"),
         candidate_audit=lambda wc: generation_window_artifacts(wc, "candidate_audit"),
         effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
+        partition_model_lookups=generation_bucket_partition_model_artifacts,
+        partition_model_diagnostics=lambda wc: generation_bucket_artifacts(wc, "partition_model_diagnostics"),
+        resolved_partition_intervals=lambda wc: generation_scope_artifact(wc, "resolved_partition_intervals"),
+        partition_statuses=lambda wc: generation_scope_artifact(wc, "partition_statuses"),
+        testing_unit_id_overlap=lambda wc: generation_scope_artifact(wc, "testing_unit_id_overlap"),
     output:
         **{
             name: ensure(path, non_empty=True) if path else []
@@ -23,6 +20,14 @@ rule finalize_null_distribution_bundle:
         partition_lookups=[
             ensure(path, non_empty=True)
             for path in GENERATION_CONTEXT.execution_layout.partition_lookup_paths.values()
+        ],
+        resolved_partitions=[
+            ensure(path, non_empty=True)
+            for path in GENERATION_CONTEXT.execution_layout.resolved_partition_paths.values()
+        ],
+        eligible_partitions=[
+            ensure(path, non_empty=True)
+            for path in GENERATION_CONTEXT.execution_layout.eligible_partition_paths.values()
         ],
     log:
         str(GENERATION_CONTEXT.plan.log_dir / "finalize.log"),
@@ -60,6 +65,10 @@ rule finalize_null_distribution_bundle:
             for name, identity in GENERATION_CONTEXT.bundle_resource_identities.items()
         },
         partition_ids=tuple(partition.identifier for partition in GENERATION_CONTEXT.plan.testing_unit_partitions),
+        partition_lookup_keys=tuple(
+            f"{partition_id}\t{model_id}"
+            for partition_id, model_id in GENERATION_CONTEXT.execution_layout.partition_lookup_paths
+        ),
     script:
         str(GENERATION_SCRIPT_DIR / "finalize_bundle.py")
 
@@ -74,6 +83,9 @@ rule validate_null_distribution_bundle:
         schema=str(
             Path(workflow.basedir) / "schemas" / "null_distribution_bundle.schema.yaml"
         ),
+        partition_lookups=getattr(rules.finalize_null_distribution_bundle.output, "partition_lookups"),
+        resolved_partitions=getattr(rules.finalize_null_distribution_bundle.output, "resolved_partitions"),
+        eligible_partitions=getattr(rules.finalize_null_distribution_bundle.output, "eligible_partitions"),
     output:
         validation=ensure(GENERATION_CONTEXT.bundle_paths["validation"], non_empty=True),
         marker=ensure(GENERATION_CONTEXT.bundle_paths["marker"], non_empty=True),

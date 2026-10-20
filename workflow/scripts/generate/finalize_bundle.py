@@ -10,7 +10,7 @@ bootstrap(snakemake, configure_polars=True)
 
 from _library import bind
 
-from bundle_finalization import finalize_generated_bundle
+from bundle_finalization import finalize_partitioned_bundle
 from generation_bindings import (
     BundleFinalizationInputs,
     BundleFinalizationOutputs,
@@ -20,7 +20,7 @@ from generation_bindings import (
 
 def main() -> None:
     """Decode Snakemake bindings and publish the bundle through the library."""
-    finalize_generated_bundle(
+    finalize_partitioned_bundle(
         bind(BundleFinalizationInputs, snakemake.input),
         bind(BundleFinalizationOutputs, snakemake.output),
         bind(BundleFinalizationParameters, snakemake.params),

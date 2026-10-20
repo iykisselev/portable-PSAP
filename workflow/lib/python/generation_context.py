@@ -74,16 +74,20 @@ class GenerationRuleContext:
         return self.execution_layout.bundle_paths
 
     def bundle_outputs(self) -> Mapping[str, str | list[str]]:
-        """Return finalization outputs, retaining an empty optional hem binding."""
-        outputs = {
-            name: path
-            for name, path in self.bundle_paths.items()
-            if name not in {"validation", "marker", "lookup_hem_chrX"}
-        }
-        outputs["lookup_hem_chrX"] = (
-            self.bundle_paths["lookup_hem_chrX"] if self.model.hemizygote else []
+        """Return the non-lookup outputs owned by bundle finalization."""
+        return MappingProxyType(
+            {
+                (
+                    "partition_statuses"
+                    if name == "unit_partition_status"
+                    else "testing_unit_id_overlap"
+                    if name == "testing_unit_id_overlap"
+                    else name
+                ): path
+                for name, path in self.bundle_paths.items()
+                if name not in {"validation", "marker"}
+            }
         )
-        return MappingProxyType(outputs)
 
     @property
     def bundle_resource_identities(self) -> Mapping[str, Mapping[str, str]]:
@@ -91,10 +95,6 @@ class GenerationRuleContext:
         identities = {
             "fasta": self.reference.fasta_id,
             "exclusion": self.reference.exclusion_id,
-            "testing_units": self.reference.testing_unit_partitions.get(
-                self.plan.testing_unit_partitions[0].identifier,
-                "testing_units",
-            ),
             "score_snv": self.reference.cadd_snv_id,
             "score_indel": self.reference.cadd_indel_id or "score_indel",
             "population_vcf": f"population_vcf:{self.plan.af_source['overall']}",
@@ -103,6 +103,12 @@ class GenerationRuleContext:
             "mutation_rate_indel": "mutation_rate_indel",
         }
         paths = {name: binding.data for name, binding in self.raw_bindings().items()}
+        for partition in self.plan.testing_unit_partitions:
+            name = f"testing_unit_partition.{partition.identifier}"
+            identities[name] = self.reference.testing_unit_partitions.get(
+                partition.identifier, partition.identifier
+            )
+            paths[name] = partition.bed.data
         paths.update(self.exclusion_paths_by_id())
         return MappingProxyType(
             {
@@ -206,6 +212,7 @@ class GenerationRuleContext:
             "lookup_hom": "hom.tsv",
             "lookup_hem_chrX": "hem_chrX.tsv",
             "diagnostics": "diagnostics.tsv",
+            "partition_model_diagnostics": "partition-model-diagnostics.tsv",
         }
         return str(self.lookup_bucket_dir / f"{bucket_id}.{suffixes[artifact_name]}")
 

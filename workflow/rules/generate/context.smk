@@ -93,6 +93,9 @@ def generation_outputs(wildcards):
     ):
         outputs.extend(generation_window_artifacts(wildcards, artifact_name))
     outputs.extend(generation_statistics_artifacts(wildcards))
-    for artifact_name in ("lookup_het", "lookup_hom", "lookup_hem_chrX", "diagnostics"):
+    for artifact_name in (
+        "lookup_het", "lookup_hom", "lookup_hem_chrX", "diagnostics",
+        "partition_model_diagnostics",
+    ):
         outputs.extend(generation_bucket_artifacts(wildcards, artifact_name))
     return outputs

@@ -107,11 +107,20 @@ def _frozen_mapping(values: Mapping[K, V]) -> Mapping[K, V]:
 
 
 def generated_bundle_paths(bundle_dir: Path) -> Mapping[str, str]:
-    """Return the public generated-bundle component paths for one output root."""
+    """Return non-lookup public paths for a partitioned generated bundle."""
     return _frozen_mapping(
         {
-            component: str(bundle_dir / filename)
-            for component, filename in BUNDLE_COMPONENT_FILENAMES.items()
+            "metadata": str(bundle_dir / "metadata.json"),
+            "validation": str(bundle_dir / "validation.json"),
+            "marker": str(bundle_dir / "validation.ok"),
+            "calibration_regions": str(bundle_dir / "calibration_regions.bed.gz"),
+            "excluded_alleles": str(bundle_dir / "excluded_alleles.tsv.gz"),
+            "candidate_audit": str(bundle_dir / "candidate_audit.tsv.gz"),
+            "population_af_zero_imputations": str(
+                bundle_dir / "population_af_zero_imputations.tsv.gz"
+            ),
+            "unit_partition_status": str(bundle_dir / "unit_partition_status.tsv.gz"),
+            "testing_unit_id_overlap": str(bundle_dir / "testing_unit_id_overlap.tsv.gz"),
         }
     )
 
