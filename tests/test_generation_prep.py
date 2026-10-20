@@ -38,10 +38,28 @@ from generation_bindings import (  # noqa: E402
     GenerationScopeOutputs,
     GenerationScopeParameters,
 )
-from generation_scope import prepare_generation_scope
+from generation_scope import _scope_masks, prepare_generation_scope
 
 
 class GenerationPreparationTests(unittest.TestCase):
+    def test_scope_bucketing_unions_testing_units_across_partitions(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            first, second = directory / "first.bed", directory / "second.bed"
+            first.write_text("1\t0\t2\tFIRST\n", encoding="utf-8")
+            second.write_text("1\t4\t6\tSECOND\n", encoding="utf-8")
+            fixture = ROOT / "tests/null_distribution"
+            masks = _scope_masks(GenerationScopeInputs(
+                population_vcf=fixture / "population_af.vcf", population_vcf_index=None,
+                score_snv=fixture / "generation_scores.tsv", score_snv_index=None,
+                exclusion=None, testing_units=first, testing_unit_partitions=(first, second),
+                par_regions=fixture / "par_regions.bed", exclusions=(),
+                fasta=ROOT / "tests/smoke/data/reference.fa",
+                fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
+                mutation_rate=None, mutation_rate_index=None,
+            ))
+            self.assertEqual({"FIRST", "SECOND"}, set(masks.units_by_id))
+
     def test_partition_ownership_subtracts_only_within_each_testing_unit(self):
         resolved = resolve_partition_ownership(
             [

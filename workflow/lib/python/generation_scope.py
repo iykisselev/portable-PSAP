@@ -121,7 +121,15 @@ def _validate_scope_inputs(
 
 
 def _scope_masks(inputs: GenerationScopeInputs) -> ScopeMasks:
-    units_by_id = read_bed_units(inputs.testing_units)
+    partition_paths = inputs.testing_unit_partitions or (inputs.testing_units,)
+    units_by_id: dict[str, list[tuple[str, int, int]]] = {}
+    for path in partition_paths:
+        for unit_id, intervals in read_bed_units(path).items():
+            if unit_id in units_by_id and units_by_id[unit_id][0][0] != intervals[0][0]:
+                raise ValueError(
+                    f"Testing unit {unit_id!r} uses conflicting chromosomes across partitions"
+                )
+            units_by_id.setdefault(unit_id, []).extend(intervals)
     par_intervals = read_intervals(inputs.par_regions)
     excluded_intervals = read_intervals(inputs.exclusion) if inputs.exclusion else {}
     for exclusion_path in inputs.exclusions:
