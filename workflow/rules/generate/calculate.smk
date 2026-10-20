@@ -52,6 +52,7 @@ rule reduce_null_distribution_bucket:
     """Produce direct lookup rows for one bounded range of unit identifiers."""
     input:
         buckets=lambda wc: generation_scope_artifact(wc, "buckets"),
+        partition_statuses=lambda wc: generation_scope_artifact(wc, "partition_statuses"),
         window_statistics=generation_statistics_shards,
     output:
         lookup_het=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.het.tsv"),
@@ -62,6 +63,10 @@ rule reduce_null_distribution_bucket:
         diagnostics=str(
             GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.diagnostics.tsv"
         ),
+        partition_model_lookups=[
+            str(GENERATION_CONTEXT.lookup_bucket_dir / f"{{bucket}}.{partition_id}.{model_id}.tsv")
+            for partition_id, model_id in GENERATION_CONTEXT.execution_layout.partition_lookup_paths
+        ],
     log:
         str(GENERATION_CONTEXT.plan.log_dir / "buckets" / "{bucket}.reduce.log"),
     conda:
@@ -77,5 +82,9 @@ rule reduce_null_distribution_bucket:
     params:
         bin_count=GENERATION_CONTEXT.execution_layout.bin_count,
         roles=GENERATION_CONTEXT.execution_layout.roles,
+        partition_lookup_keys=tuple(
+            f"{partition_id}\t{model_id}"
+            for partition_id, model_id in GENERATION_CONTEXT.execution_layout.partition_lookup_paths
+        ),
     script:
         str(GENERATION_SCRIPT_DIR / "reduce_window_statistics.py")

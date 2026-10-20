@@ -51,6 +51,14 @@ def generation_bucket_artifacts(wildcards, artifact_name):
     ]
 
 
+def generation_bucket_partition_model_artifacts(wildcards):
+    return [
+        GENERATION_CONTEXT.bucket_partition_model_artifact(bucket_id, partition_id, model_id)
+        for bucket_id in generation_bucket_ids(wildcards)
+        for partition_id, model_id in GENERATION_CONTEXT.execution_layout.partition_lookup_paths
+    ]
+
+
 def generation_statistics_shards(wildcards):
     """Return the window statistics needed to reduce one unit bucket."""
     bucket_id = str(wildcards.bucket)

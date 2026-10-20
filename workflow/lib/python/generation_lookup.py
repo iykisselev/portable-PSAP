@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import polars as pl
+
 from generation_bindings import (
     LookupReductionInputs,
     LookupReductionOutputs,
@@ -15,6 +17,7 @@ from generation_probability import (
     vectorized_lookup_rows,
 )
 from io_contracts import write_tsv_atomic
+from partitioned_lookup import partition_model_lookup_rows
 
 
 def reduce_window_statistics(
@@ -54,3 +57,26 @@ def reduce_window_statistics(
         ],
         diagnostics,
     )
+    if outputs.partition_model_lookups:
+        if len(outputs.partition_model_lookups) != len(params.partition_lookup_keys):
+            raise ValueError("Partition/model bucket lookup outputs do not match keys")
+        if inputs.partition_statuses is None:
+            raise ValueError("Partition/model lookup reduction requires partition statuses")
+        pairs = (
+            pl.scan_parquet(inputs.partition_statuses)
+            .filter(
+                (pl.col("status") == "eligible")
+                & pl.col("testing_unit_id").is_in(units)
+            )
+            .select("testing_unit_id", "partition_id", "CHROM")
+            .collect(engine="streaming")
+            .to_dicts()
+        )
+        model_rows, _ = partition_model_lookup_rows(
+            statistics, pairs, hemizygote="hem_chrX" in params.roles, bin_count=params.bin_count
+        )
+        for path, key in zip(
+            outputs.partition_model_lookups, params.partition_lookup_keys, strict=True
+        ):
+            partition_id, model_id = key.split("\t", 1)
+            write_tsv_atomic(path, header, model_rows[(partition_id, model_id)])

@@ -132,6 +132,7 @@ class WindowStatisticsParameters:
 class LookupReductionInputs:
     buckets: PathLike
     window_statistics: tuple[PathLike, ...]
+    partition_statuses: PathLike | None = None
 
 
 @dataclass(frozen=True)
@@ -140,12 +141,14 @@ class LookupReductionOutputs:
     lookup_hom: PathLike
     lookup_hem_chrX: PathLike | None
     diagnostics: PathLike
+    partition_model_lookups: tuple[PathLike, ...] = ()
 
 
 @dataclass(frozen=True)
 class LookupReductionParameters:
     bin_count: int
     roles: tuple[str, ...]
+    partition_lookup_keys: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
