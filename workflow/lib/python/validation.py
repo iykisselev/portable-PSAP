@@ -919,7 +919,7 @@ def validate_reference_tables(
     *,
     calibration_regions: IndexedResource | None,
     exclusions: Sequence[IndexedResource],
-    testing_units: IndexedResource,
+    testing_units: IndexedResource | None,
     par_regions: Sequence[IndexedResource],
     unit: str,
     errors: list[str],
@@ -945,21 +945,16 @@ def validate_reference_tables(
                 calibration_regions.index,
             )
 
-    unit_description = f"Configured {unit} testing-unit BED file"
-    validate_indexed_table(
-        testing_units.path,
-        unit_description,
-        errors,
-        warnings,
-        testing_units.index,
-    )
-    unit_chromosomes = validate_bed_regions(
-        testing_units.path,
-        unit_description,
-        errors,
-        required_columns=4,
-        require_unit_id=True,
-    )
+    unit_chromosomes: set[str] = set()
+    if testing_units is not None:
+        unit_description = f"Configured {unit} testing-unit BED file"
+        validate_indexed_table(
+            testing_units.path, unit_description, errors, warnings, testing_units.index,
+        )
+        unit_chromosomes = validate_bed_regions(
+            testing_units.path, unit_description, errors, required_columns=4,
+            require_unit_id=True,
+        )
 
     configured_exclusions = [*exclusions, *par_regions]
     if not configured_exclusions:

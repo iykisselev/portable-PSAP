@@ -55,3 +55,51 @@ omnibus_partition_psaps <- function(partition_results, configured_partition_ids)
     "contributing_partitions_json"))
   groups
 }
+
+
+partitioned_cohort_reports <- function(candidates, configured_partition_ids) {
+  required <- c("pid", "phenotype", "sex", "unit", "partition_id", "model", "variant_key", "PSAP")
+  require_columns(candidates, required, "Partitioned affected candidates")
+  scored <- data.table::copy(data.table::as.data.table(candidates))
+  scored[, PSAP := as.numeric(PSAP)]
+  best <- scored[, .(
+    PSAP = min(PSAP),
+    supporting_variant_count = .N,
+    supporting_variant_keys_json = jsonlite::toJSON(sort(unique(variant_key[PSAP == min(PSAP)])), auto_unbox = TRUE, digits = NA, na = "null")
+  ), by = .(pid, phenotype, sex, unit, partition_id, model)]
+  partition_outputs <- lapply(configured_partition_ids, function(partition_id) {
+    target_partition_id <- partition_id
+    result <- best[partition_id == target_partition_id]
+    data.table::setorder(result, PSAP, pid, unit, model)
+    result
+  })
+  main <- best[, {
+    ordered <- .SD[match(configured_partition_ids, partition_id)]
+    available <- !is.na(ordered$PSAP)
+    combined <- combine_partition_psaps(ordered$PSAP[available])
+    pairs <- lapply(seq_along(configured_partition_ids), function(i) list(
+      id = configured_partition_ids[[i]],
+      value = if (available[[i]]) ordered$PSAP[[i]] else NULL
+    ))
+    list(
+      PSAP = combined$PSAP,
+      aggregation_method = "ACAT",
+      aggregation_status = combined$aggregation_status,
+      aggregation_input_policy = "raw_survival_v1",
+      configured_partition_count = length(configured_partition_ids),
+      eligible_partition_count = sum(available),
+      contributing_partition_count = sum(available),
+      contributing_partition_ids_json = jsonlite::toJSON(configured_partition_ids[available], auto_unbox = TRUE, digits = NA, na = "null"),
+      partition_psaps_json = jsonlite::toJSON(pairs, auto_unbox = TRUE, digits = NA, na = "null"),
+      aggregation_inputs_json = jsonlite::toJSON(combined$aggregation_inputs, auto_unbox = TRUE, digits = NA, na = "null"),
+      partition_statuses_json = jsonlite::toJSON(lapply(configured_partition_ids, function(id) list(id = id, status = if (id %in% ordered$partition_id) "scored" else "no_compatible_variant")), auto_unbox = TRUE, digits = NA, na = "null"),
+      raw_zero_count = sum(ordered$PSAP[available] == 0),
+      raw_one_count = sum(ordered$PSAP[available] == 1),
+      raw_near_one_counts_json = jsonlite::toJSON(list(`0.99` = sum(ordered$PSAP[available] >= 0.99)), auto_unbox = TRUE, digits = NA, na = "null"),
+      validation = "not_evaluated", control_count = 0L, control_pids = "[]",
+      affected_count = 1L, affected_pids = jsonlite::toJSON(pid[[1]], auto_unbox = TRUE, digits = NA, na = "null")
+    )
+  }, by = .(pid, phenotype, sex, unit, model)]
+  data.table::setorderv(main, c("PSAP", "pid", "unit", "model"), na.last = TRUE)
+  list(main = main, partitions = partition_outputs, detail = best)
+}

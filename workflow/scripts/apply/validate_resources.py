@@ -55,7 +55,7 @@ def main() -> None:
             vcf=inputs.vcf,
             calibration_regions=resources.get("calibration_regions"),
             exclusions=by_role("variants_exclude"),
-            testing_units=resources["testing_units"],
+            testing_units=resources.get("testing_units"),
             par_regions=by_role("par_regions"),
             cadd_snv=resources["cadd_snv"],
             cadd_indel=resources.get("cadd_indel"),

@@ -90,6 +90,7 @@ rule build_cohort_report:
             COHORT_OUTPUTS["cohort_summary"],
             non_empty=True,
         ),
+        partition_summaries=[ensure(path, non_empty=True) for path in PARTITION_SUMMARIES.values()],
     log:
         str(APPLY_LOG_DIR / "cohort" / "build_cohort_report.log"),
     benchmark:
@@ -104,5 +105,7 @@ rule build_cohort_report:
     resources:
         mem_mb=policy_resources("build_cohort_report").mem_mb,
         runtime=policy_resources("build_cohort_report").runtime,
+    params:
+        partition_ids=LOOKUP_SOURCE.partition_ids,
     script:
         str(APPLY_SCRIPT_DIR / "build_cohort_report.R")

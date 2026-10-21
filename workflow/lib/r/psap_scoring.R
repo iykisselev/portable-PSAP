@@ -1,16 +1,16 @@
 # Per-sample lookup selection and PSAP scoring.  Scripts supply only bindings.
 
-SCORING_OUTPUT_COLUMNS <- c("Key", "unit", "Dz.Model", "PSAP")
+SCORING_OUTPUT_COLUMNS <- c("Key", "unit", "partition_id", "Dz.Model", "PSAP", "selected_score_bin", "next_PSAP")
 
 
 empty_scoring_output <- function() {
-  data.table(Key = character(), unit = character(), `Dz.Model` = character(), PSAP = numeric())
+  data.table(Key = character(), unit = character(), partition_id = character(), `Dz.Model` = character(), PSAP = numeric(), selected_score_bin = integer(), next_PSAP = numeric())
 }
 
 
 read_scoring_variants <- function(path) {
   variants <- read_tsv(path)
-  require_columns(variants, c("Key", "CHROM", "CADD_PHRED", "gt_class", "unit"), "PSAP-ready variant table")
+  require_columns(variants, c("Key", "CHROM", "CADD_PHRED", "gt_class", "unit", "partition_id"), "PSAP-ready variant table")
   variants[, CADD_PHRED := suppressWarnings(as.numeric(CADD_PHRED))]
   variants
 }
@@ -75,14 +75,9 @@ read_prepared_lookup <- function(path) {
 
 lookup_psap <- function(
     variants, lookup, score_max, score_column = "CADD_PHRED",
-    lookup_contract = "external_legacy_v0", metadata = NULL, row_index = NULL) {
+    lookup_contract = PARTITIONED_NULL_BUNDLE_CONTRACT, metadata = NULL, row_index = NULL) {
   score <- pmin(pmax(variants[[score_column]], 0), score_max)
-  if (identical(lookup_contract, "external_legacy_v0")) {
-    score_grid <- seq(0, score_max, length.out = ncol(lookup$values))
-    score_bin <- findInterval(score, score_grid)
-    score_bin[score_bin < 1] <- 1
-    score_bin[score_bin > ncol(lookup$values)] <- ncol(lookup$values)
-  } else if (is_supported_generated_bundle_contract(lookup_contract)) {
+  if (is_supported_generated_bundle_contract(lookup_contract)) {
     score_bin <- generated_lookup_bin(score, metadata$score_max, metadata$bin_width)
   } else {
     abort("Unsupported lookup contract: %s", lookup_contract)
@@ -97,25 +92,27 @@ lookup_psap <- function(
 
 
 select_highest <- function(variants) {
-  setorderv(variants, c(".testing_unit_id", "CADD_PHRED", "Key"), c(1, -1, 1), na.last = TRUE)
-  variants[, .SD[CADD_PHRED == max(CADD_PHRED)], by = .testing_unit_id]
+  setorderv(variants, c(".testing_unit_id", ".partition_id", "CADD_PHRED", "Key"), c(1, 1, -1, 1), na.last = TRUE)
+  variants[, .SD[CADD_PHRED == max(CADD_PHRED)], by = .(.testing_unit_id, .partition_id)]
 }
 
 
 score_model <- function(variants, model, genotype_class, lookup, lookup_source) {
   selected <- variants[
-    gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id)
+    gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id) & !is.na(.partition_id) & nzchar(.partition_id)
   ]
   if (nrow(selected) == 0) return(NULL)
   selected <- select_highest(selected)
   row_index <- require_lookup_units(selected, lookup, model)
+  selected[, selected_score_bin := generated_lookup_bin(CADD_PHRED, lookup_source$metadata$score_max, lookup_source$metadata$bin_width)]
   selected[, PSAP := lookup_psap(
     selected, lookup, lookup_source$score_max, lookup_contract = lookup_source$type,
     metadata = lookup_source$metadata, row_index = row_index
   )]
   selected[, .(
-    Key = as.character(Key), unit = as.character(.testing_unit_id),
-    `Dz.Model` = as.character(model), PSAP = as.numeric(PSAP)
+    Key = as.character(Key), unit = as.character(.testing_unit_id), partition_id = as.character(.partition_id),
+    `Dz.Model` = as.character(model), PSAP = as.numeric(PSAP), selected_score_bin = as.integer(selected_score_bin),
+    next_PSAP = as.numeric(ifelse(selected_score_bin == ncol(lookup$values), 0, lookup$values[cbind(row_index, pmin(selected_score_bin + 1L, ncol(lookup$values)))]))
   )]
 }
 
@@ -123,7 +120,7 @@ score_model <- function(variants, model, genotype_class, lookup, lookup_source) 
 score_lookup_models <- function(variants, definitions, lookup_source, lookup_name) {
   # This scope owns the only dense lookup. Results contain scalar PSAPs, never
   # a reference to the matrix, so the next role can reclaim this allocation.
-  lookup <- read_prepared_lookup(lookup_source$paths[[lookup_name]])
+  lookup <- read_lookup(lookup_source$paths[[lookup_name]], lookup_source$metadata, lookup_name)
   lapply(seq_len(nrow(definitions)), function(index) {
     definition <- definitions[index, ]
     selected <- variants
@@ -137,13 +134,17 @@ score_lookup_models <- function(variants, definitions, lookup_source, lookup_nam
 
 score_variants <- function(variants, lookup_source, hemizygote_model) {
   variants <- copy(variants)
-  variants[, .testing_unit_id := clean_identifier(unit)]
+  variants[, `:=`(.testing_unit_id = clean_identifier(unit), .partition_id = clean_identifier(partition_id))]
   variants[, gt_class := tolower(trimws(as.character(gt_class)))]
   definitions <- DISEASE_MODELS[hemizygote_model | !DISEASE_MODELS$is_hem, , drop = FALSE]
   results <- list()
-  for (lookup_name in unique(definitions$lookup)) {
-    selected_models <- definitions[definitions$lookup == lookup_name, , drop = FALSE]
-    results <- c(results, score_lookup_models(variants, selected_models, lookup_source, lookup_name))
+  for (partition_id in lookup_source$partition_ids) {
+    for (index in seq_len(nrow(definitions))) {
+      definition <- definitions[index, ]
+      lookup_name <- paste(partition_id, definition$model, sep = "\t")
+      selected <- variants[.partition_id == partition_id]
+      results <- c(results, score_lookup_models(selected, definition, lookup_source, lookup_name))
+    }
     # Reclaim the previous matrix before allocating another one. Merely replacing
     # a list entry allows unused matrices to accumulate until R chooses to collect.
     gc(verbose = FALSE)
@@ -152,7 +153,7 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
   if (length(results) == 0L) return(empty_scoring_output())
   output <- rbindlist(results, use.names = TRUE, fill = FALSE)
   # Reading by lookup role must not change model/tie order in the public reports.
-  output <- output[order(match(output$Dz.Model, definitions$model))]
+  output <- output[order(match(output$Dz.Model, definitions$model), output$partition_id)]
   setcolorder(output, SCORING_OUTPUT_COLUMNS)
   output
 }

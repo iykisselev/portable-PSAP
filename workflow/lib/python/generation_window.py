@@ -51,16 +51,23 @@ def prepare_generation_window(
         if partitioned
         else pl.scan_parquet(inputs.units).filter(pl.col("status") == "eligible").select("testing_unit_id").collect(engine="streaming")
     )
-    interval_frame = (
+    ownership_frame = (
         pl.scan_parquet(interval_source)
         .filter(
             (pl.col("CHROM") == window.chromosome)
             & (pl.col("START") < halo_end)
             & (pl.col("END") > window.start)
         )
-        .join(eligible_pairs.lazy(), on=( ["testing_unit_id", "partition_id"] if partitioned else "testing_unit_id"), how="inner")
         .select(*(["testing_unit_id", "partition_id", "partition_order", "START", "END"] if partitioned else ["testing_unit_id", "START", "END"]))
         .collect(engine="streaming")
+    )
+    interval_frame = (
+        ownership_frame.join(
+            eligible_pairs.lazy(),
+            on=(["testing_unit_id", "partition_id"] if partitioned else "testing_unit_id"),
+            how="inner",
+        )
+        if partitioned else ownership_frame.join(eligible_pairs.lazy(), on="testing_unit_id", how="inner")
     )
     mask_frame = (
         pl.scan_parquet(inputs.effective_mask)
@@ -111,7 +118,15 @@ def prepare_generation_window(
                 max_alternate_length=params.indel_max_alternate_length,
             )
             indel_memberships, indel_rejections = (
-                partitioned_indel_candidate_memberships(catalog, indel_mask, interval_frame.rows())
+                partitioned_indel_candidate_memberships(
+                    catalog,
+                    indel_mask,
+                    ownership_frame.rows(),
+                    {
+                        (str(row["testing_unit_id"]), str(row["partition_id"]))
+                        for row in eligible_pairs.to_dicts()
+                    },
+                )
                 if partitioned
                 else indel_candidate_memberships(catalog, indel_mask, all_intervals)
             )

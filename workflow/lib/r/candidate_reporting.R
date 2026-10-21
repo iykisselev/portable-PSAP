@@ -2,26 +2,27 @@
 
 read_candidate_psap <- function(path) {
   psap <- read_tsv(path)
-  require_columns(psap, c("Key", "unit", "Dz.Model", "PSAP"), "Affected PSAP table")
+  require_columns(psap, c("Key", "unit", "partition_id", "Dz.Model", "PSAP"), "Affected PSAP table")
   psap[, unit := clean_identifier(unit)]
   psap[, model := clean_identifier(`Dz.Model`)]
   psap[, variant_key := clean_identifier(Key)]
+  psap[, partition_id := clean_identifier(partition_id)]
   psap[, PSAP := suppressWarnings(as.numeric(PSAP))]
   unsupported <- setdiff(unique(psap$model[!is.na(psap$model)]), disease_model_names())
   if (length(unsupported) > 0L) abort("Unsupported Dz.Model value(s): %s", paste(unsupported, collapse = ", "))
-  invalid <- is.na(psap$unit) | is.na(psap$model) | is.na(psap$variant_key)
+  invalid <- is.na(psap$unit) | is.na(psap$model) | is.na(psap$variant_key) | is.na(psap$partition_id)
   if (any(invalid)) abort(
     "Affected PSAP table contains %d row(s) with missing unit, model, or variant key",
     sum(invalid)
   )
-  unique(psap[, .(unit, model, variant_key, PSAP)], by = c("unit", "model", "variant_key", "PSAP"))
+  unique(psap[, .(unit, partition_id, model, variant_key, PSAP)], by = c("unit", "partition_id", "model", "variant_key", "PSAP"))
 }
 
 
 empty_candidates <- function() {
   data.table(
     candidate_id = character(), pid = character(), phenotype = character(),
-    sex = numeric(), unit = character(), model = character(),
+    sex = numeric(), unit = character(), partition_id = character(), model = character(),
     variant_key = character(), PSAP = numeric()
   )
 }
@@ -34,8 +35,8 @@ build_candidates <- function(psap, pid, sex, candidate_id_separator = ":", candi
   }
   eligible <- psap[model %in% disease_model_names()]
   if (nrow(eligible) == 0L) return(empty_candidates())
-  setorderv(eligible, c("model", "unit", "variant_key"))
-  eligible[, candidate_number := seq_len(.N), by = model]
+  setorderv(eligible, c("model", "unit", "partition_id", "variant_key"))
+  eligible[, candidate_number := seq_len(.N), by = .(model, partition_id)]
   eligible[, candidate_id := paste(
     pid, disease_model_tag(model),
     sprintf(paste0("%0", candidate_id_ordinal_width, "d"), candidate_number),
@@ -43,7 +44,7 @@ build_candidates <- function(psap, pid, sex, candidate_id_separator = ":", candi
   )]
   candidates <- eligible[, .(
     candidate_id, pid = as.character(pid), phenotype = "affected",
-    sex = sex, unit, model, variant_key, PSAP
+    sex = sex, unit, partition_id, model, variant_key, PSAP
   )]
   setorderv(candidates, c("PSAP", "candidate_id", "variant_key"), c(1L, 1L, 1L), na.last = TRUE)
   candidates

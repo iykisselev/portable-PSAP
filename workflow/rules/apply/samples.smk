@@ -64,7 +64,7 @@ rule extract_gt:
     shell:
         """
         bcftools query \
-            -f "%CHROM\t%POS\t%REF\t%ALT\t%INFO/PSAP_CADD_PHRED\t%INFO/TESTING_UNIT[\t%GT]\n" \
+            -f "%CHROM\t%POS\t%REF\t%ALT\t%INFO/PSAP_CADD_PHRED[\t%GT]\n" \
             {input.vcf:q} | \
             bgzip --threads {threads} --stdout > {output.gt:q}
         """
@@ -74,6 +74,7 @@ rule prepare_sample_genotypes:
     """Standardize, sex-classify, and annotate one sample in memory."""
     input:
         gt=rules.extract_gt.output.gt,
+        memberships=rules.annotate_partition_memberships.output.memberships,
     output:
         annotated_gt=ensure(
             str(ANNOTATED_DIR / f"{{sample}}.{TESTING_UNIT}.tsv.gz"),

@@ -180,52 +180,12 @@ $defs:
           exclusions: false
           fasta: false
   lookup_source:
-    oneOf:
-      - type: object
-        additionalProperties: false
-        required: [type, directory]
-        properties:
-          type: {const: bundle}
-          directory: {type: string, minLength: 1}
-      - type: object
-        additionalProperties: false
-        required: [type, contract, tables]
-        properties:
-          type: {const: external}
-          contract: {const: external_legacy_v0}
-          tables: {$ref: "#/$defs/lookup_table_paths"}
-      - type: object
-        additionalProperties: false
-        required:
-          - type
-          - contract
-          - tables
-          - metadata
-          - validation
-          - marker
-          - eligible_units
-          - calibration_mask
-          - excluded_alleles
-          - excluded_units
-        properties:
-          type: {const: bundle}
-          contract: {enum: [generated_bundle_v1, generated_bundle_v2, generated_bundle_v3]}
-          tables: {$ref: "#/$defs/lookup_table_paths"}
-          metadata: {type: string, minLength: 1}
-          validation: {type: string, minLength: 1}
-          marker: {type: string, minLength: 1}
-          eligible_units: {type: string, minLength: 1}
-          calibration_mask: {type: string, minLength: 1}
-          excluded_alleles: {type: string, minLength: 1}
-          excluded_units: {type: string, minLength: 1}
-  lookup_table_paths:
     type: object
     additionalProperties: false
-    required: [het, hom]
+    required: [type, directory]
     properties:
-      het: {type: string, minLength: 1}
-      hom: {type: string, minLength: 1}
-      hem_chrX: {type: string, minLength: 1}
+      type: {const: bundle}
+      directory: {type: string, minLength: 1}
   apply_mode:
     type: object
     required: [inputs, bindings]
@@ -237,18 +197,6 @@ $defs:
         properties:
           reference: {$ref: "#/$defs/apply_reference_binding"}
     allOf:
-      - if:
-          properties: {model: {properties: {hemizygote: {const: true}}, required: [hemizygote]}}
-          required: [model]
-        then:
-          properties:
-            bindings:
-              properties:
-                reference:
-                  properties:
-                    lookup_source:
-                      properties:
-                        tables: {required: [hem_chrX]}
       - if:
           properties: {model: {properties: {include_indels: {const: true}}, required: [include_indels]}}
           required: [model]

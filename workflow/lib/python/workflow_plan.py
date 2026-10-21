@@ -9,7 +9,7 @@ dictionaries.
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import math
 from pathlib import Path
@@ -28,6 +28,10 @@ from bundle_contract import (
     BUNDLE_INPUT_COMPONENTS,
     require_supported_contract,
     fixed_width_bin_count,
+)
+from partitioned_bundle_contract import (
+    PARTITIONED_NULL_BUNDLE_CONTRACT,
+    bundle_component_paths,
 )
 
 
@@ -285,16 +289,17 @@ class LookupSource:
 
     source_type: str
     contract: str
-    tables: Mapping[str, str]
+    tables: Mapping[tuple[str, str], str]
+    partition_ids: tuple[str, ...]
     score_max: float
     bin_width: float | None
     metadata: str | None = None
     validation: str | None = None
     marker: str | None = None
-    eligible_units: str | None = None
+    resolved_partitions: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    eligible_partitions: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     calibration_mask: str | None = None
     excluded_alleles: tuple[str, ...] = ()
-    excluded_units: str | None = None
 
     @property
     def is_bundle(self) -> bool:
@@ -571,74 +576,15 @@ def _lookup_source(
     settings: GenerationSettings,
 ) -> LookupSource:
     source = _mapping(value, key)
-    if "directory" in source:
-        lookup = _directory_lookup_source(source, key)
-        if model.hemizygote != ("hem_chrX" in lookup.tables):
-            raise WorkflowPlanError(
-                f"{key}.directory: bundle HEM role differs from model.hemizygote; "
-                "choose a compatible bundle or change model.hemizygote"
-            )
-        return lookup
-    source_type = _required(source.get("type"), f"{key}.type")
-    contract = _required(source.get("contract"), f"{key}.contract")
-    tables = _frozen_mapping(
-        {
-            name: _required(path, f"{key}.tables.{name}")
-            for name, path in _mapping(source.get("tables"), f"{key}.tables").items()
-        }
-    )
-    for role in ("het", "hom"):
-        if role not in tables:
-            raise WorkflowPlanError(f"{key}.tables.{role} is required")
-    if model.hemizygote and "hem_chrX" not in tables:
+    if source.get("type") != "bundle" or "directory" not in source:
         raise WorkflowPlanError(
-            f"{key}.tables.hem_chrX is required when model.hemizygote is true"
+            f"{key} only accepts {{type: bundle, directory: ...}} with "
+            "partitioned_null_bundle_v1"
         )
-
-    is_bundle = source_type == "bundle"
-    metadata = _optional(source.get("metadata"))
-    validation = _optional(source.get("validation"))
-    marker = _optional(source.get("marker"))
-    eligible_units = (
-        _optional(source.get("eligible_units"))
-        if is_bundle
-        else binding_data(configured_reference.testing_unit_bed)
-    )
-    calibration_mask = _optional(source.get("calibration_mask")) if is_bundle else None
-    excluded_alleles = (
-        (_required(source.get("excluded_alleles"), f"{key}.excluded_alleles"),)
-        if is_bundle
-        else ()
-    )
-    excluded_units = _optional(source.get("excluded_units")) if is_bundle else None
-    if is_bundle and not all(
-        (metadata, validation, marker, eligible_units, calibration_mask, excluded_units)
-    ):
-        raise WorkflowPlanError(
-            f"{key} bundle sources require metadata, validation, marker, eligible_units, "
-            "calibration_mask, and excluded_units"
-        )
-    return LookupSource(
-        source_type=source_type,
-        contract=contract,
-        tables=tables,
-        score_max=model.score_max,
-        bin_width=settings.score_bin_width
-        if contract
-        in {
-            "generated_bundle_v1",
-            GENERATED_BUNDLE_CONTRACT,
-            INDEL_GENERATED_BUNDLE_CONTRACT,
-        }
-        else None,
-        metadata=metadata,
-        validation=validation,
-        marker=marker,
-        eligible_units=eligible_units,
-        calibration_mask=calibration_mask,
-        excluded_alleles=excluded_alleles,
-        excluded_units=excluded_units,
-    )
+    lookup = _directory_lookup_source(source, key)
+    if model.hemizygote != any(model_id == "X-linked-hem" for _, model_id in lookup.tables):
+        raise WorkflowPlanError(f"{key}.directory: bundle HEM model differs from model.hemizygote")
+    return lookup
 
 
 def _directory_lookup_source(source: Mapping[str, Any], key: str) -> LookupSource:
@@ -647,32 +593,33 @@ def _directory_lookup_source(source: Mapping[str, Any], key: str) -> LookupSourc
     metadata_path = directory / BUNDLE_COMPONENT_FILENAMES["metadata"]
     try:
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        contract = require_supported_contract(metadata["contract"])
+        contract = str(metadata["contract"])
+        if contract != PARTITIONED_NULL_BUNDLE_CONTRACT:
+            raise ValueError("bundle contract must be partitioned_null_bundle_v1")
         grid = metadata["binning"]
         maximum, width = float(grid["score_max"]), float(grid["bin_width"])
         fixed_width_bin_count(maximum, width)
-        roles = metadata["model_assumptions"]["roles"]
-        if not isinstance(roles, list) or set(roles) not in (
-            {"het", "hom"},
-            {"het", "hom", "hem_chrX"},
-        ):
-            raise ValueError("roles must declare het, hom and optionally hem_chrX")
         components = metadata["components"]
 
         def component(name: str) -> str:
             filename = components[name]["path"]
-            internal_name = "eligible_bed" if name == "eligible_testing_units" else name
-            if filename != BUNDLE_COMPONENT_FILENAMES[internal_name]:
-                raise ValueError(f"component {name} must use its published filename")
             path = directory / filename
             if not path.is_file():
                 raise ValueError(f"missing component {path}")
             return str(path)
 
-        tables = {role: component(f"lookup_{role}") for role in roles}
-        fields = {
-            field: component(name) for field, name in BUNDLE_INPUT_COMPONENTS.items()
-        }
+        partitions = metadata["partitions"]
+        partition_ids = tuple(entry["id"] for entry in partitions)
+        if [entry["order"] for entry in partitions] != list(range(len(partition_ids))):
+            raise ValueError("partitions must have contiguous configured order")
+        tables = {}
+        resolved, eligible = {}, {}
+        for entry in partitions:
+            partition_id = entry["id"]
+            resolved[partition_id] = component(entry["resolved_component"])
+            eligible[partition_id] = component(entry["eligible_component"])
+            for model_id, component_name in entry["lookups"].items():
+                tables[(partition_id, model_id)] = component(component_name)
         certificate = {}
         for name in ("validation", "marker"):
             path = directory / BUNDLE_COMPONENT_FILENAMES[name]
@@ -683,12 +630,15 @@ def _directory_lookup_source(source: Mapping[str, Any], key: str) -> LookupSourc
             source_type="bundle",
             contract=contract,
             tables=_frozen_mapping(tables),
+            partition_ids=partition_ids,
             score_max=maximum,
             bin_width=width,
             metadata=str(metadata_path),
             **certificate,
-            **{k: v for k, v in fields.items() if k != "excluded_alleles"},
-            excluded_alleles=(fields["excluded_alleles"],),
+            calibration_mask=component("calibration_regions"),
+            excluded_alleles=(component("excluded_alleles"),),
+            resolved_partitions=_frozen_mapping(resolved),
+            eligible_partitions=_frozen_mapping(eligible),
         )
     except (OSError, ValueError, TypeError, KeyError, OverflowError) as exc:
         raise WorkflowPlanError(
@@ -919,29 +869,28 @@ def _generated_lookup_source(
     generation: GenerationPlan, model: ModelPlan, settings: GenerationSettings
 ) -> LookupSource:
     bundle_paths = generated_bundle_paths(generation.bundle_dir)
-    tables = {
-        "het": bundle_paths["lookup_het"],
-        "hom": bundle_paths["lookup_hom"],
-    }
-    if model.hemizygote:
-        tables["hem_chrX"] = bundle_paths["lookup_hem_chrX"]
+    partition_ids = tuple(partition.identifier for partition in generation.testing_unit_partitions)
+    tables = bundle_component_paths(generation.bundle_dir, partition_ids, model.hemizygote)
     return LookupSource(
         source_type="bundle",
-        contract=(
-            INDEL_GENERATED_BUNDLE_CONTRACT
-            if model.include_indels
-            else GENERATED_BUNDLE_CONTRACT
-        ),
-        tables=_frozen_mapping(tables),
+        contract=PARTITIONED_NULL_BUNDLE_CONTRACT,
+        tables=tables,
+        partition_ids=partition_ids,
         score_max=model.score_max,
         bin_width=settings.score_bin_width,
         metadata=bundle_paths["metadata"],
         validation=bundle_paths["validation"],
         marker=bundle_paths["marker"],
-        eligible_units=bundle_paths["eligible_bed"],
         calibration_mask=bundle_paths["calibration_regions"],
         excluded_alleles=(bundle_paths["excluded_alleles"],),
-        excluded_units=bundle_paths["excluded_units"],
+        resolved_partitions=_frozen_mapping({
+            partition_id: str(generation.bundle_dir / f"resolved.{partition_id}.bed.gz")
+            for partition_id in partition_ids
+        }),
+        eligible_partitions=_frozen_mapping({
+            partition_id: str(generation.bundle_dir / f"eligible.{partition_id}.bed.gz")
+            for partition_id in partition_ids
+        }),
     )
 
 

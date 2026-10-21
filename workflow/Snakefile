@@ -78,6 +78,7 @@ elif WORKFLOW_MODE in {"apply", "full"}:
                 COHORT_OUTPUTS["cohort_candidates"],
                 COHORT_OUTPUTS["cohort_summary"],
                 COHORT_OUTPUTS["control_variants"],
+                list(PARTITION_SUMMARIES.values()),
 
     else:
 
@@ -88,6 +89,7 @@ elif WORKFLOW_MODE in {"apply", "full"}:
                 cohort_candidates=COHORT_OUTPUTS["cohort_candidates"],
                 cohort_summary=COHORT_OUTPUTS["cohort_summary"],
                 control_variants=COHORT_OUTPUTS["control_variants"],
+                partition_summaries=list(PARTITION_SUMMARIES.values()),
                 generation=generation_outputs,
 
 else:

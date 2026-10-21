@@ -15,6 +15,7 @@ options(scipen = 999)
 workflow_config <- function() {
   list(
     gt = snakemake@input[["gt"]],
+    memberships = snakemake@input[["memberships"]],
     output = snakemake@output[["annotated_gt"]],
     sex_value = parse_sex(as.character(snakemake@params[["sex"]])),
     hemizygote = require_boolean(
@@ -27,7 +28,7 @@ workflow_config <- function() {
 
 
 read_extracted_genotypes <- function(path) {
-  columns <- c("CHROM", "POS", "REF", "ALT", "CADD_PHRED", "unit", "GT")
+  columns <- c("CHROM", "POS", "REF", "ALT", "CADD_PHRED", "GT")
   connection <- if (grepl("\\.gz$", path, ignore.case = TRUE)) {
     gzfile(path, open = "rt")
   } else {
@@ -38,14 +39,14 @@ read_extracted_genotypes <- function(path) {
   if (length(readLines(connection, n = 1L, warn = FALSE)) == 0L) {
     return(data.table(
       CHROM = character(), POS = integer(), REF = character(), ALT = character(),
-      CADD_PHRED = numeric(), unit = character(), GT = character()
+      CADD_PHRED = numeric(), GT = character()
     ))
   }
 
   genotypes <- read_tsv(path, header = FALSE, col.names = columns)
   if (ncol(genotypes) != length(columns)) {
     abort(
-      "Expected seven input columns: %s; found %d",
+      "Expected six input columns: %s; found %d",
       paste(columns, collapse = ", "), ncol(genotypes)
     )
   }
@@ -70,15 +71,17 @@ deduplicate_by_key <- function(genotypes) {
 }
 
 
-expand_units <- function(genotypes) {
+expand_units <- function(genotypes, memberships) {
   if (nrow(genotypes) == 0L) {
-    genotypes[, unit := character()]
+    genotypes[, `:=`(unit = character(), partition_id = character())]
     return(genotypes)
   }
-  pieces <- strsplit(clean_identifier(genotypes$unit), split = ",", fixed = TRUE)
-  expanded <- genotypes[rep.int(seq_len(nrow(genotypes)), lengths(pieces))]
-  expanded[, unit := clean_identifier(unlist(pieces, use.names = FALSE))]
-  unique(expanded[!is.na(unit)], by = c("Key", "unit"))
+  memberships <- read_tsv(memberships)
+  require_columns(memberships, c("CHROM", "POS", "REF", "ALT", "unit", "partition_id"), "Certified partition membership")
+  memberships[, `:=`(POS = as.integer(POS), unit = clean_identifier(unit), partition_id = clean_identifier(partition_id))]
+  expanded <- merge(genotypes, memberships[, .(CHROM, POS, REF, ALT, unit, partition_id)],
+    by = c("CHROM", "POS", "REF", "ALT"), all = FALSE, sort = FALSE)
+  unique(expanded[!is.na(unit) & !is.na(partition_id)], by = c("Key", "unit", "partition_id"))
 }
 
 
@@ -102,9 +105,9 @@ run_sample_preparation <- function(config) {
   message("Male X/Y heterozygous calls removed: ", classified$removed_male_xy_het)
   message("Unknown-sex X/Y calls removed: ", classified$removed_unknown_sex_xy)
 
-  annotated <- expand_units(classified$genotypes)
+  annotated <- expand_units(classified$genotypes, config$memberships)
   output_columns <- c(
-    "Key", "CADD_PHRED", "unit", "CHROM", "POS", "REF", "ALT", "GT", "gt_class"
+    "Key", "CADD_PHRED", "unit", "partition_id", "CHROM", "POS", "REF", "ALT", "GT", "gt_class"
   )
   write_tsv(
     annotated[, output_columns, with = FALSE], config$output,

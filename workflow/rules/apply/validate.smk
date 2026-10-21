@@ -67,20 +67,10 @@ rule validate_resources:
 rule validate_model:
     """Validate model configuration and enabled lookup resources."""
     input:
-        testing_unit_bed=apply_resource("testing_units").source,
-        lookup_het=LOOKUP_SOURCE.tables["het"],
-        lookup_hom=LOOKUP_SOURCE.tables["hom"],
-        lookup_hem_chrX=(
-            [LOOKUP_SOURCE.tables["hem_chrX"]]
-            if WORKFLOW_PLAN.model.hemizygote
-            else []
-        ),
+        lookup_tables=list(LOOKUP_SOURCE.tables.values()),
         lookup_metadata=as_inputs(LOOKUP_SOURCE.metadata),
         lookup_validation=as_inputs(LOOKUP_SOURCE.validation),
         lookup_marker=as_inputs(LOOKUP_SOURCE.marker),
-        lookup_eligible_units=(
-            as_inputs(LOOKUP_SOURCE.eligible_units) if LOOKUP_SOURCE.is_bundle else []
-        ),
         lookup_calibration_mask=(
             as_inputs(LOOKUP_SOURCE.calibration_mask)
             if LOOKUP_SOURCE.is_bundle
@@ -89,9 +79,10 @@ rule validate_model:
         lookup_excluded_alleles=(
             list(LOOKUP_SOURCE.excluded_alleles) if LOOKUP_SOURCE.is_bundle else []
         ),
-        lookup_excluded_units=(
-            as_inputs(LOOKUP_SOURCE.excluded_units) if LOOKUP_SOURCE.is_bundle else []
-        ),
+        resolved_partitions=list(LOOKUP_SOURCE.resolved_partitions.values()),
+        eligible_partitions=list(LOOKUP_SOURCE.eligible_partitions.values()),
+        partition_statuses=str(Path(LOOKUP_SOURCE.metadata).parent / "unit_partition_status.tsv.gz"),
+        testing_unit_id_overlap=str(Path(LOOKUP_SOURCE.metadata).parent / "testing_unit_id_overlap.tsv.gz"),
         libraries=VALIDATION_LIBRARIES,
         schema=VALIDATION_REPORT_SCHEMA,
     output:
@@ -116,6 +107,7 @@ rule validate_model:
         include_indels=WORKFLOW_PLAN.model.include_indels,
         lookup_contract=LOOKUP_SOURCE.contract,
         lookup_bin_width=LOOKUP_SOURCE.bin_width,
+        lookup_component_keys=tuple(f"lookup.{partition_id}.{model_id}" for partition_id, model_id in LOOKUP_SOURCE.tables),
     script:
         str(APPLY_SCRIPT_DIR / "validate_model.py")
 

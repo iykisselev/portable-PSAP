@@ -48,17 +48,16 @@ class ResourceValidationParameters:
 
 @dataclass(frozen=True)
 class ModelValidationInputs:
-    testing_unit_bed: PathLike
-    lookup_het: PathLike
-    lookup_hom: PathLike
-    lookup_hem_chrX: PathLike | None
-    lookup_metadata: PathLike | None
-    lookup_validation: PathLike | None
-    lookup_marker: PathLike | None
-    lookup_eligible_units: PathLike | None
-    lookup_calibration_mask: PathLike | None
+    lookup_tables: tuple[PathLike, ...]
+    lookup_metadata: PathLike
+    lookup_validation: PathLike
+    lookup_marker: PathLike
+    lookup_calibration_mask: PathLike
     lookup_excluded_alleles: tuple[PathLike, ...]
-    lookup_excluded_units: PathLike | None
+    resolved_partitions: tuple[PathLike, ...]
+    eligible_partitions: tuple[PathLike, ...]
+    partition_statuses: PathLike
+    testing_unit_id_overlap: PathLike
 
 
 @dataclass(frozen=True)
@@ -70,6 +69,7 @@ class ModelValidationParameters:
     include_indels: bool
     lookup_contract: str
     lookup_bin_width: float | None
+    lookup_component_keys: tuple[str, ...]
 
 
 @dataclass(frozen=True)

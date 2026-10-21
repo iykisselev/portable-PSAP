@@ -5,6 +5,7 @@ ANNOTATED_VCF_CSI = Path(f"{ANNOTATED_VCF}.csi")
 RAW_UNIT_ANNOTATIONS = ANNOTATION_DIR / f"{TESTING_UNIT}.annotated.tsv.gz"
 ANNOTATION_QC_REPORT = ANNOTATION_DIR / f"{TESTING_UNIT}.annotation_qc.json"
 ANNOTATION_QC_OK = ANNOTATION_DIR / f"{TESTING_UNIT}.annotation_qc.ok"
+PARTITION_MEMBERSHIPS = ANNOTATION_DIR / f"{TESTING_UNIT}.partition_memberships.tsv.gz"
 
 
 rule annotate_variants:
@@ -18,8 +19,6 @@ rule annotate_variants:
         cadd_snv_index=apply_resource("cadd_snv").staged_index,
         cadd_indel=APPLY_RESOURCE_REGISTRY.inputs("cadd_indel", "staged_data"),
         cadd_indel_index=APPLY_RESOURCE_REGISTRY.inputs("cadd_indel", "staged_index"),
-        unit_bed=apply_resource("testing_units").staged_data,
-        unit_bed_index=apply_resource("testing_units").staged_index,
     output:
         vcf=ensure(str(ANNOTATED_VCF), non_empty=True),
         csi=ensure(str(ANNOTATED_VCF_CSI), non_empty=True),
@@ -46,10 +45,6 @@ rule annotate_variants:
         cadd_header=(
             "##INFO=<ID=PSAP_CADD_PHRED,Number=1,Type=Float,"
             'Description="CADD PHRED score">'
-        ),
-        unit_header=(
-            "##INFO=<ID=TESTING_UNIT,Number=.,Type=String,"
-            f'Description="PSAP {TESTING_UNIT} unit IDs">'
         ),
         indel_stage=lambda wc, input: (
             "bcftools annotate "
@@ -106,12 +101,7 @@ rule annotate_variants:
                     --pair-logic exact \
                     -Ou - |
                 {params.indel_stage}
-                bcftools annotate \
-                    --annotations {input.unit_bed:q} \
-                    --columns CHROM,FROM,TO,INFO/TESTING_UNIT \
-                    --header-line {params.unit_header:q} \
-                    --merge-logic TESTING_UNIT:unique \
-                    -Ob -o "$destination" -
+                bcftools view -Ob -o "$destination" -
                 bcftools index --force "$destination"
             }}
 
@@ -137,9 +127,9 @@ rule annotate_variants:
             bcftools index --threads {threads} --force {output.vcf:q}
 
             {{
-                printf 'CHROM\\tPOS\\tREF\\tALT\\tCADD_PHRED\\tunit\\n'
+                printf 'CHROM\\tPOS\\tREF\\tALT\\tCADD_PHRED\\n'
                 bcftools query \
-                    --format '%CHROM\\t%POS\\t%REF\\t%ALT\\t%INFO/PSAP_CADD_PHRED\\t%INFO/TESTING_UNIT\\n' \
+                    --format '%CHROM\\t%POS\\t%REF\\t%ALT\\t%INFO/PSAP_CADD_PHRED\\n' \
                     {output.vcf:q}
             }} | bgzip --threads {threads} --stdout > {output.annotations:q}
         }} > {log:q} 2>&1
@@ -149,7 +139,7 @@ rule annotate_variants:
 rule summarize_annotations:
     """Report complete annotation misses before any per-sample scoring."""
     input:
-        annotations=rules.annotate_variants.output.annotations,
+        annotations=str(PARTITION_MEMBERSHIPS),
     output:
         report=ensure(str(ANNOTATION_QC_REPORT), non_empty=True),
     log:
@@ -194,3 +184,18 @@ rule require_valid_annotations:
         success_marker="annotation validation passed\n",
     script:
         str(APPLY_SCRIPT_DIR / "require_valid_report.py")
+
+
+rule annotate_partition_memberships:
+    """Attach certified unit/partition ownership without pooling BEDs."""
+    input:
+        annotations=rules.annotate_variants.output.annotations,
+        resolved=list(LOOKUP_SOURCE.resolved_partitions.values()),
+        eligible=list(LOOKUP_SOURCE.eligible_partitions.values()),
+        validated=rules.require_valid_inputs.output.ok,
+    output:
+        memberships=ensure(str(PARTITION_MEMBERSHIPS), non_empty=True),
+    params:
+        partition_ids=LOOKUP_SOURCE.partition_ids,
+    script:
+        str(APPLY_SCRIPT_DIR / "annotate_partition_memberships.py")

@@ -1,4 +1,4 @@
-"""Validate model resources through injected Snakemake inputs and parameters."""
+"""Validate the certified partitioned bundle before cohort work."""
 
 from pathlib import Path
 import sys
@@ -7,72 +7,49 @@ sys.path.insert(0, str(Path(snakemake.scriptdir).parents[1] / "shared"))
 from _bootstrap import bootstrap
 
 bootstrap(snakemake)
-from apply_bindings import (
-    ModelValidationInputs,
-    ReportOutput,
-    ModelValidationParameters,
-)
 from _library import bind
-
-
-from bundle_contract import is_supported_contract
-from validation_model import (
-    certificate_components_with_exclusions,
-    validate_model_inputs,
-)
-from validation_reporting import write_validation_report
+from apply_bindings import ModelValidationInputs, ModelValidationParameters, ReportOutput
+from bundle_certificate import BundleCertificateError, verify_bundle_certificate
+from partitioned_bundle_contract import PARTITIONED_NULL_BUNDLE_CONTRACT
+from validation_reporting import build_validation_report, write_validation_report
 
 
 def main() -> None:
-    """Validate model settings and lookup tables against testing-unit annotations.
-
-    Converts Snakemake settings into the validation library's argument contract,
-    checks every enabled lookup table, and writes a JSON report used by the
-    shared validation gate.
-    """
     inputs = bind(ModelValidationInputs, snakemake.input)
     outputs = bind(ReportOutput, snakemake.output)
     params = bind(ModelValidationParameters, snakemake.params)
-    configured = {
-        "het": str(inputs.lookup_het),
-        "hom": str(inputs.lookup_hom),
-        "hem_chrX": inputs.lookup_hem_chrX or "",
-    }
-    contract = str(params.lookup_contract)
-    certificate = None
-    components: dict[str, str] = {}
-    if is_supported_contract(contract):
-        certificate = {
-            "metadata": str(inputs.lookup_metadata),
-            "validation": str(inputs.lookup_validation),
-            "marker": str(inputs.lookup_marker),
-        }
-        components = certificate_components_with_exclusions(
-            {
-                "lookup_het": configured["het"],
-                "lookup_hom": configured["hom"],
-                "eligible_testing_units": str(inputs.lookup_eligible_units),
-                "calibration_regions": str(inputs.lookup_calibration_mask),
-                "excluded_units": str(inputs.lookup_excluded_units),
-            },
-            inputs.lookup_excluded_alleles,
+    errors = []
+    try:
+        component_keys = tuple(params.lookup_component_keys)
+        if len(component_keys) != len(inputs.lookup_tables):
+            raise ValueError("lookup component keys do not match paths")
+        components = dict(zip(component_keys, inputs.lookup_tables, strict=True))
+        components.update({
+            "calibration_regions": inputs.lookup_calibration_mask,
+            "excluded_alleles": inputs.lookup_excluded_alleles[0],
+            "unit_partition_status": inputs.partition_statuses,
+            "testing_unit_id_overlap": inputs.testing_unit_id_overlap,
+        })
+        metadata = verify_bundle_certificate(
+            contract=PARTITIONED_NULL_BUNDLE_CONTRACT,
+            metadata_path=inputs.lookup_metadata,
+            validation_path=inputs.lookup_validation,
+            marker_path=inputs.lookup_marker,
+            components=components,
         )
-        if params.hemizygote_model:
-            components["lookup_hem_chrX"] = configured["hem_chrX"]
-    report = validate_model_inputs(
-        score_max=params.score_max,
-        assembly=str(params.assembly),
-        unit=str(params.unit),
-        hemizygote_model=params.hemizygote_model,
-        include_indels=params.include_indels,
-        testing_unit_bed=inputs.testing_unit_bed,
-        lookup_tables=configured,
-        lookup_contract=contract,
-        lookup_bin_width=params.lookup_bin_width,
-        bundle_certificate=certificate,
-        bundle_components=components,
-    )
-    write_validation_report(report, outputs.report, create_parents=False)
+        if metadata["assembly"] != params.assembly:
+            errors.append("Generated lookup assembly differs from reference.assembly")
+        if metadata["testing_unit_type"] != params.unit:
+            errors.append("Generated lookup testing-unit type differs from model.unit")
+        if bool(params.hemizygote_model) != ("hem_chrX" in metadata["model_assumptions"]["roles"]):
+            errors.append("Generated lookup HEM model differs from model.hemizygote")
+    except (BundleCertificateError, ValueError, KeyError, IndexError) as exc:
+        errors.append(f"Could not validate partitioned lookup bundle: {exc}")
+    write_validation_report(build_validation_report(
+        errors=errors, warnings=[],
+        summary={"lookup_contract": params.lookup_contract, "lookup_files_checked": len(inputs.lookup_tables)},
+        sections=("model",),
+    ), outputs.report, create_parents=False)
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ def validate_resource_inputs(
     vcf: str | Path,
     calibration_regions: IndexedResource | None,
     exclusions: Sequence[IndexedResource],
-    testing_units: IndexedResource,
+    testing_units: IndexedResource | None,
     par_regions: Sequence[IndexedResource],
     cadd_snv: IndexedResource,
     cadd_indel: IndexedResource | None,
@@ -49,12 +49,13 @@ def validate_resource_inputs(
         "Exclusion interval files",
         warnings,
     )
-    validate_annotation_chromosome_names(
-        reference_chromosomes["testing_unit"],
-        vcf_chromosomes,
-        f"Configured {unit} testing-unit BED file",
-        warnings,
-    )
+    if testing_units is not None:
+        validate_annotation_chromosome_names(
+            reference_chromosomes["testing_unit"],
+            vcf_chromosomes,
+            f"Configured {unit} testing-unit BED file",
+            warnings,
+        )
     cadd_chromosomes = validate_cadd_resources(
         cadd_snv.path,
         cadd_indel.path if cadd_indel else None,

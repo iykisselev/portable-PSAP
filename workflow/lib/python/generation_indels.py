@@ -246,6 +246,7 @@ def partitioned_indel_candidate_memberships(
     candidates: pl.DataFrame,
     mask: list[tuple[int, int]],
     intervals: list[tuple[str, str, int, int, int]],
+    eligible_pairs: set[tuple[str, str]] | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Assign a span to the earliest resolved partition for each testing unit."""
     base, rejected = indel_candidate_memberships(
@@ -262,7 +263,11 @@ def partitioned_indel_candidate_memberships(
         if not owners:
             raise ValueError("Indel membership lost its resolved partition owner")
         _, partition = min(owners)
-        memberships.append({**row, "partition_id": partition})
+        # Ownership is decided before eligibility.  An excluded earlier owner
+        # therefore suppresses this membership instead of leaking it into a
+        # later partition.
+        if eligible_pairs is None or (row["testing_unit_id"], partition) in eligible_pairs:
+            memberships.append({**row, "partition_id": partition})
     return (
         pl.DataFrame(memberships, schema=PARTITIONED_INDEL_MEMBERSHIP_SCHEMA, strict=False).unique(
             maintain_order=True
