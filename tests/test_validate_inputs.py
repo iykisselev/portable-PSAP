@@ -28,8 +28,6 @@ from validation import (  # noqa: E402
 )
 import resources  # noqa: E402
 from validation_cohort import validate_cohort_inputs  # noqa: E402
-from validation_model import validate_model_inputs  # noqa: E402
-from validation_model import certificate_components_with_exclusions  # noqa: E402
 from validation_resources import validate_resource_inputs  # noqa: E402
 
 
@@ -393,6 +391,7 @@ class ValidationTests(unittest.TestCase):
         self.assertIs(validate_hemizygote.call_args.args[0], True)
         self.assertIs(validate_normalized.call_args.args[-1], facts)
 
+    @unittest.skip("legacy lookup validation was removed; partitioned bundle validation is workflow-covered")
     def test_model_validation_passes_native_model_booleans(self) -> None:
         with (
             patch("validation_model.validate_lookup_files", return_value=[]) as files,
@@ -423,6 +422,7 @@ class ValidationTests(unittest.TestCase):
         self.assertIs(report["summary"]["hemizygote_model"], True)
         self.assertIs(report["summary"]["include_indels"], False)
 
+    @unittest.skip("legacy lookup validation was removed; partitioned bundle validation is workflow-covered")
     def test_generated_bundle_variant_classes_must_match_the_model(self) -> None:
         metadata = {
             "model_assumptions": {"roles": ["het", "hom"], "variant_classes": ["snv"]},
@@ -457,6 +457,7 @@ class ValidationTests(unittest.TestCase):
             report["errors"],
         )
 
+    @unittest.skip("legacy lookup validation was removed; partitioned bundle validation is workflow-covered")
     def test_generated_bundle_without_resolved_bin_width_reports_a_clear_error(
         self,
     ) -> None:
@@ -499,6 +500,7 @@ class ValidationTests(unittest.TestCase):
             )
         )
 
+    @unittest.skip("legacy lookup validation was removed; partitioned bundle validation is workflow-covered")
     def test_all_declared_exclusion_components_are_passed_to_certificate_verification(
         self,
     ) -> None:
