@@ -137,12 +137,8 @@ class LookupReductionInputs:
 
 @dataclass(frozen=True)
 class LookupReductionOutputs:
-    lookup_het: PathLike
-    lookup_hom: PathLike
-    lookup_hem_chrX: PathLike | None
-    diagnostics: PathLike
-    partition_model_lookups: tuple[PathLike, ...] = ()
-    partition_model_diagnostics: PathLike | None = None
+    partition_model_lookups: tuple[PathLike, ...]
+    partition_model_diagnostics: PathLike
 
 
 @dataclass(frozen=True)

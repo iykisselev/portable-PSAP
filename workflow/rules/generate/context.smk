@@ -12,11 +12,6 @@ GENERATION_CONTEXT = GenerationRuleContext.from_workflow_plan(WORKFLOW_PLAN)
 GENERATION_SCRIPT_DIR = Path(workflow.basedir) / "scripts" / "generate"
 
 
-def hem_artifact(value):
-    """Retain a named optional hem binding while disabling its file dependency."""
-    return value if GENERATION_CONTEXT.model.hemizygote else []
-
-
 def generation_scope_artifact(wildcards, artifact_name):
     """Return one scope file after the scope checkpoint has completed."""
     scope_checkpoint = checkpoints.prepare_generation_scope.get()
@@ -43,8 +38,6 @@ def generation_window_artifacts(wildcards, artifact_name):
 
 def generation_bucket_artifacts(wildcards, artifact_name):
     """Return the requested lookup file for every discovered unit bucket."""
-    if artifact_name == "lookup_hem_chrX" and not GENERATION_CONTEXT.model.hemizygote:
-        return []
     return [
         GENERATION_CONTEXT.bucket_artifact(bucket_id, artifact_name)
         for bucket_id in generation_bucket_ids(wildcards)
@@ -93,9 +86,6 @@ def generation_outputs(wildcards):
     ):
         outputs.extend(generation_window_artifacts(wildcards, artifact_name))
     outputs.extend(generation_statistics_artifacts(wildcards))
-    for artifact_name in (
-        "lookup_het", "lookup_hom", "lookup_hem_chrX", "diagnostics",
-        "partition_model_diagnostics",
-    ):
-        outputs.extend(generation_bucket_artifacts(wildcards, artifact_name))
+    outputs.extend(generation_bucket_artifacts(wildcards, "partition_model_diagnostics"))
+    outputs.extend(generation_bucket_partition_model_artifacts(wildcards))
     return outputs

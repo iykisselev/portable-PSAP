@@ -90,3 +90,29 @@ Completed on 2026-10-21:
 Focused verification passed: cross-language catalog/finalization/scoring tests,
 the ACAT analytic and endpoint tests, direct generate/full plan resolution for
 all active null-distribution fixtures, and the generate workflow test (2 tests).
+
+## Iteration 3: partition-only generation and apply reporting
+
+Completed on 2026-10-21:
+
+- Removed role-wide bucket lookup outputs from the active generation graph.
+  Buckets now render only physical `(partition_id, model_id)` tables and their
+  partition/model diagnostics.
+- Apply reads one partition/model lookup table at a time, retains certified
+  partition ownership through candidate and control matching, and publishes an
+  omnibus ACAT report plus one partition report for each configured partition.
+  JSON arrays preserve configured partition order and write absent values as
+  JSON `null` without numeric truncation.
+- Added a two-partition full-mode fixture. A clean run produces ten physical
+  lookup tables (two partitions by five enabled models), certified resolved and
+  eligible BEDs, and both partition summary files.
+- Removed the dead prepared-lookup stage, external legacy lookup reader branch,
+  and its unused execution policy. Apply accepts only certified partitioned
+  bundles.
+
+Verification: the clean two-partition full fixture completed with Snakemake
+9.23.1; partition scope, lookup, audit, and bundle-contract Python tests (7)
+and the R partition-reporting test passed. The implementation retains only the
+active partitioned workflow path; obsolete unit tests that directly import the
+deleted legacy validator still need replacement before the complete historical
+test suite can be considered migrated.

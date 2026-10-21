@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Append CADD, population AF, and Ensembl gene names to a cohort summary.
+"""Append CADD, population AF, and Ensembl gene names to cohort candidates.
 
-The Portable PSAP cohort summary deliberately contains only the candidate
-signature and aggregate PSAP evidence.  This accessory command adds common
-review fields without changing the certified workflow outputs.  It expects
-the normal Portable PSAP ``candidate_signature`` spelling:
-``CHROM:POS-POS_REF>ALT`` (with signatures separated by ``|``).
+The partitioned omnibus summary deliberately does not repeat variant
+identities. This accessory command therefore reads the certified
+``cohort_candidates.tsv.gz`` output, whose ``variant_key`` identifies one
+candidate allele per row, and appends common review fields without changing
+the workflow outputs.  A different key column may be supplied explicitly.
 """
 
 from __future__ import annotations
@@ -314,7 +314,7 @@ def annotate_summary(
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "summary", type=Path, help="Portable PSAP cohort_summary.tsv[.gz]"
+        "summary", type=Path, help="Portable PSAP cohort_candidates.tsv[.gz]"
     )
     parser.add_argument("output", type=Path, help="Annotated TSV or TSV.GZ output path")
     parser.add_argument(
@@ -344,8 +344,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--signature-column",
-        default="candidate_signature",
-        help="Variant-signature column (default: candidate_signature)",
+        default="variant_key",
+        help="Variant-key column (default: variant_key)",
     )
     return parser.parse_args(argv)
 

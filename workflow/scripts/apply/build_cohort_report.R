@@ -25,8 +25,9 @@ workflow_config <- function() {
 if (exists("snakemake", inherits = FALSE)) {
   config <- workflow_config()
   candidates <- data.table::rbindlist(lapply(config$candidates, read_tsv), use.names = TRUE, fill = TRUE)
-  reports <- partitioned_cohort_reports(candidates, config$partition_ids)
-  write_tsv(candidates, config$output_candidates, threads = config$threads)
+  triaged <- validate_candidates(candidates, read_controls(config$controls))$detail
+  reports <- partitioned_cohort_reports(triaged, config$partition_ids)
+  write_tsv(triaged, config$output_candidates, threads = config$threads)
   write_tsv(reports$main, config$output_summary, threads = config$threads)
   for (i in seq_along(config$partition_ids)) write_tsv(reports$partitions[[i]], config$output_partition_summaries[[i]], threads = config$threads)
 }

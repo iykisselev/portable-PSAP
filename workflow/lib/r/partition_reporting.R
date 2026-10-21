@@ -1,5 +1,9 @@
 # Partition-level PSAP selection and per-person/model ACAT aggregation.
 
+json_array <- function(values) {
+  jsonlite::toJSON(as.list(values), auto_unbox = TRUE, digits = NA, na = "null")
+}
+
 partition_best_psaps <- function(scored) {
   required <- c("pid", "unit", "model", "partition_id", "PSAP")
   require_columns(scored, required, "Partition scoring results")
@@ -41,7 +45,7 @@ omnibus_partition_psaps <- function(partition_results, configured_partition_ids)
         combined$PSAP,
         combined$aggregation_status,
         sum(available),
-        jsonlite::toJSON(x.partition_id[available], auto_unbox = TRUE, digits = NA, na = "null")
+        json_array(x.partition_id[available])
       )
     }, by = .EACHI]
   data.table::setnames(groups, c("V1", "V2", "V3", "V4"),
@@ -58,14 +62,17 @@ omnibus_partition_psaps <- function(partition_results, configured_partition_ids)
 
 
 partitioned_cohort_reports <- function(candidates, configured_partition_ids) {
-  required <- c("pid", "phenotype", "sex", "unit", "partition_id", "model", "variant_key", "PSAP")
+  required <- c("pid", "phenotype", "sex", "unit", "partition_id", "model", "variant_key", "PSAP", "validation", "control_count", "control_pids")
   require_columns(candidates, required, "Partitioned affected candidates")
   scored <- data.table::copy(data.table::as.data.table(candidates))
   scored[, PSAP := as.numeric(PSAP)]
   best <- scored[, .(
     PSAP = min(PSAP),
     supporting_variant_count = .N,
-    supporting_variant_keys_json = jsonlite::toJSON(sort(unique(variant_key[PSAP == min(PSAP)])), auto_unbox = TRUE, digits = NA, na = "null")
+    supporting_variant_keys_json = json_array(sort(unique(variant_key[PSAP == min(PSAP)]))),
+    validation = validation_priority(validation),
+    control_count = uniqueN(unlist(strsplit(control_pids[!is.na(control_pids)], ",", fixed = TRUE), use.names = FALSE)),
+    control_pids = combine_id_lists(control_pids)
   ), by = .(pid, phenotype, sex, unit, partition_id, model)]
   partition_outputs <- lapply(configured_partition_ids, function(partition_id) {
     target_partition_id <- partition_id
@@ -79,7 +86,7 @@ partitioned_cohort_reports <- function(candidates, configured_partition_ids) {
     combined <- combine_partition_psaps(ordered$PSAP[available])
     pairs <- lapply(seq_along(configured_partition_ids), function(i) list(
       id = configured_partition_ids[[i]],
-      value = if (available[[i]]) ordered$PSAP[[i]] else NULL
+      value = if (available[[i]]) ordered$PSAP[[i]] else NA_real_
     ))
     list(
       PSAP = combined$PSAP,
@@ -89,15 +96,17 @@ partitioned_cohort_reports <- function(candidates, configured_partition_ids) {
       configured_partition_count = length(configured_partition_ids),
       eligible_partition_count = sum(available),
       contributing_partition_count = sum(available),
-      contributing_partition_ids_json = jsonlite::toJSON(configured_partition_ids[available], auto_unbox = TRUE, digits = NA, na = "null"),
+      contributing_partition_ids_json = json_array(configured_partition_ids[available]),
       partition_psaps_json = jsonlite::toJSON(pairs, auto_unbox = TRUE, digits = NA, na = "null"),
-      aggregation_inputs_json = jsonlite::toJSON(combined$aggregation_inputs, auto_unbox = TRUE, digits = NA, na = "null"),
+      aggregation_inputs_json = json_array(combined$aggregation_inputs),
       partition_statuses_json = jsonlite::toJSON(lapply(configured_partition_ids, function(id) list(id = id, status = if (id %in% ordered$partition_id) "scored" else "no_compatible_variant")), auto_unbox = TRUE, digits = NA, na = "null"),
       raw_zero_count = sum(ordered$PSAP[available] == 0),
       raw_one_count = sum(ordered$PSAP[available] == 1),
       raw_near_one_counts_json = jsonlite::toJSON(list(`0.99` = sum(ordered$PSAP[available] >= 0.99)), auto_unbox = TRUE, digits = NA, na = "null"),
-      validation = "not_evaluated", control_count = 0L, control_pids = "[]",
-      affected_count = 1L, affected_pids = jsonlite::toJSON(pid[[1]], auto_unbox = TRUE, digits = NA, na = "null")
+      validation = validation_priority(ordered$validation[available]),
+      control_count = uniqueN(unlist(strsplit(ordered$control_pids[available & !is.na(ordered$control_pids)], ",", fixed = TRUE), use.names = FALSE)),
+      control_pids = combine_id_lists(ordered$control_pids[available]),
+      affected_count = 1L, affected_pids = json_array(pid[[1]])
     )
   }, by = .(pid, phenotype, sex, unit, model)]
   data.table::setorderv(main, c("PSAP", "pid", "unit", "model"), na.last = TRUE)

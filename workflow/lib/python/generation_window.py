@@ -63,11 +63,11 @@ def prepare_generation_window(
     )
     interval_frame = (
         ownership_frame.join(
-            eligible_pairs.lazy(),
+            eligible_pairs,
             on=(["testing_unit_id", "partition_id"] if partitioned else "testing_unit_id"),
             how="inner",
         )
-        if partitioned else ownership_frame.join(eligible_pairs.lazy(), on="testing_unit_id", how="inner")
+        if partitioned else ownership_frame.join(eligible_pairs, on="testing_unit_id", how="inner")
     )
     mask_frame = (
         pl.scan_parquet(inputs.effective_mask)

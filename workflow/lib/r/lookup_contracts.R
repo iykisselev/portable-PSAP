@@ -69,15 +69,6 @@ resolve_lookup_contract <- function(
     expected_score_max = NULL,
     expected_bin_width = NULL
 ) {
-  if (identical(contract, "external_legacy_v0")) {
-    return(list(
-      type = contract,
-      paths = lookup_paths,
-      metadata = NULL,
-      score_max = as.numeric(expected_score_max),
-      bin_width = NULL
-    ))
-  }
   if (!is_supported_generated_bundle_contract(contract)) {
     abort("Unsupported lookup contract: %s", contract)
   }

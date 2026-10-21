@@ -17,7 +17,6 @@ VALIDATION_LIBRARIES = [
         "validation.py",
         "validation_cohort.py",
         "validation_resources.py",
-        "validation_model.py",
         "validation_reporting.py",
         "bundle_certificate.py",
         "exclusions.py",

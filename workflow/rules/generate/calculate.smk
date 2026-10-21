@@ -55,14 +55,6 @@ rule reduce_null_distribution_bucket:
         partition_statuses=lambda wc: generation_scope_artifact(wc, "partition_statuses"),
         window_statistics=generation_statistics_shards,
     output:
-        lookup_het=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.het.tsv"),
-        lookup_hom=str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.hom.tsv"),
-        lookup_hem_chrX=hem_artifact(
-            str(GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.hem_chrX.tsv")
-        ),
-        diagnostics=str(
-            GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.diagnostics.tsv"
-        ),
         partition_model_diagnostics=str(
             GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.partition-model-diagnostics.tsv"
         ),

@@ -55,7 +55,6 @@ RULE_POLICY_NAMES = frozenset(
         "annotate_variants",
         "summarize_annotations",
         "require_valid_annotations",
-        "prepare_lookups",
         "filter_calibration_regions",
         "filter_excluded_records",
         "build_sample_candidates",
@@ -136,9 +135,6 @@ EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
         ),
         "require_valid_annotations": ExecutionPolicy(
             baseline_mem_mb=512, baseline_runtime_minutes=5
-        ),
-        "prepare_lookups": ExecutionPolicy(
-            baseline_mem_mb=16000, baseline_runtime_minutes=180
         ),
         "filter_calibration_regions": ExecutionPolicy(
             baseline_mem_mb=4096, baseline_runtime_minutes=180

@@ -22,10 +22,9 @@ from config_validation import ConfigurationValidationError, validate_configurati
 from io_contracts import is_missing_token
 from workflow_bindings import as_inputs
 from bundle_contract import (
-    BUNDLE_COMPONENT_FILENAMES,
+    BUNDLE_ARTIFACT_FILENAMES,
     CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
     INDEL_GENERATED_BUNDLE_CONTRACT,
-    BUNDLE_INPUT_COMPONENTS,
     require_supported_contract,
     fixed_width_bin_count,
 )
@@ -590,7 +589,7 @@ def _lookup_source(
 def _directory_lookup_source(source: Mapping[str, Any], key: str) -> LookupSource:
     """Resolve small, unverified declarations; the validation job certifies bytes."""
     directory = Path(_required(source["directory"], f"{key}.directory"))
-    metadata_path = directory / BUNDLE_COMPONENT_FILENAMES["metadata"]
+    metadata_path = directory / BUNDLE_ARTIFACT_FILENAMES["metadata"]
     try:
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         contract = str(metadata["contract"])
@@ -622,7 +621,7 @@ def _directory_lookup_source(source: Mapping[str, Any], key: str) -> LookupSourc
                 tables[(partition_id, model_id)] = component(component_name)
         certificate = {}
         for name in ("validation", "marker"):
-            path = directory / BUNDLE_COMPONENT_FILENAMES[name]
+            path = directory / BUNDLE_ARTIFACT_FILENAMES[name]
             if not path.is_file():
                 raise ValueError(f"missing certificate file {path}")
             certificate[name] = str(path)

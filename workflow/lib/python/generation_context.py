@@ -208,10 +208,6 @@ class GenerationRuleContext:
     def bucket_artifact(self, bucket_id: str, artifact_name: str) -> str:
         """Return one lookup-bucket artifact path for a known artifact name."""
         suffixes = {
-            "lookup_het": "het.tsv",
-            "lookup_hom": "hom.tsv",
-            "lookup_hem_chrX": "hem_chrX.tsv",
-            "diagnostics": "diagnostics.tsv",
             "partition_model_diagnostics": "partition-model-diagnostics.tsv",
         }
         return str(self.lookup_bucket_dir / f"{bucket_id}.{suffixes[artifact_name]}")

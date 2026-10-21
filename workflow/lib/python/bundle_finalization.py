@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 from collections import defaultdict
 import json
-import math
 from pathlib import Path
 
 import polars as pl
@@ -20,91 +19,15 @@ from bundle_contract import (
     CURRENT_GENERATED_BUNDLE_CONTRACT,
     CURRENT_GENERATED_BUNDLE_SCHEMA_VERSION,
     FIXED_WIDTH_BINNING_ALGORITHM,
-    INDEL_GENERATED_BUNDLE_CONTRACT,
-    INDEL_GENERATED_BUNDLE_SCHEMA_VERSION,
     VALIDATION_ARTIFACT_FILENAMES,
-    GENERATED_ROLES,
     model_roles,
 )
 from io_contracts import GzipTsvAtomicWriter, write_gzip_tsv_atomic, write_json_atomic
-from model_catalog import enabled_models, models_for_chromosome, validate_status
+from model_catalog import enabled_models, models_for_chromosome
 from partitioned_bundle_contract import (
     PARTITIONED_NULL_BUNDLE_CONTRACT,
     PARTITIONED_NULL_BUNDLE_SCHEMA_VERSION,
 )
-
-
-def applicable_roles(unit_row, hemizygote: bool) -> tuple[str, ...]:
-    """Return roles needed to score a testing unit under the X-only HEM contract."""
-    # Unit fixtures and pre-window internal callers historically did not retain
-    # chromosome information.  Production provisional-unit rows always do; the
-    # fallback preserves the generic role contract for those small callers.
-    if "CHROM" not in unit_row:
-        return model_roles(hemizygote)
-    models = models_for_chromosome(unit_row["CHROM"], hemizygote)
-    roles = {model.role for model in models}
-    if not roles:
-        raise ValueError(f"No disease models apply to chromosome {unit_row['CHROM']!r}")
-    return tuple(role for role in GENERATED_ROLES if role in roles)
-
-
-def classify_units(units, diagnostics, hemizygote: bool = False):
-    """Keep units with positive mass in every role applicable to their chromosome."""
-    unit_status = {row["testing_unit_id"]: row["status"] for row in units}
-    if len(unit_status) != len(units):
-        raise ValueError("Provisional unit table contains duplicate testing-unit IDs")
-    by_unit = defaultdict(dict)
-    for row in diagnostics:
-        unit, role, status = row["testing_unit_id"], row["role"], row["status"]
-        if unit not in unit_status:
-            raise ValueError(f"Distribution diagnostics contain unknown unit {unit!r}")
-        if role not in GENERATED_ROLES:
-            raise ValueError(
-                f"Distribution diagnostics contain unsupported role {role!r}"
-            )
-        validate_status(status, "role", role=role)
-        if role in by_unit[unit]:
-            raise ValueError(f"Duplicate distribution diagnostic for {unit}/{role}")
-        try:
-            event_mass = float(row["event_mass"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid event mass for {unit}/{role}") from exc
-        if status == "ok" and (
-            not math.isfinite(event_mass) or not 0 < event_mass <= 1
-        ):
-            raise ValueError(f"Invalid positive event mass for {unit}/{role}")
-        if status == "zero_event_mass" and event_mass != 0:
-            raise ValueError(
-                f"Zero-event diagnostic has nonzero mass for {unit}/{role}"
-            )
-        if status == "numerical_failure":
-            raise ValueError(f"Numerical distribution failure for {unit}/{role}")
-        by_unit[unit][role] = status
-    eligible, excluded = [], []
-    for row in units:
-        unit = row["testing_unit_id"]
-        if row["status"] != "eligible":
-            excluded.append((unit, row["status"]))
-            continue
-        roles = applicable_roles(row, hemizygote)
-        missing = [role for role in roles if role not in by_unit[unit]]
-        if missing:
-            raise ValueError(
-                f"Missing distribution diagnostic for {unit}: {', '.join(missing)}"
-            )
-        zero = [role for role in roles if by_unit[unit][role] == "zero_event_mass"]
-        if zero:
-            excluded.append((unit, "zero_event_mass_" + "_".join(zero)))
-        else:
-            eligible.append(unit)
-    return eligible, excluded
-
-
-def diagnostics_rows(paths):
-    """Read compact bucket diagnostics; their size is bounded by testing units."""
-    for path in paths:
-        with Path(path).open(newline="", encoding="utf-8") as handle:
-            yield from csv.DictReader(handle, delimiter="\t")
 
 
 def lookup_rows(paths, allowed_units):
@@ -141,15 +64,6 @@ def parquet_frames(paths, columns: list[str]):
             .select(columns)
             .collect_batches(chunk_size=8192, engine="streaming")
         )
-
-
-def masked_bed_rows(path: str | Path, allowed_units):
-    """Stream canonical masked intervals, never the raw pre-PAR testing BED."""
-    for chromosome, start, end, unit in parquet_rows(
-        [path], ["CHROM", "START", "END", "testing_unit_id"]
-    ):
-        if unit in allowed_units:
-            yield chromosome, start, end, unit
 
 
 def candidate_audit_rows(paths):

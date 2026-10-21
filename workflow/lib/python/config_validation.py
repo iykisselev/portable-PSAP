@@ -97,17 +97,7 @@ def validate_configuration(config: Mapping[str, Any]) -> None:
         raise ConfigurationValidationError(f"{path} must be a boolean")
     hint = ""
     if "lookup_source" in path:
-        if isinstance(source, Mapping) and source.get("type") == "external":
-            hint = (
-                "; external sources require contract: external_legacy_v0 and "
-                "tables: {het: /path/to/het, hom: /path/to/hom, hem_chrX: /path/to/hem} "
-                "(hem_chrX only when enabled)"
-            )
-        else:
-            hint = (
-                "; use lookup_source: {type: bundle, directory: /path/to/bundle} "
-                "or the complete explicit-component form; do not combine them"
-            )
+        hint = "; use lookup_source: {type: bundle, directory: /path/to/bundle}"
     elif path == "bindings.reference" and error.validator == "additionalProperties":
         misplaced = set(error.instance) & {
             "tables",

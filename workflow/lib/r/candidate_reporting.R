@@ -36,7 +36,9 @@ build_candidates <- function(psap, pid, sex, candidate_id_separator = ":", candi
   eligible <- psap[model %in% disease_model_names()]
   if (nrow(eligible) == 0L) return(empty_candidates())
   setorderv(eligible, c("model", "unit", "partition_id", "variant_key"))
-  eligible[, candidate_number := seq_len(.N), by = .(model, partition_id)]
+  # Candidate IDs are join keys, so they must remain unique when the same
+  # disease model has candidates in more than one biological partition.
+  eligible[, candidate_number := seq_len(.N), by = model]
   eligible[, candidate_id := paste(
     pid, disease_model_tag(model),
     sprintf(paste0("%0", candidate_id_ordinal_width, "d"), candidate_number),

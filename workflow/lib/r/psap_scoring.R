@@ -46,33 +46,6 @@ read_lookup <- function(path, metadata = NULL, role = NULL) {
 }
 
 
-prepare_psap_lookups <- function(lookup_source, output_paths, hemizygote_model) {
-  roles <- model_roles(hemizygote_model)
-  for (role in roles) {
-    output <- output_paths[[role]]
-    if (is.null(output) || !nzchar(output)) {
-      abort("Missing prepared output path for %s lookup", role)
-    }
-    dir.create(dirname(output), recursive = TRUE, showWarnings = FALSE)
-    saveRDS(
-      read_lookup(lookup_source$paths[[role]], lookup_source$metadata, role),
-      output,
-      version = 2
-    )
-  }
-  invisible(output_paths)
-}
-
-
-read_prepared_lookup <- function(path) {
-  lookup <- readRDS(path)
-  if (!is.list(lookup) || !all(c("ids", "values", "row_of") %in% names(lookup))) {
-    abort("Prepared PSAP lookup has an invalid structure: %s", path)
-  }
-  lookup
-}
-
-
 lookup_psap <- function(
     variants, lookup, score_max, score_column = "CADD_PHRED",
     lookup_contract = PARTITIONED_NULL_BUNDLE_CONTRACT, metadata = NULL, row_index = NULL) {
@@ -117,18 +90,12 @@ score_model <- function(variants, model, genotype_class, lookup, lookup_source) 
 }
 
 
-score_lookup_models <- function(variants, definitions, lookup_source, lookup_name) {
-  # This scope owns the only dense lookup. Results contain scalar PSAPs, never
-  # a reference to the matrix, so the next role can reclaim this allocation.
-  lookup <- read_lookup(lookup_source$paths[[lookup_name]], lookup_source$metadata, lookup_name)
-  lapply(seq_len(nrow(definitions)), function(index) {
-    definition <- definitions[index, ]
-    selected <- variants
-    if (definition$is_hem) {
-      selected <- variants[canonical_chromosome(CHROM) == definition$required_chromosome]
-    }
-    score_model(selected, definition$model, definition$genotype_class, lookup, lookup_source)
-  })
+variants_for_model <- function(variants, definition) {
+  chromosome <- canonical_chromosome(variants$CHROM)
+  if (!is.na(definition$required_chromosome)) {
+    return(variants[chromosome == definition$required_chromosome])
+  }
+  variants[chromosome != "X"]
 }
 
 
@@ -138,18 +105,26 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
   variants[, gt_class := tolower(trimws(as.character(gt_class)))]
   definitions <- DISEASE_MODELS[hemizygote_model | !DISEASE_MODELS$is_hem, , drop = FALSE]
   results <- list()
-  for (partition_id in lookup_source$partition_ids) {
+  for (current_partition_id in lookup_source$partition_ids) {
+    partition_variants <- variants[.partition_id == current_partition_id]
     for (index in seq_len(nrow(definitions))) {
       definition <- definitions[index, ]
-      lookup_name <- paste(partition_id, definition$model, sep = "\t")
-      selected <- variants[.partition_id == partition_id]
-      results <- c(results, score_lookup_models(selected, definition, lookup_source, lookup_name))
+      selected <- variants_for_model(partition_variants, definition)
+      if (nrow(selected) == 0L) next
+      lookup_name <- paste(current_partition_id, definition$model, sep = "\t")
+      # Keep only one partition/model matrix resident at a time. Result rows
+      # are scalar values, so the matrix can be reclaimed before the next one.
+      lookup <- read_lookup(
+        lookup_source$paths[[lookup_name]], lookup_source$metadata, lookup_name
+      )
+      result <- score_model(
+        selected, definition$model, definition$genotype_class, lookup, lookup_source
+      )
+      if (!is.null(result)) results[[length(results) + 1L]] <- result
+      rm(lookup)
+      gc(verbose = FALSE)
     }
-    # Reclaim the previous matrix before allocating another one. Merely replacing
-    # a list entry allows unused matrices to accumulate until R chooses to collect.
-    gc(verbose = FALSE)
   }
-  results <- Filter(Negate(is.null), results)
   if (length(results) == 0L) return(empty_scoring_output())
   output <- rbindlist(results, use.names = TRUE, fill = FALSE)
   # Reading by lookup role must not change model/tie order in the public reports.

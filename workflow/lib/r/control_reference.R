@@ -3,14 +3,14 @@
 empty_reference <- function() {
   data.table(
     pid = character(), phenotype = character(), sex = numeric(), unit = character(),
-    model = character(), variant_key = character(), PSAP = numeric()
+    partition_id = character(), model = character(), variant_key = character(), PSAP = numeric()
   )
 }
 
 make_evidence <- function(variants, row_filter, model) {
   selected <- variants[row_filter]
   if (nrow(selected) == 0L) return(NULL)
-  selected[, .(unit, model = model, variant_key)]
+  selected[, .(unit, partition_id, model = model, variant_key)]
 }
 
 derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
@@ -18,9 +18,10 @@ derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
   require_columns(variants, c("Key", "gt_class"), sprintf("Control annotation table for %s", pid))
   variants[, variant_key := clean_identifier(Key)]
   variants[, gt_class := tolower(clean_identifier(gt_class))]
-  require_columns(variants, "unit", sprintf("Control annotation table for %s", pid))
+  require_columns(variants, c("unit", "partition_id"), sprintf("Control annotation table for %s", pid))
   variants[, unit := clean_identifier(unit)]
-  invalid <- is.na(variants$variant_key) | is.na(variants$gt_class) | is.na(variants$unit)
+  variants[, partition_id := clean_identifier(partition_id)]
+  invalid <- is.na(variants$variant_key) | is.na(variants$gt_class) | is.na(variants$unit) | is.na(variants$partition_id)
   if (any(invalid)) abort("Control %s contains %d row(s) with missing key, genotype class, or unit", pid, sum(invalid))
   definitions <- standard_disease_models()
   evidence <- lapply(seq_len(nrow(definitions)), function(index) {
@@ -39,29 +40,30 @@ derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
   }
   evidence <- Filter(Negate(is.null), evidence)
   if (length(evidence) == 0L) return(empty_reference())
-  output <- unique(rbindlist(evidence, use.names = TRUE), by = c("unit", "model", "variant_key"))
+  output <- unique(rbindlist(evidence, use.names = TRUE), by = c("unit", "partition_id", "model", "variant_key"))
   output[, `:=`(pid = as.character(pid), phenotype = "unaffected", sex = sex, PSAP = NA_real_)]
-  setcolorder(output, c("pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP"))
+  setcolorder(output, c("pid", "phenotype", "sex", "unit", "partition_id", "model", "variant_key", "PSAP"))
   output
 }
 
 
 read_psap_scores <- function(path, pid) {
   scores <- read_tsv(path)
-  require_columns(scores, c("Key", "unit", "Dz.Model", "PSAP"), sprintf("Control PSAP table for %s", pid))
+  require_columns(scores, c("Key", "unit", "partition_id", "Dz.Model", "PSAP"), sprintf("Control PSAP table for %s", pid))
   scores[, unit := clean_identifier(unit)]
   scores[, model := clean_identifier(`Dz.Model`)]
   scores[, variant_key := clean_identifier(Key)]
+  scores[, partition_id := clean_identifier(partition_id)]
   scores[, PSAP := suppressWarnings(as.numeric(PSAP))]
-  scores <- scores[!is.na(unit) & !is.na(model) & !is.na(variant_key), .(unit, model, variant_key, PSAP)]
-  scores[, .(PSAP = if (all(is.na(PSAP))) NA_real_ else min(PSAP, na.rm = TRUE)), by = .(unit, model, variant_key)]
+  scores <- scores[!is.na(unit) & !is.na(partition_id) & !is.na(model) & !is.na(variant_key), .(unit, partition_id, model, variant_key, PSAP)]
+  scores[, .(PSAP = if (all(is.na(PSAP))) NA_real_ else min(PSAP, na.rm = TRUE)), by = .(unit, partition_id, model, variant_key)]
 }
 
 
 attach_psap <- function(evidence, scores) {
   if (nrow(evidence) == 0L || nrow(scores) == 0L) return(evidence)
   evidence[, PSAP := NULL]
-  scores[evidence, on = c("unit", "model", "variant_key")][, .(pid, phenotype, sex, unit, model, variant_key, PSAP)]
+  scores[evidence, on = c("unit", "partition_id", "model", "variant_key")][, .(pid, phenotype, sex, unit, partition_id, model, variant_key, PSAP)]
 }
 
 
@@ -84,7 +86,7 @@ run_control_reference <- function(config) {
     reference <- unique(reference, by = names(reference))
     message("Exact duplicate rows removed: ", before - nrow(reference))
   }
-  if (nrow(reference) > 0L) setorderv(reference, c("unit", "model", "variant_key", "pid"), c(1L, 1L, 1L, 1L))
+  if (nrow(reference) > 0L) setorderv(reference, c("unit", "partition_id", "model", "variant_key", "pid"), c(1L, 1L, 1L, 1L, 1L))
   write_tsv(reference, config$output, threads = config$threads)
   message("Unaffected individuals: ", length(config$input))
   message("Control evidence rows written: ", nrow(reference))

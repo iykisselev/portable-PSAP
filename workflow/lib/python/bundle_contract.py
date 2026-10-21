@@ -13,7 +13,7 @@ import sys
 from types import MappingProxyType
 from typing import Mapping
 
-from model_catalog import GENERATED_ROLES, model_roles  # noqa: F401
+from model_catalog import model_roles  # noqa: F401
 
 
 CURRENT_GENERATED_BUNDLE_CONTRACT = "partitioned_null_bundle_v1"
@@ -26,32 +26,13 @@ CANONICAL_CONTIG_CONVENTION = "canonical_without_chr_prefix"
 VALIDATION_ARTIFACT_FILENAMES = MappingProxyType(
     {"report": "validation.json", "marker": "validation.ok"}
 )
-BUNDLE_COMPONENT_FILENAMES: Mapping[str, str] = MappingProxyType(
+BUNDLE_ARTIFACT_FILENAMES: Mapping[str, str] = MappingProxyType(
     {
-        "lookup_het": "lookup_het.tsv.gz",
-        "lookup_hom": "lookup_hom.tsv.gz",
-        "lookup_hem_chrX": "lookup_hem_chrX.tsv.gz",
-        "eligible_bed": "eligible_testing_units.bed.gz",
-        "calibration_regions": "calibration_regions.bed.gz",
-        "excluded_alleles": "excluded_alleles.tsv.gz",
-        "candidate_audit": "candidate_audit.tsv.gz",
-        "population_af_zero_imputations": "population_af_zero_imputations.tsv.gz",
-        "excluded_units": "excluded_units.tsv.gz",
         "metadata": "metadata.json",
         "validation": VALIDATION_ARTIFACT_FILENAMES["report"],
         "marker": VALIDATION_ARTIFACT_FILENAMES["marker"],
     }
 )
-# Public certificate keys differ from a few rule-facing field names.
-BUNDLE_INPUT_COMPONENTS = MappingProxyType(
-    {
-        "eligible_units": "eligible_testing_units",
-        "calibration_mask": "calibration_regions",
-        "excluded_alleles": "excluded_alleles",
-        "excluded_units": "excluded_units",
-    }
-)
-HEM_COMPONENT = "lookup_hem_chrX"
 class BundleContractError(ValueError):
     """Raised when a bundle cannot be read or upgraded under this release."""
 

@@ -1,7 +1,7 @@
 # Candidate/control joins and cohort-level report aggregation.
 
 read_candidate_tables <- function(paths) {
-  required <- c("candidate_id", "pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP")
+  required <- c("candidate_id", "pid", "phenotype", "sex", "unit", "partition_id", "model", "variant_key", "PSAP")
   tables <- lapply(paths, function(path) {
     candidates <- read_tsv(path)
     require_columns(candidates, required, paste("Candidate table", path))
@@ -15,7 +15,7 @@ read_candidate_tables <- function(paths) {
 
 
 read_controls <- function(path) {
-  required <- c("pid", "phenotype", "sex", "unit", "model", "variant_key", "PSAP")
+  required <- c("pid", "phenotype", "sex", "unit", "partition_id", "model", "variant_key", "PSAP")
   controls <- read_tsv(path)
   require_columns(controls, required, "Control reference")
   controls <- controls[, required, with = FALSE]
@@ -25,7 +25,7 @@ read_controls <- function(path) {
   controls[, (character_columns) := lapply(.SD, as.character), .SDcols = character_columns]
   controls[, PSAP := suppressWarnings(as.numeric(PSAP))]
   if (any(controls$phenotype != "unaffected")) abort("Control reference contains rows not labelled unaffected")
-  unique(controls, by = c("pid", "unit", "model", "variant_key"))
+  unique(controls, by = c("pid", "unit", "partition_id", "model", "variant_key"))
 }
 
 
@@ -56,11 +56,11 @@ validation_priority <- function(value) {
 
 build_candidate_groups <- function(candidates) {
   inconsistent <- candidates[, .(
-    pid_count = uniqueN(pid), unit_count = uniqueN(unit), model_count = uniqueN(model)
-  ), by = candidate_id][pid_count != 1L | unit_count != 1L | model_count != 1L]
-  if (nrow(inconsistent) > 0L) abort("candidate_id values span multiple patients, units, or models")
+    pid_count = uniqueN(pid), unit_count = uniqueN(unit), partition_count = uniqueN(partition_id), model_count = uniqueN(model)
+  ), by = candidate_id][pid_count != 1L | unit_count != 1L | partition_count != 1L | model_count != 1L]
+  if (nrow(inconsistent) > 0L) abort("candidate_id values span multiple patients, units, partitions, or models")
   groups <- candidates[, .(
-    pid = pid[[1]], unit = unit[[1]], model = model[[1]],
+    pid = pid[[1]], unit = unit[[1]], partition_id = partition_id[[1]], model = model[[1]],
     variant_keys = list(sort(unique(variant_key))), PSAP = minimum_or_na(PSAP)
   ), by = candidate_id]
   groups[, variant_count := lengths(variant_keys)]
@@ -89,6 +89,7 @@ validate_candidates <- function(candidates, controls) {
   candidate_keys <- groups[, .(
     candidate_id,
     unit,
+    partition_id,
     model,
     variant_key = vapply(variant_keys, function(keys) keys[[1L]], character(1))
   )]
@@ -96,7 +97,7 @@ validate_candidates <- function(candidates, controls) {
     candidate_keys, on = "model", allow.cartesian = TRUE
   ]
   hits <- controls[candidate_controls,
-    on = .(unit, variant_key, model = control_model),
+    on = .(unit, partition_id, variant_key, model = control_model),
     nomatch = NULL,
     allow.cartesian = TRUE,
     .(candidate_id = i.candidate_id, pid = x.pid)
@@ -123,7 +124,7 @@ validate_candidates <- function(candidates, controls) {
   setcolorder(status, c("candidate_id", "validation", "control_count", "control_pids"))
   detail <- status[candidates, on = "candidate_id"]
   setcolorder(detail, c(
-    "candidate_id", "pid", "phenotype", "sex", "unit", "model", "variant_key",
+    "candidate_id", "pid", "phenotype", "sex", "unit", "partition_id", "model", "variant_key",
     "PSAP", "validation", "control_count", "control_pids"
   ))
   candidate_level <- status[groups, on = "candidate_id"]
