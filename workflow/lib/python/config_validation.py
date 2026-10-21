@@ -33,24 +33,6 @@ def validate_configuration(config: Mapping[str, Any]) -> None:
         )
     }
     schemas = {name: _load_schema(path) for name, path in schema_paths.items()}
-    # Select the lookup branch before collecting errors from the whole schema.
-    # Otherwise oneOf can report an unrelated external contract for bundle input.
-    source: Any = config
-    for name in ("bindings", "reference", "lookup_source"):
-        source = source.get(name) if isinstance(source, Mapping) else None
-    if isinstance(source, Mapping):
-        branches = schemas["run.schema.yaml"]["$defs"]["lookup_source"]["oneOf"]
-        selected = [
-            branch
-            for branch in branches
-            if branch["properties"]["type"]["const"] == source.get("type")
-            and (
-                source.get("type") == "external"
-                or ("directory" in branch["properties"]) == ("directory" in source)
-            )
-        ]
-        if selected:
-            schemas["run.schema.yaml"]["$defs"]["lookup_source"] = selected[0]
     schema = schemas[SCHEMA_PATH.name]
     resolver = jsonschema.RefResolver(
         base_uri=SCHEMA_PATH.resolve().as_uri(),
