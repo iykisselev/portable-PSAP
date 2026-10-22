@@ -40,7 +40,13 @@ combine_partition_psaps <- function(raw_psap, aggregation_inputs = raw_psap,
     abort("Raw partition PSAPs and ACAT inputs must have the same length")
   }
   k <- length(raw_psap)
-  if (!k) return(list(PSAP = NA_real_, aggregation_status = "no_contributing_partitions", aggregation_inputs = numeric()))
+  if (!k) {
+    return(list(
+      PSAP = NA_real_,
+      aggregation_status = "no_contributing_partitions",
+      aggregation_inputs = numeric()
+    ))
+  }
 
   any_zero <- any(raw_psap == 0)
   any_one <- any(raw_psap == 1)
@@ -59,7 +65,11 @@ combine_partition_psaps <- function(raw_psap, aggregation_inputs = raw_psap,
     ))
   }
   if (any(aggregation_inputs == 1)) {
-    return(list(PSAP = NA_real_, aggregation_status = "upper_endpoint_unresolved", aggregation_inputs = aggregation_inputs))
+    return(list(
+      PSAP = NA_real_,
+      aggregation_status = "upper_endpoint_unresolved",
+      aggregation_inputs = aggregation_inputs
+    ))
   }
   # A zero aggregation input that did not originate as an exact raw PSAP is
   # invalid under the current policies and must not be silently transformed.

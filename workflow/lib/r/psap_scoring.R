@@ -1,47 +1,57 @@
 # Per-sample lookup selection and PSAP scoring.  Scripts supply only bindings.
 
-SCORING_OUTPUT_COLUMNS <- c("Key", "unit", "partition_id", "Dz.Model", "PSAP", "selected_score_bin", "next_PSAP")
+SCORING_OUTPUT_COLUMNS <- c(
+  "Key", "unit", "partition_id", "Dz.Model", "PSAP", "selected_score_bin", "next_PSAP"
+)
 
 
 empty_scoring_output <- function() {
-  data.table(Key = character(), unit = character(), partition_id = character(), `Dz.Model` = character(), PSAP = numeric(), selected_score_bin = integer(), next_PSAP = numeric())
+  data.table(
+    Key = character(), unit = character(), partition_id = character(),
+    `Dz.Model` = character(), PSAP = numeric(), selected_score_bin = integer(),
+    next_PSAP = numeric()
+  )
 }
 
 
 read_scoring_variants <- function(path) {
   variants <- read_tsv(path)
-  require_columns(variants, c("Key", "CHROM", "CADD_PHRED", "gt_class", "unit", "partition_id", "partition_status"), "PSAP-ready variant table")
+  require_columns(
+    variants,
+    c("Key", "CHROM", "CADD_PHRED", "gt_class", "unit", "partition_id", "partition_status"),
+    "PSAP-ready variant table"
+  )
   variants[, CADD_PHRED := suppressWarnings(as.numeric(CADD_PHRED))]
   variants
 }
 
 
-read_lookup <- function(path, metadata = NULL, role = NULL) {
-  lookup <- read_tsv(path, header = FALSE, colClasses = "character")
-  if (ncol(lookup) < 2 || nrow(lookup) == 0) {
-    abort("PSAP lookup table must contain an ID column and score columns: %s", path)
+read_lookup <- function(path, metadata, role) {
+  lookup <- read_tsv(path, colClasses = "character")
+  if (!"testing_unit_id" %in% names(lookup) || ncol(lookup) < 2L) {
+    abort("Partitioned PSAP lookup must contain testing_unit_id and score columns: %s", path)
   }
-  ids <- trimws(as.character(lookup[[1]]))
-  values <- lookup[, -1, with = FALSE]
+  ids <- trimws(as.character(lookup[["testing_unit_id"]]))
+  if (anyNA(ids) || any(!nzchar(ids))) {
+    abort("Partitioned PSAP lookup has an empty testing_unit_id: %s", path)
+  }
+  values <- lookup[, setdiff(names(lookup), "testing_unit_id"), with = FALSE]
   value_matrix <- matrix(
     suppressWarnings(as.numeric(unlist(values, use.names = FALSE))),
     nrow = nrow(values), ncol = ncol(values)
   )
-  invalid_rows <- rowSums(is.na(value_matrix)) > 0L
-  if (identical(tolower(ids[[1L]]), "testing_unit_id") || (invalid_rows[1] && any(!invalid_rows[-1]))) {
-    ids <- ids[-1]
-    value_matrix <- value_matrix[-1, , drop = FALSE]
+  if (anyNA(value_matrix)) {
+    abort("PSAP lookup table contains non-numeric score values: %s", path)
   }
-  if (anyNA(value_matrix)) abort("PSAP lookup table contains non-numeric score values: %s", path)
-  if (anyDuplicated(ids)) abort("PSAP lookup table contains duplicate testing-unit IDs: %s", path)
+  if (anyDuplicated(ids)) {
+    abort("PSAP lookup table contains duplicate testing-unit IDs: %s", path)
+  }
   lookup <- list(
     ids = ids,
     values = value_matrix,
     row_of = setNames(seq_along(ids), ids)
   )
-  if (!is.null(metadata)) {
-    validate_generated_lookup(lookup, metadata, if (is.null(role)) "selected" else role)
-  }
+  validate_generated_lookup(lookup, metadata, role)
   lookup
 }
 
@@ -65,27 +75,38 @@ lookup_psap <- function(
 
 
 select_highest <- function(variants) {
-  setorderv(variants, c(".testing_unit_id", ".partition_id", "CADD_PHRED", "Key"), c(1, 1, -1, 1), na.last = TRUE)
+  setorderv(
+    variants, c(".testing_unit_id", ".partition_id", "CADD_PHRED", "Key"),
+    c(1, 1, -1, 1), na.last = TRUE
+  )
   variants[, .SD[CADD_PHRED == max(CADD_PHRED)], by = .(.testing_unit_id, .partition_id)]
 }
 
 
 score_model <- function(variants, model, genotype_class, lookup, lookup_source) {
   selected <- variants[
-    partition_status == "eligible" & gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id) & !is.na(.partition_id) & nzchar(.partition_id)
+    partition_status == "eligible" & gt_class == genotype_class & !is.na(CADD_PHRED) &
+      !is.na(.testing_unit_id) & nzchar(.testing_unit_id) &
+      !is.na(.partition_id) & nzchar(.partition_id)
   ]
   if (nrow(selected) == 0) return(NULL)
   selected <- select_highest(selected)
   row_index <- require_lookup_units(selected, lookup, model)
-  selected[, selected_score_bin := generated_lookup_bin(CADD_PHRED, lookup_source$metadata$score_max, lookup_source$metadata$bin_width)]
+  selected[, selected_score_bin := generated_lookup_bin(
+    CADD_PHRED, lookup_source$metadata$score_max, lookup_source$metadata$bin_width
+  )]
   selected[, PSAP := lookup_psap(
     selected, lookup, lookup_source$score_max, lookup_contract = lookup_source$type,
     metadata = lookup_source$metadata, row_index = row_index
   )]
   selected[, .(
-    Key = as.character(Key), unit = as.character(.testing_unit_id), partition_id = as.character(.partition_id),
-    `Dz.Model` = as.character(model), PSAP = as.numeric(PSAP), selected_score_bin = as.integer(selected_score_bin),
-    next_PSAP = as.numeric(ifelse(selected_score_bin == ncol(lookup$values), 0, lookup$values[cbind(row_index, pmin(selected_score_bin + 1L, ncol(lookup$values)))]))
+    Key = as.character(Key), unit = as.character(.testing_unit_id),
+    partition_id = as.character(.partition_id), `Dz.Model` = as.character(model),
+    PSAP = as.numeric(PSAP), selected_score_bin = as.integer(selected_score_bin),
+    next_PSAP = as.numeric(ifelse(
+      selected_score_bin == ncol(lookup$values), 0,
+      lookup$values[cbind(row_index, pmin(selected_score_bin + 1L, ncol(lookup$values)))]
+    ))
   )]
 }
 
@@ -101,9 +122,14 @@ variants_for_model <- function(variants, definition) {
 
 score_variants <- function(variants, lookup_source, hemizygote_model) {
   variants <- copy(variants)
-  variants[, `:=`(.testing_unit_id = clean_identifier(unit), .partition_id = clean_identifier(partition_id))]
+  variants[, `:=`(
+    .testing_unit_id = clean_identifier(unit),
+    .partition_id = clean_identifier(partition_id)
+  )]
   variants[, gt_class := tolower(trimws(as.character(gt_class)))]
-  definitions <- DISEASE_MODELS[hemizygote_model | !DISEASE_MODELS$is_hem, , drop = FALSE]
+  definitions <- DISEASE_MODELS[
+    hemizygote_model | !DISEASE_MODELS$is_hem, , drop = FALSE
+  ]
   results <- list()
   for (current_partition_id in lookup_source$partition_ids) {
     partition_variants <- variants[.partition_id == current_partition_id]
@@ -128,7 +154,9 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
   if (length(results) == 0L) return(empty_scoring_output())
   output <- rbindlist(results, use.names = TRUE, fill = FALSE)
   # Reading by lookup role must not change model/tie order in the public reports.
-  output <- output[order(match(output$Dz.Model, definitions$model), output$partition_id)]
+  output <- output[order(
+    match(output$Dz.Model, definitions$model), output$partition_id
+  )]
   setcolorder(output, SCORING_OUTPUT_COLUMNS)
   output
 }
@@ -137,7 +165,10 @@ score_variants <- function(variants, lookup_source, hemizygote_model) {
 run_psap_scoring <- function(config) {
   setDTthreads(config$threads)
   variants <- read_scoring_variants(config$input)
-  output <- score_variants(variants, lookup_source = config$lookup_source, hemizygote_model = config$hemizygote_model)
+  output <- score_variants(
+    variants, lookup_source = config$lookup_source,
+    hemizygote_model = config$hemizygote_model
+  )
   if (nrow(output) > 0) setorderv(output, "PSAP", 1L, na.last = TRUE)
   if (!identical(names(output), SCORING_OUTPUT_COLUMNS)) {
     abort(

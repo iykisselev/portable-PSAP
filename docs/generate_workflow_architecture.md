@@ -67,10 +67,10 @@ filesystem.
 
 | Rule | Inputs | Transformation | Outputs |
 | --- | --- | --- | --- |
-| `prepare_generation_scope` (checkpoint) | FASTA index, units, exclusion/PAR/other exclusions, population/score bindings | Build supported non-PAR scope; subtract all other interval exclusions; measure retained fractions; divide the genome into windows; assign eligible-unit buckets; capture input checksums. | Window and bucket manifests; provisional unit/interval/mask Parquet files; resource-identity JSON. |
+| `prepare_generation_scope` (checkpoint) | FASTA index, ordered partition BEDs, exclusion/PAR/other exclusions, population/score bindings | Resolve per-unit partition ownership in configured order; subtract exclusions; determine pair eligibility; divide the eligible owned scope into windows; assign one bucket per testing unit. | Window and bucket manifests; resolved ownership, pair-status, ID-overlap, and calibration-mask Parquet files. |
 | `prepare_generation_window` | One window plus scope artifacts, FASTA, population VCF, and scores | Enumerate calibrated SNV alleles and, when enabled, anchor-owned indel catalog entries; validate spans, join unit membership, score, and population state. | One each of `allele_states`, `allele_membership`, `allele_scores`, and indel candidate-audit Parquet shards. |
 | `calculate_window_null_distribution` | One window shard set and one unit bucket | Assign the absent-allele policy and role-specific effective AF; bin scores; aggregate additive no-event statistics and class-specific event counts. | One window-by-bucket statistics Parquet shard. |
-| `reduce_null_distribution_bucket` | All statistics shards for one bucket | Compensated reduction across windows; calculate conditional score-bin survival rows and diagnostics. | HET/HOM and optional HEM lookup rows plus diagnostics TSV with total, SNV, and indel event counts. |
+| `reduce_null_distribution_bucket` | All statistics shards for one bucket | Compensated reduction across windows; calculate conditional score-bin survival rows and diagnostics by biological partition and public disease model. | Partition/model lookup rows plus diagnostics TSV with total, SNV, and indel event counts. |
 | `finalize_null_distribution_bundle` | All bucket rows/diagnostics plus scope and state artifacts | Retain only units with positive mass for every applicable role; stream public bundle components and metadata. | Gzipped lookup, scope, exclusion, and metadata files. |
 | `validate_null_distribution_bundle` | Finalized bundle and schema | Validate component checksums, row coverage, contracts, and semantics. | `validation.json` and `validation.ok`. |
 
@@ -81,14 +81,13 @@ intermediates. In full mode, it also exposes the downstream apply reports.
 
 These checkpoint artifacts are part of the internal DAG contract:
 
-- `provisional_units.parquet` has one row per unit with `supported_bases`,
-  `retained_bases`, `retained_fraction`, chromosome, and eligibility status.
-  Supported bases exclude PAR but not other interval exclusions; retained bases
-  also exclude the union of all other exclusion sources. The default minimum
-  retained fraction is 0.5. Statuses distinguish `no_calibration_scope`,
-  `fully_excluded`, `retained_fraction_below_minimum`, and `eligible`.
-- `unit_intervals.parquet` preserves merged raw unit intervals; the masked
-  counterpart preserves only callable, supported, non-excluded segments.
+- `resolved_partition_intervals.parquet` has one row per owned biological
+  partition interval and includes the configured `partition_order`.
+- `unit_partition_status.parquet` has one row per testing-unit/partition pair
+  with raw, priority-removed, resolved, supported, and retained bases plus its
+  eligibility status. Retention is calculated after precedence subtraction.
+- `testing_unit_id_overlap.parquet` records cross-partition raw-ID overlap
+  diagnostics; it does not alter identifiers or eligibility.
 - `effective_calibration_mask.parquet` records the exact calibration intervals.
 - `windows.json` and `unit_buckets.json` are versioned, sorted manifests;
   they are the only source of window and bucket wildcards.
@@ -100,7 +99,8 @@ These checkpoint artifacts are part of the internal DAG contract:
 - Window `allele_states` holds `present`, `absent`, `rejected`, or invalid
   population state information. `allele_membership` maps alleles to units, and
   `allele_scores` supplies the matching score.
-- Statistics shards are additive per `testing_unit_id`, role, and score bin.
+- Statistics shards are additive per `testing_unit_id`, `partition_id`, role,
+  and score bin.
   They store `certain_count`, `log_none_sum`, total event count, and SNV/indel
   event counts so global event tables never need to be materialized. Bucket
   diagnostics expose those class counts as `snv_event_count` and

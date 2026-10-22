@@ -65,7 +65,7 @@ class CohortSummaryAnnotationTests(unittest.TestCase):
             for output in (source, hardlink):
                 with self.assertRaisesRegex(ValueError, "overwrite"):
                     module.annotate_summary(
-                        source, output, {}, None, "unit", "candidate_signature"
+                        source, output, {}, None, "testing_unit_id", "variant_key"
                     )
                 self.assertEqual("original content\n", source.read_text())
 
@@ -121,8 +121,8 @@ class CohortSummaryAnnotationTests(unittest.TestCase):
             summary = root / "cohort_candidates.tsv.gz"
             with gzip.open(summary, "wt", encoding="utf-8", newline="") as handle:
                 handle.write(
-                    "unit\tvariant_key\tPSAP\n"
-                    "ENSG000001.7\t1:10-10_A>G|1:20-21_AA>A\t0.01\n"
+                    "testing_unit_id\tvariant_key\tPSAP\n"
+                    "ENSG000001.7\t1:10-10_A>G\t0.01\n"
                 )
 
             module = self.load_module()
@@ -146,8 +146,8 @@ class CohortSummaryAnnotationTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle, delimiter="\t"))
             self.assertEqual(1, len(rows))
             self.assertEqual("GENE_A", rows[0]["gene_name"])
-            self.assertEqual("25,18", rows[0]["cadd_phred"])
-            self.assertEqual("0.001,0.0003", rows[0]["population_af"])
+            self.assertEqual("25", rows[0]["cadd_phred"])
+            self.assertEqual("0.001", rows[0]["population_af"])
 
 
 if __name__ == "__main__":

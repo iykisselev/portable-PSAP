@@ -37,10 +37,10 @@ class GenerationWindowTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
         self.window_id = "1_000000000000_000000000010"
+        self.resolved_partitions = self.directory / "resolved_partitions.parquet"
+        self.partition_statuses = self.directory / "partition_statuses.parquet"
         self.inputs = GenerationWindowInputs(
             windows=self.directory / "windows",
-            units=self.directory / "units",
-            unit_intervals=self.directory / "unit_intervals",
             effective_mask=self.directory / "mask",
             fasta=self.directory / "fasta",
             fasta_fai=self.directory / "fasta_fai",
@@ -48,6 +48,8 @@ class GenerationWindowTests(unittest.TestCase):
             score_snv_index=None,
             population_vcf=self.directory / "population_vcf",
             population_vcf_index=None,
+            resolved_partition_intervals=self.resolved_partitions,
+            partition_statuses=self.partition_statuses,
         )
         self.outputs = GenerationWindowOutputs(
             allele_states=self.directory / "allele_states.parquet",
@@ -85,17 +87,20 @@ class GenerationWindowTests(unittest.TestCase):
         pl.DataFrame(
             {
                 "testing_unit_id": ["a", "b", "excluded"],
-                "status": ["eligible", "eligible", "retained_fraction_below_minimum"],
-            }
-        ).write_parquet(self.inputs.units)
-        pl.DataFrame(
-            {
-                "testing_unit_id": ["a", "b", "excluded"],
+                "partition_id": ["cds", "cds", "cds"],
+                "partition_order": [0, 0, 0],
                 "CHROM": ["1"] * 3,
                 "START": [0, 1, 8],
                 "END": [3, 6, 10],
             }
-        ).write_parquet(self.inputs.unit_intervals)
+        ).write_parquet(self.resolved_partitions)
+        pl.DataFrame(
+            {
+                "testing_unit_id": ["a", "b", "excluded"],
+                "partition_id": ["cds", "cds", "cds"],
+                "status": ["eligible", "eligible", "retained_fraction_below_minimum"],
+            }
+        ).write_parquet(self.partition_statuses)
         self.write_mask([(0, 2), (4, 10)])
         self.inputs.score_snv.write_text(
             "".join(
@@ -340,17 +345,23 @@ class GenerationWindowTests(unittest.TestCase):
         )
 
     def test_population_query_keeps_indel_anchor_outside_unit(self):
-        pl.DataFrame({"testing_unit_id": ["b"], "status": ["eligible"]}).write_parquet(
-            self.inputs.units
-        )
         pl.DataFrame(
             {
                 "testing_unit_id": ["b"],
+                "partition_id": ["cds"],
+                "partition_order": [0],
                 "CHROM": ["1"],
                 "START": [1],
                 "END": [2],
             }
-        ).write_parquet(self.inputs.unit_intervals)
+        ).write_parquet(self.resolved_partitions)
+        pl.DataFrame(
+            {
+                "testing_unit_id": ["b"],
+                "partition_id": ["cds"],
+                "status": ["eligible"],
+            }
+        ).write_parquet(self.partition_statuses)
         self.write_mask([(0, 3)])
         self.inputs.fasta.write_text(">1\nACAAAAAAAA\n", encoding="utf-8")
         self.inputs.fasta_fai.write_text("1\t10\t3\t10\t11\n", encoding="utf-8")
@@ -425,9 +436,9 @@ class GenerationWindowTests(unittest.TestCase):
                     ">1\n" + ("N" if scenario == "all_n" else "A") * 10 + "\n"
                 )
                 if scenario == "no_eligible_units":
-                    pl.read_parquet(self.inputs.units).with_columns(
+                    pl.read_parquet(self.partition_statuses).with_columns(
                         pl.lit("retained_fraction_below_minimum").alias("status")
-                    ).write_parquet(self.inputs.units)
+                    ).write_parquet(self.partition_statuses)
                 with (
                     patch("generation_window.score_rows") as scores,
                     patch("generation_window.population_rows") as population,
@@ -454,6 +465,7 @@ class GenerationWindowTests(unittest.TestCase):
                             "POS": pl.Int64,
                             "REF": pl.String,
                             "ALT": pl.String,
+                            "partition_id": pl.String,
                             "variant_class": pl.String,
                         }
                     ),

@@ -68,7 +68,7 @@ def calculate_window_statistics(
         .collect(engine="streaming")
     )
     if "partition_id" not in memberships.columns:
-        memberships = memberships.with_columns(pl.lit("default").alias("partition_id"))
+        raise ValueError("Partitioned generation membership is missing partition_id")
     candidate_keys = memberships.select(ALLELE_COLUMNS).unique()
     scores = selected_window_rows(inputs.allele_scores, candidate_keys)
     states = selected_window_rows(inputs.allele_states, candidate_keys)

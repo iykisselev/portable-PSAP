@@ -76,10 +76,10 @@ class GenerationResourcePolicyTests(unittest.TestCase):
         outputs = GenerationScopeOutputs(
             windows=self.path,
             buckets=self.path,
-            units=self.path,
-            unit_intervals=self.path,
-            masked_unit_intervals=self.path,
             effective_mask=self.path,
+            resolved_partition_intervals=self.path,
+            partition_statuses=self.path,
+            testing_unit_id_overlap=self.path,
         )
         params = GenerationScopeParameters(0.5, 10, 10, "zstd", {}, False, 50, ("unit",))
         with patch("generation_scope.read_bed_units") as read_units:

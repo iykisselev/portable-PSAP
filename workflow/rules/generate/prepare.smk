@@ -8,9 +8,6 @@ checkpoint prepare_generation_scope:
     output:
         windows=GENERATION_CONTEXT.scope_paths["windows"],
         buckets=GENERATION_CONTEXT.scope_paths["buckets"],
-        units=GENERATION_CONTEXT.scope_paths["units"],
-        unit_intervals=GENERATION_CONTEXT.scope_paths["unit_intervals"],
-        masked_unit_intervals=GENERATION_CONTEXT.scope_paths["masked_unit_intervals"],
         effective_mask=GENERATION_CONTEXT.scope_paths["effective_mask"],
         resolved_partition_intervals=GENERATION_CONTEXT.scope_paths["resolved_partition_intervals"],
         partition_statuses=GENERATION_CONTEXT.scope_paths["partition_statuses"],
@@ -45,8 +42,6 @@ rule prepare_generation_window:
     input:
         **GENERATION_CONTEXT.raw_inputs("window"),
         windows=lambda wc: generation_scope_artifact(wc, "windows"),
-        units=lambda wc: generation_scope_artifact(wc, "units"),
-        unit_intervals=lambda wc: generation_scope_artifact(wc, "unit_intervals"),
         resolved_partition_intervals=lambda wc: generation_scope_artifact(wc, "resolved_partition_intervals"),
         partition_statuses=lambda wc: generation_scope_artifact(wc, "partition_statuses"),
         effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),

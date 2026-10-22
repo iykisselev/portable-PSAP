@@ -116,3 +116,26 @@ and the R partition-reporting test passed. The implementation retains only the
 active partitioned workflow path; obsolete unit tests that directly import the
 deleted legacy validator still need replacement before the complete historical
 test suite can be considered migrated.
+
+## Iteration 4: contract audit and strict partition-only execution
+
+Completed on 2026-10-21:
+
+- Removed the remaining pooled execution-scope artifacts and compatibility
+  branch from generation-window preparation. Windows and buckets now derive
+  from the union of eligible, resolved, calibration-masked biological
+  partitions, while each testing unit still receives one deterministic bucket.
+- Removed lookup-header guessing. Apply accepts only the certified
+  `testing_unit_id`-headed partitioned lookup tables.
+- Removed the obsolete candidate-signature cohort summary path. The standalone
+  annotation utility now explicitly consumes `cohort_candidates.tsv.gz` using
+  `testing_unit_id` and one `variant_key` per row.
+- Re-ran focused generation tests, schema tests, workflow DAG tests, and both
+  two-partition full fixtures after these removals.
+
+The remaining external requirement is unchanged: the repository contains no
+real generated reference bundle and matched cohort with which to measure
+endpoint prevalence and select/calibrate a production multi-partition
+upper-tail policy. The workflow emits bounded endpoint and raw-versus-mid-p
+diagnostics and marks the policy as pending; it must not be represented as a
+completed production calibration until those supplied resources are measured.

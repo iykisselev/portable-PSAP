@@ -21,7 +21,8 @@ derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
   require_columns(variants, c("unit", "partition_id"), sprintf("Control annotation table for %s", pid))
   variants[, unit := clean_identifier(unit)]
   variants[, partition_id := clean_identifier(partition_id)]
-  invalid <- is.na(variants$variant_key) | is.na(variants$gt_class) | is.na(variants$unit) | is.na(variants$partition_id)
+  invalid <- is.na(variants$variant_key) | is.na(variants$gt_class) |
+    is.na(variants$unit) | is.na(variants$partition_id)
   if (any(invalid)) abort("Control %s contains %d row(s) with missing key, genotype class, or unit", pid, sum(invalid))
   definitions <- standard_disease_models()
   evidence <- lapply(seq_len(nrow(definitions)), function(index) {
@@ -49,21 +50,31 @@ derive_control_evidence <- function(path, pid, sex, hemizygote_model) {
 
 read_psap_scores <- function(path, pid) {
   scores <- read_tsv(path)
-  require_columns(scores, c("Key", "unit", "partition_id", "Dz.Model", "PSAP"), sprintf("Control PSAP table for %s", pid))
+  require_columns(
+    scores, c("Key", "unit", "partition_id", "Dz.Model", "PSAP"),
+    sprintf("Control PSAP table for %s", pid)
+  )
   scores[, unit := clean_identifier(unit)]
   scores[, model := clean_identifier(`Dz.Model`)]
   scores[, variant_key := clean_identifier(Key)]
   scores[, partition_id := clean_identifier(partition_id)]
   scores[, PSAP := suppressWarnings(as.numeric(PSAP))]
-  scores <- scores[!is.na(unit) & !is.na(partition_id) & !is.na(model) & !is.na(variant_key), .(unit, partition_id, model, variant_key, PSAP)]
-  scores[, .(PSAP = if (all(is.na(PSAP))) NA_real_ else min(PSAP, na.rm = TRUE)), by = .(unit, partition_id, model, variant_key)]
+  scores <- scores[
+    !is.na(unit) & !is.na(partition_id) & !is.na(model) & !is.na(variant_key),
+    .(unit, partition_id, model, variant_key, PSAP)
+  ]
+  scores[, .(
+    PSAP = if (all(is.na(PSAP))) NA_real_ else min(PSAP, na.rm = TRUE)
+  ), by = .(unit, partition_id, model, variant_key)]
 }
 
 
 attach_psap <- function(evidence, scores) {
   if (nrow(evidence) == 0L || nrow(scores) == 0L) return(evidence)
   evidence[, PSAP := NULL]
-  scores[evidence, on = c("unit", "partition_id", "model", "variant_key")][, .(pid, phenotype, sex, unit, partition_id, model, variant_key, PSAP)]
+  scores[evidence, on = c("unit", "partition_id", "model", "variant_key")][,
+    .(pid, phenotype, sex, unit, partition_id, model, variant_key, PSAP)
+  ]
 }
 
 
@@ -86,7 +97,12 @@ run_control_reference <- function(config) {
     reference <- unique(reference, by = names(reference))
     message("Exact duplicate rows removed: ", before - nrow(reference))
   }
-  if (nrow(reference) > 0L) setorderv(reference, c("unit", "partition_id", "model", "variant_key", "pid"), c(1L, 1L, 1L, 1L, 1L))
+  if (nrow(reference) > 0L) {
+    setorderv(
+      reference, c("unit", "partition_id", "model", "variant_key", "pid"),
+      c(1L, 1L, 1L, 1L, 1L)
+    )
+  }
   write_tsv(reference, config$output, threads = config$threads)
   message("Unaffected individuals: ", length(config$input))
   message("Control evidence rows written: ", nrow(reference))

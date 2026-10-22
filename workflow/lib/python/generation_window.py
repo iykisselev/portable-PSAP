@@ -12,11 +12,10 @@ from generation_bindings import (
 from generation_windows import window_from_manifest
 from generation_population import POPULATION_SCHEMA, population_rows
 from generation_prep import intersect_intervals, merge_intervals
-from generation_reference import ReferenceReader, membership_rows, partition_membership_rows
+from generation_reference import ReferenceReader, partition_membership_rows
 from generation_scores import ALLELE_COLUMNS, SCORE_SCHEMA, score_rows
 from generation_indels import (
     INDEL_REJECTION_SCHEMA,
-    indel_candidate_memberships,
     indel_score_rows,
     partitioned_indel_candidate_memberships,
 )
@@ -38,36 +37,26 @@ def prepare_generation_window(
         if params.include_indels
         else window.end
     )
-    partitioned = (
-        inputs.resolved_partition_intervals is not None
-        and inputs.partition_statuses is not None
-    )
-    interval_source = inputs.resolved_partition_intervals if partitioned else inputs.unit_intervals
     eligible_pairs = (
         pl.scan_parquet(inputs.partition_statuses)
         .filter(pl.col("status") == "eligible")
         .select("testing_unit_id", "partition_id")
         .collect(engine="streaming")
-        if partitioned
-        else pl.scan_parquet(inputs.units).filter(pl.col("status") == "eligible").select("testing_unit_id").collect(engine="streaming")
     )
     ownership_frame = (
-        pl.scan_parquet(interval_source)
+        pl.scan_parquet(inputs.resolved_partition_intervals)
         .filter(
             (pl.col("CHROM") == window.chromosome)
             & (pl.col("START") < halo_end)
             & (pl.col("END") > window.start)
         )
-        .select(*(["testing_unit_id", "partition_id", "partition_order", "START", "END"] if partitioned else ["testing_unit_id", "START", "END"]))
+        .select("testing_unit_id", "partition_id", "partition_order", "START", "END")
         .collect(engine="streaming")
     )
-    interval_frame = (
-        ownership_frame.join(
-            eligible_pairs,
-            on=(["testing_unit_id", "partition_id"] if partitioned else "testing_unit_id"),
-            how="inner",
-        )
-        if partitioned else ownership_frame.join(eligible_pairs, on="testing_unit_id", how="inner")
+    interval_frame = ownership_frame.join(
+        eligible_pairs,
+        on=["testing_unit_id", "partition_id"],
+        how="inner",
     )
     mask_frame = (
         pl.scan_parquet(inputs.effective_mask)
@@ -90,14 +79,11 @@ def prepare_generation_window(
     )
     reference = ReferenceReader(inputs.fasta, inputs.fasta_fai)
     try:
-        snv_memberships = (
-            partition_membership_rows(
-                window,
-                mask,
-                [(unit, partition, start, end) for unit, partition, _, start, end in intervals],
-                reference,
-            )
-            if partitioned else membership_rows(window, mask, intervals, reference)
+        snv_memberships = partition_membership_rows(
+            window,
+            mask,
+            [(unit, partition, start, end) for unit, partition, _, start, end in intervals],
+            reference,
         ).with_columns(pl.lit("snv").alias("variant_class"))
         indel_scores = pl.DataFrame(schema=SCORE_SCHEMA)
         indel_memberships = pl.DataFrame(schema=snv_memberships.schema)
@@ -105,7 +91,6 @@ def prepare_generation_window(
         if params.include_indels:
             if inputs.score_indel is None:
                 raise ValueError("Indel generation requires an indel score resource")
-            all_intervals = interval_frame.select("testing_unit_id", "START", "END").rows()
             indel_mask = mask_frame.rows()
             catalog = indel_score_rows(
                 inputs.score_indel,
@@ -117,18 +102,14 @@ def prepare_generation_window(
                 max_reference_length=params.indel_max_reference_length,
                 max_alternate_length=params.indel_max_alternate_length,
             )
-            indel_memberships, indel_rejections = (
-                partitioned_indel_candidate_memberships(
-                    catalog,
-                    indel_mask,
-                    ownership_frame.rows(),
-                    {
-                        (str(row["testing_unit_id"]), str(row["partition_id"]))
-                        for row in eligible_pairs.to_dicts()
-                    },
-                )
-                if partitioned
-                else indel_candidate_memberships(catalog, indel_mask, all_intervals)
+            indel_memberships, indel_rejections = partitioned_indel_candidate_memberships(
+                catalog,
+                indel_mask,
+                ownership_frame.rows(),
+                {
+                    (str(row["testing_unit_id"]), str(row["partition_id"]))
+                    for row in eligible_pairs.to_dicts()
+                },
             )
             indel_scores = catalog.select(*ALLELE_COLUMNS, "score")
     finally:

@@ -259,16 +259,16 @@ def annotate_summary(
     gene_names: dict[str, str],
     lookup: AnnotationLookup,
     unit_column: str,
-    signature_column: str,
+    variant_column: str,
 ) -> int:
-    """Write a row-preserving, post-annotated cohort summary and return its size."""
+    """Write a row-preserving, post-annotated candidate-detail table."""
     require_distinct_output(summary, output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with open_text(summary, "rt") as source, open_text(output, "wt") as destination:
         reader = csv.DictReader(source, delimiter="\t")
         if reader.fieldnames is None:
             raise ValueError(f"{summary}: summary has no header")
-        required = {unit_column, signature_column}
+        required = {unit_column, variant_column}
         missing = required - set(reader.fieldnames)
         if missing:
             raise ValueError(
@@ -289,23 +289,15 @@ def annotate_summary(
         writer.writeheader()
         count = 0
         for row_number, row in enumerate(reader, start=2):
-            signature = row[signature_column].strip()
+            variant_key = row[variant_column].strip()
             try:
-                keys = [
-                    parse_variant_key(value) for value in signature.split("|") if value
-                ]
+                key = parse_variant_key(variant_key)
             except ValueError as exc:
                 raise ValueError(f"{summary}: line {row_number}: {exc}") from exc
-            if not keys:
-                raise ValueError(
-                    f"{summary}: line {row_number}: empty candidate signature"
-                )
-            cadd_values, af_values = zip(
-                *(lookup.values(key) for key in keys), strict=True
-            )
+            cadd_value, af_value = lookup.values(key)
             row["gene_name"] = gene_names.get(normalized_gene_id(row[unit_column]), "")
-            row["cadd_phred"] = ",".join(cadd_values)
-            row["population_af"] = ",".join(af_values)
+            row["cadd_phred"] = cadd_value
+            row["population_af"] = af_value
             writer.writerow(row)
             count += 1
     return count
@@ -339,13 +331,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--unit-column",
-        default="unit",
-        help="Ensembl gene-ID column in the summary (default: unit)",
+        default="testing_unit_id",
+        help="Ensembl gene-ID column in cohort candidates (default: testing_unit_id)",
     )
     parser.add_argument(
-        "--signature-column",
+        "--variant-column",
         default="variant_key",
-        help="Variant-key column (default: variant_key)",
+        help="Actual variant-key column (default: variant_key)",
     )
     return parser.parse_args(argv)
 
@@ -367,7 +359,7 @@ def main(argv: list[str] | None = None) -> None:
             gene_names,
             lookup,
             args.unit_column,
-            args.signature_column,
+            args.variant_column,
         )
     finally:
         lookup.close()

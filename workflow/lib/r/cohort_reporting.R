@@ -29,11 +29,6 @@ read_controls <- function(path) {
 }
 
 
-minimum_or_na <- function(value) {
-  if (length(value) == 0L || all(is.na(value))) NA_real_ else min(value, na.rm = TRUE)
-}
-
-
 collapse_ids <- function(value) {
   value <- unique(value[!is.na(value) & nzchar(value)])
   if (length(value) == 0L) NA_character_ else paste(sort(value), collapse = ",")
@@ -54,28 +49,17 @@ validation_priority <- function(value) {
 }
 
 
-build_candidate_groups <- function(candidates) {
+validate_candidate_rows <- function(candidates) {
   inconsistent <- candidates[, .(
-    pid_count = uniqueN(pid), unit_count = uniqueN(unit), partition_count = uniqueN(partition_id), model_count = uniqueN(model)
-  ), by = candidate_id][pid_count != 1L | unit_count != 1L | partition_count != 1L | model_count != 1L]
+    pid_count = uniqueN(pid), unit_count = uniqueN(unit),
+    partition_count = uniqueN(partition_id), model_count = uniqueN(model)
+  ), by = candidate_id][
+    pid_count != 1L | unit_count != 1L | partition_count != 1L | model_count != 1L
+  ]
   if (nrow(inconsistent) > 0L) abort("candidate_id values span multiple patients, units, partitions, or models")
-  groups <- candidates[, .(
-    pid = pid[[1]], unit = unit[[1]], partition_id = partition_id[[1]], model = model[[1]],
-    variant_keys = list(sort(unique(variant_key))), PSAP = minimum_or_na(PSAP)
-  ), by = candidate_id]
-  groups[, variant_count := lengths(variant_keys)]
-  if (any(groups$variant_count != 1L)) abort("Candidates must contain exactly one distinct variant")
-  groups[, candidate_signature := vapply(variant_keys, paste, collapse = "|", FUN.VALUE = character(1))]
-  groups
-}
-
-
-empty_cohort_summary <- function() {
-  data.table(
-    unit = character(), model = character(), candidate_signature = character(),
-    affected_count = integer(), affected_pids = character(), minimum_PSAP = numeric(),
-    validation = character(), control_count = integer(), control_pids = character()
-  )
+  inconsistent_variant <- candidates[, .(variant_count = uniqueN(variant_key)), by = candidate_id][variant_count != 1L]
+  if (nrow(inconsistent_variant) > 0L) abort("candidate_id values must identify one variant")
+  invisible(candidates)
 }
 
 
@@ -83,16 +67,10 @@ validate_candidates <- function(candidates, controls) {
   if (nrow(candidates) == 0L) {
     detail <- copy(candidates)
     detail[, `:=`(validation = character(), control_count = integer(), control_pids = character())]
-    return(list(detail = detail, summary = empty_cohort_summary()))
+    return(list(detail = detail))
   }
-  groups <- build_candidate_groups(candidates)
-  candidate_keys <- groups[, .(
-    candidate_id,
-    unit,
-    partition_id,
-    model,
-    variant_key = vapply(variant_keys, function(keys) keys[[1L]], character(1))
-  )]
+  validate_candidate_rows(candidates)
+  candidate_keys <- unique(candidates[, .(candidate_id, unit, partition_id, model, variant_key)])
   candidate_controls <- compatible_control_model_table()[
     candidate_keys, on = "model", allow.cartesian = TRUE
   ]
@@ -107,7 +85,7 @@ validate_candidates <- function(candidates, controls) {
     control_pids = collapse_ids(pid)
   ), by = candidate_id]
   status <- data.table(
-    candidate_id = groups$candidate_id,
+    candidate_id = candidate_keys$candidate_id,
     control_count = NA_integer_,
     control_pids = NA_character_
   )
@@ -127,24 +105,6 @@ validate_candidates <- function(candidates, controls) {
     "candidate_id", "pid", "phenotype", "sex", "unit", "partition_id", "model", "variant_key",
     "PSAP", "validation", "control_count", "control_pids"
   ))
-  candidate_level <- status[groups, on = "candidate_id"]
-  summary <- candidate_level[, .(
-    affected_count = uniqueN(pid), affected_pids = collapse_ids(pid), minimum_PSAP = minimum_or_na(PSAP),
-    validation = validation_priority(validation),
-    control_count = uniqueN(unlist(strsplit(control_pids[!is.na(control_pids)], ",", fixed = TRUE), use.names = FALSE)),
-    control_pids = combine_id_lists(control_pids)
-  ), by = .(unit, model, candidate_signature)]
   setorderv(detail, c("PSAP", "unit", "model", "candidate_id", "variant_key"), c(1L, 1L, 1L, 1L, 1L), na.last = TRUE)
-  setorderv(summary, c("minimum_PSAP", "unit", "model", "candidate_signature"), c(1L, 1L, 1L, 1L), na.last = TRUE)
-  list(detail = detail, summary = summary)
-}
-
-
-run_cohort_reporting <- function(config) {
-  setDTthreads(config$threads)
-  report <- validate_candidates(read_candidate_tables(config$candidates), read_controls(config$controls))
-  write_tsv(report$detail, config$output_candidates, threads = config$threads)
-  write_tsv(report$summary, config$output_summary, threads = config$threads)
-  message("Affected candidate rows: ", nrow(report$detail))
-  message("Cohort summary rows: ", nrow(report$summary))
+  list(detail = detail)
 }

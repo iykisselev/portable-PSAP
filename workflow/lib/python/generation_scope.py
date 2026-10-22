@@ -24,9 +24,9 @@ from generation_windows import (
 )
 from generation_population import validate_population_af_headers
 from generation_prep import (
-    retention_rows,
     effective_calibration_mask,
     merge_intervals,
+    overlap_sorted,
     read_bed_units,
     read_intervals,
     supported_scope_mask,
@@ -88,7 +88,6 @@ UnitInterval = tuple[str, str, int, int]
 
 @dataclass(frozen=True)
 class ScopeMasks:
-    units_by_id: dict[str, list[tuple[str, int, int]]]
     supported_scope: dict[str, list[tuple[int, int]]]
     calibration_mask: dict[str, list[tuple[int, int]]]
 
@@ -161,77 +160,55 @@ def _scope_masks(inputs: GenerationScopeInputs) -> ScopeMasks:
         par_intervals,
     )
     calibration_mask = effective_calibration_mask(excluded_intervals, supported_scope)
-    return ScopeMasks(units_by_id, supported_scope, calibration_mask)
+    return ScopeMasks(supported_scope, calibration_mask)
 
 
-def _unit_intervals(
-    masks: ScopeMasks, params: GenerationScopeParameters
-) -> ScopeTables:
-    units_by_id = masks.units_by_id
-    supported_scope = masks.supported_scope
-    calibration_mask = masks.calibration_mask
-    supported_scope_starts = {
-        chromosome: [start for start, _ in intervals]
-        for chromosome, intervals in supported_scope.items()
+def _partition_scope_tables(scope, masks: ScopeMasks) -> ScopeTables:
+    """Derive shared execution work from eligible resolved ownership only.
+
+    Biological partitions do not receive their own execution buckets.  The
+    union of the eligible, calibration-masked owned intervals defines one
+    deterministic unit bucket and the sparse window relations for that unit.
+    """
+    resolved_by_pair = {
+        (unit_id, partition_id): intervals
+        for partition_id, units in scope.resolved.items()
+        for unit_id, intervals in units.items()
     }
-    calibration_mask_starts = {
-        chromosome: [start for start, _ in intervals]
-        for chromosome, intervals in calibration_mask.items()
-    }
-    callable_pieces_by_unit: dict[str, list[tuple[int, int]]] = {}
-    unit_retention_rows = retention_rows(
-        units_by_id,
-        calibration_mask,
-        float(params.minimum_retained_fraction),
-        denominator_scope=supported_scope,
-        retained_region_starts=calibration_mask_starts,
-        denominator_region_starts=supported_scope_starts,
-        callable_intervals_by_unit=callable_pieces_by_unit,
-    )
-    unit_intervals = []
-    callable_unit_intervals = []
-    for unit_id, intervals in sorted(units_by_id.items()):
-        chromosome = intervals[0][0]
-        merged_intervals = merge_intervals(
-            [(start, end) for _, start, end in intervals]
+    callable_by_unit: dict[str, dict[str, list[tuple[int, int]]]] = {}
+    for row in scope.rows:
+        if row["status"] != "eligible":
+            continue
+        unit_id = str(row["testing_unit_id"])
+        chromosome = str(row["CHROM"])
+        owned = resolved_by_pair[(unit_id, str(row["partition_id"]))]
+        retained = overlap_sorted(
+            [(start, end) for _, start, end in owned],
+            masks.calibration_mask.get(chromosome, []),
         )
-        for start, end in merged_intervals:
-            unit_intervals.append((unit_id, chromosome, start, end))
-        for start, end in callable_pieces_by_unit[unit_id]:
-            callable_unit_intervals.append((unit_id, chromosome, start, end))
-    unit_retention_frame = pl.DataFrame(
-        unit_retention_rows,
-        schema=[
-            "testing_unit_id",
-            "CHROM",
-            "supported_bases",
-            "retained_bases",
-            "retained_fraction",
-            "status",
-        ],
+        if retained:
+            callable_by_unit.setdefault(unit_id, {}).setdefault(chromosome, []).extend(retained)
+
+    unit_rows: list[tuple[str, str]] = []
+    interval_rows: list[tuple[str, str, int, int]] = []
+    callable_intervals: list[UnitInterval] = []
+    for unit_id, by_chromosome in sorted(callable_by_unit.items()):
+        for chromosome, intervals in sorted(by_chromosome.items()):
+            for start, end in merge_intervals(intervals):
+                interval_rows.append((unit_id, chromosome, start, end))
+                callable_intervals.append((unit_id, chromosome, start, end))
+                unit_rows.append((unit_id, "eligible"))
+    units = pl.DataFrame(
+        sorted(set(unit_rows)),
+        schema=["testing_unit_id", "status"],
         orient="row",
     )
-    eligible_unit_ids = set(
-        unit_retention_frame.filter(pl.col("status") == "eligible")[
-            "testing_unit_id"
-        ].to_list()
-    )
-    eligible_callable_unit_intervals = [
-        (unit_id, chromosome, start, end)
-        for unit_id, chromosome, start, end in callable_unit_intervals
-        if unit_id in eligible_unit_ids
-    ]
-    unit_intervals_frame = pl.DataFrame(
-        unit_intervals,
+    unit_intervals = pl.DataFrame(
+        interval_rows,
         schema=["testing_unit_id", "CHROM", "START", "END"],
         orient="row",
     ).sort("CHROM", "START", "END", "testing_unit_id")
-    return ScopeTables(
-        unit_retention_frame,
-        unit_intervals_frame,
-        callable_unit_intervals,
-        eligible_callable_unit_intervals,
-    )
+    return ScopeTables(units, unit_intervals, callable_intervals, callable_intervals)
 
 
 def _window_manifest(
@@ -299,33 +276,12 @@ def _bucket_manifest(
     }
 
 
-def _write_scope_tables(
-    scope: ScopeTables,
+def _write_scope_mask(
     masks: ScopeMasks,
     outputs: GenerationScopeOutputs,
     params: GenerationScopeParameters,
 ) -> None:
-    unit_retention_frame = scope.units
-    unit_intervals_frame = scope.unit_intervals
-    callable_unit_intervals = scope.callable_intervals
     calibration_mask = masks.calibration_mask
-    write_parquet_atomic(unit_retention_frame, outputs.units, params.compression)
-    write_parquet_atomic(
-        unit_intervals_frame,
-        outputs.unit_intervals,
-        params.compression,
-        row_group_size=16_384,
-    )
-    write_parquet_atomic(
-        pl.DataFrame(
-            callable_unit_intervals,
-            schema=["testing_unit_id", "CHROM", "START", "END"],
-            orient="row",
-        ).sort("CHROM", "START", "END", "testing_unit_id"),
-        outputs.masked_unit_intervals,
-        params.compression,
-        row_group_size=16_384,
-    )
     write_parquet_atomic(
         pl.DataFrame(
             [
@@ -347,7 +303,7 @@ def _write_partition_scope_artifacts(
     outputs: GenerationScopeOutputs,
     masks: ScopeMasks,
     params: GenerationScopeParameters,
-) -> None:
+) -> object:
     """Materialize ordered unit/partition ownership and eligibility statuses."""
     paths = inputs.testing_unit_partitions
     identifiers = params.partition_ids
@@ -376,42 +332,40 @@ def _write_partition_scope_artifacts(
         for unit, intervals in units.items()
         for chromosome, start, end in intervals
     ]
-    if outputs.resolved_partition_intervals is not None:
-        write_parquet_atomic(
-            pl.DataFrame(
-                resolved_rows,
-                schema=["testing_unit_id", "partition_id", "partition_order", "CHROM", "START", "END"],
-                orient="row",
-            ).sort("CHROM", "START", "END", "testing_unit_id", "partition_id"),
-            outputs.resolved_partition_intervals,
-            params.compression,
-        )
-    if outputs.partition_statuses is not None:
-        write_parquet_atomic(
-            pl.DataFrame(list(scope.rows)).sort("testing_unit_id", "partition_id"),
-            outputs.partition_statuses,
-            params.compression,
-        )
-    if outputs.testing_unit_id_overlap is not None:
-        audit_rows = partition_id_overlap_rows(partitions)
-        schema = {
-            "left_partition_id": pl.String,
-            "right_partition_id": pl.String,
-            "left_unique_id_count": pl.Int64,
-            "right_unique_id_count": pl.Int64,
-            "intersection_count": pl.Int64,
-            "union_count": pl.Int64,
-            "left_overlap_fraction": pl.Float64,
-            "right_overlap_fraction": pl.Float64,
-            "minimum_overlap_fraction": pl.Float64,
-            "empty_set_status": pl.String,
-            "low_overlap_warning": pl.Boolean,
-        }
-        write_parquet_atomic(
-            pl.DataFrame(audit_rows, schema=schema, strict=False),
-            outputs.testing_unit_id_overlap,
-            params.compression,
-        )
+    write_parquet_atomic(
+        pl.DataFrame(
+            resolved_rows,
+            schema=["testing_unit_id", "partition_id", "partition_order", "CHROM", "START", "END"],
+            orient="row",
+        ).sort("CHROM", "START", "END", "testing_unit_id", "partition_id"),
+        outputs.resolved_partition_intervals,
+        params.compression,
+    )
+    write_parquet_atomic(
+        pl.DataFrame(list(scope.rows)).sort("testing_unit_id", "partition_id"),
+        outputs.partition_statuses,
+        params.compression,
+    )
+    audit_rows = partition_id_overlap_rows(partitions)
+    schema = {
+        "left_partition_id": pl.String,
+        "right_partition_id": pl.String,
+        "left_unique_id_count": pl.Int64,
+        "right_unique_id_count": pl.Int64,
+        "intersection_count": pl.Int64,
+        "union_count": pl.Int64,
+        "left_overlap_fraction": pl.Float64,
+        "right_overlap_fraction": pl.Float64,
+        "minimum_overlap_fraction": pl.Float64,
+        "empty_set_status": pl.String,
+        "low_overlap_warning": pl.Boolean,
+    }
+    write_parquet_atomic(
+        pl.DataFrame(audit_rows, schema=schema, strict=False),
+        outputs.testing_unit_id_overlap,
+        params.compression,
+    )
+    return scope
 
 
 def prepare_generation_scope(
@@ -422,8 +376,8 @@ def prepare_generation_scope(
     """Prepare masks, retention tables and sparse manifests for window jobs."""
     _validate_scope_inputs(inputs, params)
     masks = _scope_masks(inputs)
-    _write_partition_scope_artifacts(inputs, outputs, masks, params)
-    scope = _unit_intervals(masks, params)
+    partition_scope = _write_partition_scope_artifacts(inputs, outputs, masks, params)
+    scope = _partition_scope_tables(partition_scope, masks)
     eligible_callable_unit_intervals = scope.eligible_intervals
     indel_owner_intervals: list[UnitInterval] = []
     if params.include_indels:
@@ -445,7 +399,7 @@ def prepare_generation_scope(
             for _, chromosome, start, end in indel_owner_intervals
         ],
     )
-    _write_scope_tables(scope, masks, outputs, params)
+    _write_scope_mask(masks, outputs, params)
     write_json_atomic(outputs.windows, _window_manifest(genome_windows, params))
     write_json_atomic(
         outputs.buckets,

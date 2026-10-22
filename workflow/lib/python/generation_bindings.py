@@ -40,13 +40,10 @@ class GenerationScopeInputs:
 class GenerationScopeOutputs:
     windows: PathLike
     buckets: PathLike
-    units: PathLike
-    unit_intervals: PathLike
-    masked_unit_intervals: PathLike
     effective_mask: PathLike
-    resolved_partition_intervals: PathLike | None = None
-    partition_statuses: PathLike | None = None
-    testing_unit_id_overlap: PathLike | None = None
+    resolved_partition_intervals: PathLike
+    partition_statuses: PathLike
+    testing_unit_id_overlap: PathLike
 
 
 @dataclass(frozen=True)
@@ -64,8 +61,6 @@ class GenerationScopeParameters:
 @dataclass(frozen=True)
 class GenerationWindowInputs:
     windows: PathLike
-    units: PathLike
-    unit_intervals: PathLike
     effective_mask: PathLike
     population_vcf: PathLike
     population_vcf_index: PathLike | None
@@ -73,8 +68,8 @@ class GenerationWindowInputs:
     score_snv_index: PathLike | None
     fasta: PathLike
     fasta_fai: PathLike
-    resolved_partition_intervals: PathLike | None = None
-    partition_statuses: PathLike | None = None
+    resolved_partition_intervals: PathLike
+    partition_statuses: PathLike
     score_indel: PathLike | None = None
     score_indel_index: PathLike | None = None
 

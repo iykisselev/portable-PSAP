@@ -41,8 +41,16 @@ if (exists("snakemake", inherits = FALSE)) {
   )
   write_tsv(triaged, config$output_candidates, threads = config$threads)
   write_tsv(reports$main, config$output_summary, threads = config$threads)
-  write_tsv(reports$aggregation_diagnostics, config$output_aggregation_diagnostics, threads = config$threads)
-  for (i in seq_along(config$partition_ids)) write_tsv(reports$partitions[[i]], config$output_partition_summaries[[i]], threads = config$threads)
+  write_tsv(
+    reports$aggregation_diagnostics, config$output_aggregation_diagnostics,
+    threads = config$threads
+  )
+  for (i in seq_along(config$partition_ids)) {
+    write_tsv(
+      reports$partitions[[i]], config$output_partition_summaries[[i]],
+      threads = config$threads
+    )
+  }
   jsonlite::write_json(list(
     schema_version = 1L,
     score_direction = "smaller_PSAP_is_stronger",
@@ -52,7 +60,10 @@ if (exists("snakemake", inherits = FALSE)) {
     availability_policy = "compatible_evidence_universe_v1",
     aggregation_input_policy = "raw_survival_v1",
     aggregation_policy_status = "pending_real_bundle_endpoint_calibration",
-    aggregation_policy_note = "Raw and mid-p ACAT diagnostics are emitted; production upper-tail policy remains unselected until real-bundle calibration is recorded.",
+    aggregation_policy_note = paste(
+      "Raw and mid-p ACAT diagnostics are emitted; production upper-tail policy",
+      "remains unselected until real-bundle calibration is recorded."
+    ),
     json_numeric_serialization = "jsonlite_digits_17_fallback_for_interior_probability_round_trip",
     endpoint_diagnostics = "endpoint_diagnostics.tsv.gz",
     aggregation_diagnostics = "aggregation_diagnostics.tsv.gz",
@@ -63,6 +74,9 @@ if (exists("snakemake", inherits = FALSE)) {
       one = c("single_partition_one", "upper_endpoint_unresolved")
     ),
     near_one_thresholds = c(0.99, 0.999999, 0.999999999),
-    output_counts = list(main_rows = nrow(reports$main), partition_rows = vapply(reports$partitions, nrow, integer(1)))
+    output_counts = list(
+      main_rows = nrow(reports$main),
+      partition_rows = vapply(reports$partitions, nrow, integer(1))
+    )
   ), config$output_report_metadata, auto_unbox = TRUE, digits = I(17), na = "null", pretty = TRUE)
 }

@@ -54,7 +54,10 @@ read_model_catalog <- function(path) {
     if (!is.list(status$required_payload) || !setequal(names(status$required_payload), status$domains)) {
       stop("Catalog status ", code, " must declare payloads for every domain")
     }
-    status$required_payload <- lapply(status$required_payload, catalog_strings, label = "required_payload", nonempty = FALSE)
+    status$required_payload <- lapply(
+      status$required_payload, catalog_strings,
+      label = "required_payload", nonempty = FALSE
+    )
     if (any(!unlist(status$required_payload, use.names = FALSE) %in% c("role", "failed_roles"))) {
       stop("Unknown catalog payload field for ", code)
     }
@@ -95,7 +98,9 @@ validate_status <- function(code, domain, role = NULL, failed_roles = character(
   required <- definition$required_payload[[domain]]
   if ("role" %in% required && is.null(role)) stop("Status '", code, "' requires role")
   if ("failed_roles" %in% required && !length(failed_roles)) stop("Status '", code, "' requires nonempty failed_roles")
-  if (length(failed_roles) && !"failed_roles" %in% required) stop("Status '", code, "' does not allow failed_roles in ", domain)
+  if (length(failed_roles) && !"failed_roles" %in% required) {
+    stop("Status '", code, "' does not allow failed_roles in ", domain)
+  }
   if (!is.null(role) && !"role" %in% required) stop("Status '", code, "' does not allow role in ", domain)
   invisible(code)
 }

@@ -67,6 +67,7 @@ class GenerationStatisticsTests(unittest.TestCase):
             pl.DataFrame(
                 {
                     "testing_unit_id": ["wanted", "other"],
+                    "partition_id": ["cds", "cds"],
                     "CHROM": ["1", "1"],
                     "POS": [10, 20],
                     "REF": ["A", "A"],

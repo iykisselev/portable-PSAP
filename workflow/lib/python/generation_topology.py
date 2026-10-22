@@ -48,11 +48,6 @@ def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArt
             {
                 "windows": str(prepared_dir / "windows.json"),
                 "buckets": str(prepared_dir / "unit_buckets.json"),
-                "units": str(prepared_dir / "provisional_units.parquet"),
-                "unit_intervals": str(prepared_dir / "unit_intervals.parquet"),
-                "masked_unit_intervals": str(
-                    prepared_dir / "masked_unit_intervals.parquet"
-                ),
                 "effective_mask": str(
                     prepared_dir / "effective_calibration_mask.parquet"
                 ),

@@ -80,9 +80,18 @@ expand_units <- function(genotypes, memberships) {
     return(genotypes)
   }
   memberships <- read_tsv(memberships)
-  require_columns(memberships, c("CHROM", "POS", "REF", "ALT", "unit", "partition_id", "partition_status", "failed_roles_json"), "Certified partition membership")
-  memberships[, `:=`(POS = as.integer(POS), unit = clean_identifier(unit), partition_id = clean_identifier(partition_id))]
-  expanded <- merge(genotypes, memberships[, .(CHROM, POS, REF, ALT, unit, partition_id, partition_status, failed_roles_json)],
+  require_columns(
+    memberships,
+    c("CHROM", "POS", "REF", "ALT", "unit", "partition_id", "partition_status", "failed_roles_json"),
+    "Certified partition membership"
+  )
+  memberships[, `:=`(
+    POS = as.integer(POS), unit = clean_identifier(unit),
+    partition_id = clean_identifier(partition_id)
+  )]
+  expanded <- merge(
+    genotypes,
+    memberships[, .(CHROM, POS, REF, ALT, unit, partition_id, partition_status, failed_roles_json)],
     by = c("CHROM", "POS", "REF", "ALT"), all = FALSE, sort = FALSE)
   unique(expanded[!is.na(unit) & !is.na(partition_id)], by = c("Key", "unit", "partition_id"))
 }

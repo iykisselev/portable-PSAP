@@ -38,7 +38,7 @@ from generation_bindings import (  # noqa: E402
     GenerationScopeOutputs,
     GenerationScopeParameters,
 )
-from generation_scope import _scope_masks, prepare_generation_scope
+from generation_scope import _partition_scope_tables, _scope_masks, prepare_generation_scope
 from partition_audit import partition_id_overlap_rows
 from partition_scope import build_partition_scope
 
@@ -82,7 +82,21 @@ class GenerationPreparationTests(unittest.TestCase):
                 fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
                 mutation_rate=None, mutation_rate_index=None,
             ))
-            self.assertEqual({"FIRST", "SECOND"}, set(masks.units_by_id))
+            scope = build_partition_scope(
+                [
+                    ("first", read_bed_units(first)),
+                    ("second", read_bed_units(second)),
+                ],
+                masks.supported_scope,
+                masks.calibration_mask,
+                0.5,
+            )
+            tables = _partition_scope_tables(scope, masks)
+            self.assertEqual({"FIRST", "SECOND"}, set(tables.units["testing_unit_id"]))
+            self.assertEqual(
+                {"FIRST", "SECOND"},
+                set(unit_bucket_frame(tables.units, 10, tables.unit_intervals)["testing_unit_id"]),
+            )
 
     def test_partition_ownership_subtracts_only_within_each_testing_unit(self):
         resolved = resolve_partition_ownership(
@@ -168,9 +182,6 @@ class GenerationPreparationTests(unittest.TestCase):
             outputs = GenerationScopeOutputs(
                 windows=directory / "windows.json",
                 buckets=directory / "buckets.json",
-                units=directory / "units.parquet",
-                unit_intervals=directory / "unit_intervals.parquet",
-                masked_unit_intervals=directory / "masked.parquet",
                 effective_mask=directory / "mask.parquet",
                 resolved_partition_intervals=directory / "resolved.parquet",
                 partition_statuses=directory / "partition_statuses.parquet",
@@ -189,11 +200,11 @@ class GenerationPreparationTests(unittest.TestCase):
 
             self.assertEqual(
                 ["AUTOSOMAL"],
-                pl.read_parquet(outputs.units)["testing_unit_id"].to_list(),
+                pl.read_parquet(outputs.partition_statuses)["testing_unit_id"].to_list(),
             )
             self.assertEqual(
                 ["1"],
-                pl.read_parquet(outputs.unit_intervals)["CHROM"].unique().to_list(),
+                pl.read_parquet(outputs.resolved_partition_intervals)["CHROM"].unique().to_list(),
             )
             self.assertEqual(
                 [("AUTOSOMAL", "default")],
@@ -274,16 +285,16 @@ class GenerationPreparationTests(unittest.TestCase):
             outputs = GenerationScopeOutputs(
                 windows=directory / "windows",
                 buckets=directory / "buckets",
-                units=directory / "units",
-                unit_intervals=directory / "unit_intervals",
-                masked_unit_intervals=directory / "masked_unit_intervals",
                 effective_mask=directory / "mask",
+                resolved_partition_intervals=directory / "resolved_partition_intervals",
+                partition_statuses=directory / "partition_statuses",
+                testing_unit_id_overlap=directory / "testing_unit_id_overlap",
             )
             params = GenerationScopeParameters(
                 0.5, 10, 250, "zstd", {"overall": "AF_CUSTOM"}, False, 50, ("default",)
             )
             prepare_generation_scope(inputs, outputs, params)
-            unit_intervals = pl.read_parquet(outputs.unit_intervals)
+            unit_intervals = pl.read_parquet(outputs.resolved_partition_intervals)
             self.assertEqual(
                 unit_intervals.rows(),
                 unit_intervals.sort("CHROM", "START", "END", "testing_unit_id").rows(),
@@ -295,7 +306,7 @@ class GenerationPreparationTests(unittest.TestCase):
             )
             rows = {
                 row["testing_unit_id"]: row
-                for row in pl.read_parquet(outputs.units).to_dicts()
+                for row in pl.read_parquet(outputs.partition_statuses).to_dicts()
             }
             self.assertEqual(rows["UNIT_OVERLAP"]["supported_bases"], 10)
             self.assertEqual(rows["UNIT_OVERLAP"]["retained_bases"], 3)
@@ -352,10 +363,10 @@ class GenerationPreparationTests(unittest.TestCase):
             outputs = GenerationScopeOutputs(
                 windows=directory / "windows.json",
                 buckets=directory / "buckets.json",
-                units=directory / "units.parquet",
-                unit_intervals=directory / "unit_intervals.parquet",
-                masked_unit_intervals=directory / "masked.parquet",
                 effective_mask=directory / "mask.parquet",
+                resolved_partition_intervals=directory / "resolved_partition_intervals.parquet",
+                partition_statuses=directory / "partition_statuses.parquet",
+                testing_unit_id_overlap=directory / "testing_unit_id_overlap.parquet",
             )
             prepare_generation_scope(
                 inputs,

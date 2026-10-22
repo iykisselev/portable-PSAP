@@ -77,20 +77,26 @@ class IndexedIndelGenerationTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            units = directory / "units.parquet"
-            intervals = directory / "intervals.parquet"
+            resolved_partitions = directory / "resolved_partitions.parquet"
+            partition_statuses = directory / "partition_statuses.parquet"
             mask = directory / "mask.parquet"
-            pl.DataFrame(
-                {"testing_unit_id": ["BOUNDARY"], "status": ["eligible"]}
-            ).write_parquet(units)
             pl.DataFrame(
                 {
                     "testing_unit_id": ["BOUNDARY"],
+                    "partition_id": ["cds"],
+                    "partition_order": [0],
                     "CHROM": ["1"],
                     "START": [9_999],
                     "END": [10_001],
                 }
-            ).write_parquet(intervals)
+            ).write_parquet(resolved_partitions)
+            pl.DataFrame(
+                {
+                    "testing_unit_id": ["BOUNDARY"],
+                    "partition_id": ["cds"],
+                    "status": ["eligible"],
+                }
+            ).write_parquet(partition_statuses)
             pl.DataFrame({"CHROM": ["1"], "START": [0], "END": [20_000]}).write_parquet(
                 mask
             )
@@ -142,8 +148,6 @@ class IndexedIndelGenerationTests(unittest.TestCase):
             prepare_generation_window(
                 GenerationWindowInputs(
                     windows=windows,
-                    units=units,
-                    unit_intervals=intervals,
                     effective_mask=mask,
                     population_vcf=population_gz,
                     population_vcf_index=str(population_gz) + ".tbi",
@@ -153,6 +157,8 @@ class IndexedIndelGenerationTests(unittest.TestCase):
                     score_indel_index=indel_score_index,
                     fasta=fasta,
                     fasta_fai=str(fasta) + ".fai",
+                    resolved_partition_intervals=resolved_partitions,
+                    partition_statuses=partition_statuses,
                 ),
                 outputs,
                 GenerationWindowParameters(
