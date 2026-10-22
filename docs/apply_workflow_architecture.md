@@ -59,9 +59,10 @@ provided by the user and are not regenerated.
 
 ## DAG and transformations
 
-The default `all` target writes the three cohort reports. The stages below are
-listed in dependency order, although the independent validation rules can run
-in parallel.
+The default `all` target writes the candidate, omnibus, and control reports,
+one report for each configured partition, and endpoint/aggregation diagnostics.
+The stages below are listed in dependency order, although the independent
+validation rules can run in parallel.
 
 | Stage / rules | Inputs | Transformation | Primary outputs |
 | --- | --- | --- | --- |
@@ -70,19 +71,20 @@ in parallel.
 | Exclusion projection: `combine_exclusions` | Staged cohort and every configured exclusion | Project full-span intervals and exact alleles to a cohort-aligned exclusion VCF. | `prepared/combined_exclusions.vcf` |
 | Variant filtering: `filter_calibration_regions`, `filter_excluded_records` | Staged cohort, optional bundle calibration regions, combined exclusions | Restrict to generated calibration regions when present, then subtract excluded records. | In-scope BCF/CSI and filtered VCF/CSI |
 | Annotation: `annotate_variants`, `summarize_annotations`, `require_valid_annotations` | Filtered VCF, CADD, resolved partition BEDs | Attach CADD and unit/partition memberships, then reject complete expected annotation misses. | Annotated VCF and annotation QC |
-| Per-sample processing: `split_genotypes`, `extract_gt`, `prepare_sample_genotypes` | Annotated VCF | Split non-reference calls, retain the two INFO fields, normalize ploidy/alleles, assign sex-aware genotype classes, and expand multi-unit annotations in memory. | Temporary `raw/` calls and `annotated/` tables |
-| Scoring: `apply_psap` | Per-sample annotations and lookup source/certificate | Keep compatible best-scoring variants and map score bins to role-specific PSAP values. | `scored/<sample>.<unit>.tsv.gz` |
+| Per-sample processing: `split_genotypes`, `extract_gt`, `prepare_sample_genotypes` | Annotated VCF | Split non-reference calls, retain the two INFO fields, normalize ploidy/alleles, assign sex-aware genotype classes, and expand unit/partition annotations in memory. | Temporary `raw/` calls and `annotated/` tables |
+| Scoring: `apply_psap` | Per-sample annotations and lookup source/certificate | Keep compatible best-scoring variants and map score bins to partition/model PSAP values. | Partition-aware files under `scored/` |
 | Cohort aggregation: `build_sample_candidates`, `build_control_reference`, `build_cohort_report` | Affected scores, unaffected annotations/scores, manifest | Build candidates, preserve control evidence, compare exact matching variants, and aggregate reports. | Candidate intermediates plus three final cohort reports |
 
 ## Data and join keys
 
 The canonical allele key contains chromosome, position, reference, and
-alternate allele. The normalized testing-unit table adds the unit ID, so a
-variant overlapping several units produces several rows. Per-sample tables
-carry that allele/unit pair through classification and scoring.
+alternate allele. The normalized membership table adds the unit and owned
+partition IDs, so a variant overlapping several units produces several rows.
+Per-sample tables carry that allele/unit/partition tuple through classification
+and scoring.
 
 The final control comparison is intentionally strict. It uses the exact
-`unit`/`variant_key` pair, not merely the same gene or position. The
+`unit`/`partition_id`/`variant_key` tuple, not merely the same gene or position. The
 dominant-heterozygous exception allows evidence from any configured control
 model; other candidate models require a matching model. Keep this behavior if
 you refactor report aggregation.
@@ -121,8 +123,8 @@ For `outdir` and `run.apply_prefix`, results are rooted at
    from configured metadata, while the validated manifest gates processing.
    Preserve this split so malformed metadata fails clearly without weakening
    DAG construction.
-5. **Preserve one-row-per-variant/unit semantics.** Do not collapse unit
-   memberships before scoring or control comparison.
+5. **Preserve one-row-per-variant/unit/partition semantics.** Do not collapse
+   owned memberships before scoring or control comparison.
 6. **Keep adapters thin.** Put cross-rule logic in libraries and use
    `APPLY_SCRIPT_DIR` for every apply script path.
 

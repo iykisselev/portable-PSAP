@@ -104,7 +104,7 @@ These checkpoint artifacts are part of the internal DAG contract:
   They store `certain_count`, `log_none_sum`, total event count, and SNV/indel
   event counts so global event tables never need to be materialized. Bucket
   diagnostics expose those class counts as `snv_event_count` and
-  `indel_event_count` for every unit/role.
+  `indel_event_count` for every unit/partition/model combination.
 
 Downstream rules should not glob these files or infer wildcard names from
 directory contents. Use the callbacks in `rules/generate/context.smk`; they

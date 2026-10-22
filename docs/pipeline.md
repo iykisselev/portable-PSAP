@@ -56,12 +56,14 @@ of the same DAG.
 A testing unit is the region over which an event is evaluated. The default is
 a gene, although `model.unit` also supports `cadd_region` and
 `coding_cadd_region`. The fourth BED column is the stable unit identifier. The
-same identifier must appear in the lookup tables.
+same identifier must appear in the lookup tables. Generation records an ordered
+set of biological partitions for each unit; the certified bundle carries the
+resulting ownership and eligible-membership artifacts.
 
 CADD-PHRED is the severity score. Scores are clipped to `[0, score_max]` and
 placed on a fixed-width grid. During application, if several compatible
-variants tie for the highest score in a sample/unit/model combination, the
-workflow keeps all tied variants.
+variants tie for the highest score in a sample/unit/partition/model
+combination, the workflow keeps all tied variants.
 
 ### Genotype roles
 
@@ -74,17 +76,34 @@ probability `q`:
 | Homozygous alternate (`hom`) | `q = f²` |
 | Male non-PAR chromosome-X hemizygous (`hem_chrX`) | `q = f` |
 
-For each unit and role, the workflow assumes independent allele events. For a
-score threshold `t`, it calculates a conditional tail probability:
+For each unit/partition and applicable role, the workflow assumes independent
+allele events. For a score threshold `t`, it calculates a conditional tail
+probability:
 
 ```text
-P(event score >= t | at least one event in the unit)
+P(event score >= t | at least one event in the unit/partition)
 ```
 
 Equivalently, the numerator is the probability of at least one event among
 alleles at or above `t`, and the denominator is the probability of at least
-one compatible event anywhere in the unit. This score-bin survival row becomes
-the lookup table used by the apply workflow.
+one compatible event anywhere in the unit/partition. This score-bin survival
+row becomes the lookup table used by the apply workflow.
+
+### Partition aggregation
+
+Each bundle contains one survival lookup for every configured biological
+partition and enabled disease model. Apply selects the best compatible score in
+each available unit/partition/model group, then combines one raw partition
+PSAP per partition with the aggregated Cauchy association test (ACAT)
+[Liu et al., 2019](https://doi.org/10.1016/j.ajhg.2019.01.002). The omnibus
+group is `(pid, testing_unit_id, model)`; a missing or ineligible partition is
+reported with its status and does not receive an imputed p-value or ACAT weight.
+
+The current production input policy is raw survival probabilities. Endpoint and
+raw-versus-mid-p diagnostics are emitted to measure alternatives, but an
+alternative multi-partition policy must be calibrated with real generated
+bundles and matched cohorts before it is adopted. The report metadata and
+diagnostic files record the policy and contributing partition set.
 
 ### Alleles absent from the population panel
 
@@ -221,7 +240,7 @@ fasta:
 An uncompressed FASTA requires `.fai` and may set `gzi: null`. A BGZF FASTA
 requires both `.fai` and `.gzi`.
 
-### Testing-unit BED
+### Testing-unit partition BEDs
 
 Generate and full manifests provide an ordered `testing_unit_partitions` list.
 Bundle apply reads its resolved and eligible partition BEDs from the certified
@@ -234,7 +253,8 @@ CHROM  START  END  testing_unit_id
 ```
 
 BED coordinates are zero-based and half-open. A unit may have several rows;
-the workflow merges its intervals when calculating retained fractions.
+the workflow resolves each partition in configured order and calculates
+retained fractions on its owned intervals.
 
 ### Exclusion resources and retained scope
 

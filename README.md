@@ -1,10 +1,10 @@
 # Portable PSAP
 
-Portable PSAP is a Snakemake workflow [1] that can generate certified PSAP
-null-distribution lookup bundles, apply an external or certified bundle to a
-cohort VCF, or perform both steps in one full workflow. It prioritizes variants
-under the selected disease models using the single-case PSAP framework and its
-genomic-regions extension [3,7].
+Portable PSAP is a Snakemake workflow [1] that generates certified partitioned
+PSAP null-distribution bundles, applies a certified bundle to a cohort VCF, or
+performs both steps in one full workflow. It prioritizes variants under selected
+disease models using the single-case PSAP framework and its genomic-regions
+extension [3,7].
 
 ## Workflow modes
 
@@ -12,7 +12,7 @@ Every manifest explicitly selects one mode with `workflow.mode`:
 
 | Mode | Inputs | Default target | Result |
 | --- | --- | --- | --- |
-| `apply` | Cohort, reference/annotation resources, external or certified bundle | `all` | Cohort candidate, summary, and control reports |
+| `apply` | Cohort, reference/annotation resources, certified partitioned bundle | `all` | Cohort candidate, summary, and control reports |
 | `generate` | Population AF, score, scope, and reference resources | `all` | Certified generated lookup bundle |
 | `full` | Cohort plus one shared generation/application binding set | `all` | Generated bundle followed by cohort reports |
 
@@ -24,7 +24,7 @@ package. Workflow scripts add that directory through `workflow/shared/_library.p
 and import modules such as `generation_scope`; package-qualified imports are
 unsupported.
 
-## Combined SNV/indel null generation
+## Partitioned SNV/indel null generation
 
 Generated null distributions can include SNVs alone or the combined SNV/indel
 candidate universe. A combined run sets `model.include_indels: true`, declares
@@ -34,12 +34,11 @@ or `bindings.reference.cadd.indel` in `full` mode). Candidate indels are
 normalized, left-aligned, reference-validated alleles from that score resource;
 their complete REF spans must remain inside the calibration mask.
 
-Combined runs write `generated_bundle_v3`. Its certificate records the SNV and
-indel score identities, the candidate-universe and span conventions,
-class-specific retained/rejected/observed/absent counts, and a certified indel
-candidate audit. SNV-only runs continue to write `generated_bundle_v2`.
-Consumers can read v1–v3, but bundles are never silently upgraded: regenerate
-the lookup when moving to combined indel semantics.
+Every new generate or full run writes `partitioned_null_bundle_v1`, whether it
+contains SNVs alone or SNVs and indels. The bundle records its score resources,
+candidate-universe and span conventions, partition order, overlap ownership,
+and one lookup table for every enabled partition/model pair. Apply accepts only
+this certified contract; regenerate legacy bundles before use.
 
 For `unobserved_policy: mutation_rate`, `generation.mutation_rate_indel` is an
 optional indexed allele-specific indel rate source. If it is not supplied,
@@ -65,18 +64,15 @@ lookup_source:
   directory: results/generate/my-model/bundle
 ```
 
-The workflow discovers its lookup tables, eligibility, calibration mask,
-exclusions, contract and score grid from bundle declarations. No original
-testing-unit BED or repeated component paths are needed. Paths are relative to
-the directory where you invoke Snakemake. The bundle must already exist for
-this apply form; `full` mode generates and binds its own bundle automatically.
-Model choices (`include_indels`, `hemizygote`, testing-unit type) and assembly
-must match the bundle. Certificate and checksum checks run before annotation.
-For directory bundles, the bundle's score maximum and bin width govern scoring;
-configuration grid defaults do not change them.
-
-The existing explicit-component form remains supported for advanced use and
-retains its configured-grid checks. See
+The workflow discovers the partition/model lookup tables, eligible partitions,
+calibration mask, exclusions, contract, and score grid from the bundle
+declarations. No source partition BED or repeated component paths are accepted
+in apply mode. Paths are relative to the directory where you invoke Snakemake.
+The bundle must already exist for this apply form; `full` generates and binds
+its own bundle automatically. Model choices (`include_indels`, `hemizygote`,
+testing-unit type) and assembly must match the bundle. Certificate and checksum
+checks run before annotation. The bundle's score maximum and bin width govern
+scoring; configuration defaults do not change them. See
 [bundle configuration and deployment](docs/pipeline.md#applying-an-existing-bundle)
 for migration and verification details.
 
@@ -89,10 +85,10 @@ Before processing variants, the workflow runs three validation stages:
 - Cohort validation checks the VCF, sample metadata, reference FASTA and
   indexes, sample-ID agreement, VCF normalization/splitting, and sex-chromosome
   requirements.
-- Resource validation checks resource formats, chromosome compatibility, 
-  CADD columns, testing-unit BED columns, and configured exclusion files.
-- Model validation checks model settings and verifies that testing-unit IDs
-  overlap the enabled PSAP lookup tables.
+- Resource validation checks resource formats, chromosome compatibility, CADD
+  columns, certified partition artifacts, and configured exclusion files.
+- Model validation checks model settings and verifies the bundle certificate,
+  partition/model lookup tables, and testing-unit identities.
 
 Each stage writes a JSON report; the reports are merged when validation
 finishes. Errors stop the run before the computationally expensive rules begin.
@@ -113,22 +109,24 @@ workflow considers the complete VCF span of a variant, including the `REF`
 length and any `INFO/END` value. A deletion is therefore removed if any part of
 its span overlaps an excluded region.
 
-### 3. VCF annotation with CADD and testing units
+### 3. VCF annotation with CADD and owned partitions
 
-The filtered VCF receives CADD-PHRED scores and every overlapping testing-unit
-ID. SNVs always use the configured SNV CADD table. Indels use the configured
-indel table only when `model.include_indels` is `true`. CADD scores and their
-splice-focused extension are described in [2,5].
+The filtered VCF receives CADD-PHRED scores and owned testing-unit/partition
+memberships. SNVs always use the configured SNV CADD table. Indels use the
+configured indel table only when `model.include_indels` is `true`. CADD scores
+and their splice-focused extension are described in [2,5].
 
 Annotation QC stops the run if an expected resource annotates no relevant
 records:
 
 - CADD annotates no SNVs;
 - enabled CADD indel annotation annotates no indels; or
-- the testing-unit BED annotates no cohort variants.
+- the certified partition scope annotates no cohort variants.
 
-The testing-unit table is normalized to one row for each `variant_key` and
-testing-unit pair. A variant that overlaps several units appears once per unit.
+The annotation table is normalized to one row for each `variant_key`,
+testing-unit, and partition combination. A variant may belong to several
+testing units, but overlapping bases within a testing unit are owned by the
+earliest configured partition.
 
 ### 4. Genotype extraction and classification
 
@@ -153,11 +151,13 @@ male, `2` for female):
 
 ### 5. Variant scoring with PSAP
 
-Each classified genotype is inner-joined with its CADD and testing-unit
-annotations. For every enabled disease model and testing unit, the workflow:
+Each classified genotype is inner-joined with its CADD and testing-unit/
+partition annotations. For every enabled disease model, testing unit, and
+partition, the workflow:
 
 1. retains variants in the model's compatible genotype class;
-2. keeps every variant tied for the highest CADD-PHRED value in that unit;
+2. keeps every variant tied for the highest CADD-PHRED value in that
+   unit/partition;
 3. clips CADD-PHRED values to the resolved lookup interval `[0, score_max]`;
 4. maps each value to an evenly spaced column in the corresponding PSAP lookup
    grid; and
@@ -169,17 +169,19 @@ candidate generation and comparison with controls.
 ### 6. Variant prioritization and aggregation
 
 For every affected sample, the workflow creates one candidate for each scored
-variant. Candidate IDs are deterministic and use the configured separator and
-ordinal width, for example `case_001:DOM:001`.
+variant. Candidate IDs are deterministic and incorporate the partition-aware
+candidate ordering.
 
 For every unaffected sample, the workflow retains evidence for each carried
 variant under compatible disease models. It attaches the lowest available PSAP
-value for every exact `unit`/`model`/`variant_key` combination.
+value for every exact `unit`/`partition`/`model`/`variant_key` combination.
 
 The final cohort report compares each affected candidate with controls that
-carry the same exact variant key in the same testing unit. A
+carry the same exact variant key in the same testing unit and partition. A
 dominant-heterozygous candidate may use evidence from any configured control
-model; all other models require a matching model.
+model; all other models require a matching model. The main cohort summary
+combines available partition PSAPs once per affected individual, testing unit,
+and model with ACAT [8].
 
 ## Inputs
 
@@ -257,7 +259,7 @@ avoid some staging work.
 | Binding | Required structure |
 | --- | --- |
 | `exclusion` (optional) | Genomic intervals to remove, independent of source. Generation uses zero-based, half-open BED intervals. Set `data: null` and `index: null` when absent. |
-| `testing_unit_bed` | BED with at least four columns: `CHROM`, a zero-based start, an end, and a non-empty testing-unit ID. |
+| `testing_unit_partitions` (generate/full) | Ordered bindings, each with an ID and BED containing `CHROM`, zero-based start, end, and a non-empty testing-unit ID. Earlier bindings own overlapping bases. Apply reads these artifacts from the certified bundle and rejects source-partition overrides. |
 | `exclusions` | An ordered list of BED, TSV, or VCF resources. BED rows are zero-based, half-open intervals. TSV rows are either `CHROM, start, end` with 1-based inclusive coordinates or `CHROM, POS, REF, ALT` exact variants. VCF exclusions match exact alleles. |
 | `cadd.snv` | Tab-delimited CADD SNV table with `Chrom`, `Pos`, `Ref`, `Alt`, `RawScore`, and `PHRED` as the first six data columns. |
 | `cadd.indel` | Same required CADD layout for indels when `model.include_indels: true`; otherwise it may be `null`. |
@@ -267,18 +269,14 @@ resource releases. When substituting a resource, reflect assembly and release
 changes in the run documentation; gnomAD constraint resources are described
 in [4,6].
 
-### PSAP lookup tables
+### Certified lookup bundle
 
-Each lookup table is a tab-delimited file. Its first column is a testing-unit
-ID; the remaining columns are numeric PSAP values across the CADD score grid.
-The usual format is headerless, although the scorer accepts one optional header
-row. Required tables are:
-
-| Binding | Used by |
-| --- | --- |
-| `lookup_tables.het` | `DOM-het` and `X-linked-het` |
-| `lookup_tables.hom` | `REC-hom` and `X-linked-hom` |
-| `lookup_tables.hem_chrX` | `X-linked-hem` when hemizygote scoring is enabled |
+Apply mode requires `bindings.reference.lookup_source` to name a certified
+`partitioned_null_bundle_v1` directory. The bundle contains a
+`testing_unit_id`-headed lookup table for every enabled partition/model pair,
+along with resolved and eligible partition BEDs, the calibration mask,
+exclusions, metadata, and certificate. Its partition order and score grid are
+authoritative; apply manifests cannot override them.
 
 ## Outputs
 
@@ -290,45 +288,39 @@ The main reports are gzip-compressed TSVs located in:
 
 ### `cohort_candidates.tsv.gz`
 
-One row per affected candidate variant after control comparison.
-
-| Column | Meaning |
-| --- | --- |
-| `candidate_id` | Deterministic sample/model/ordinal identifier. |
-| `pid`, `phenotype`, `sex` | Candidate sample metadata. `phenotype` is `affected`. |
-| `unit` | Configured testing-unit ID, such as a gene ID. |
-| `model` | `DOM-het`, `REC-hom`, `X-linked-hom`, `X-linked-het`, or `X-linked-hem`. |
-| `variant_key` | `CHROM:POS-POS_REF>ALT`. |
-| `PSAP` | Numeric value retrieved from the model-specific lookup table. |
-| `validation` | `ok`, `control_match`, or `no_controls`. |
-| `control_count` | Number of unaffected participants carrying the matching variant. |
-| `control_pids` | Comma-separated IDs of matching unaffected participants, or empty when none exist. |
+One row per affected candidate variant after partition-aware control comparison.
+It includes `partition_id` in addition to candidate, sample, unit, model,
+variant, PSAP, and matching-control fields.
 
 ### `cohort_summary.tsv.gz`
 
-One row per `unit`/`model`/candidate-variant signature observed across affected
-samples.
+One row per affected individual, testing unit, and model. `PSAP` is the ACAT
+omnibus result across available partitions, not a minimum across candidates.
+The report records the aggregation status, configured/eligible/contributing
+partition counts, and ordered JSON descriptions of contributing IDs, raw
+partition PSAPs, inputs, and statuses.
 
-| Column | Meaning |
-| --- | --- |
-| `unit`, `model` | Testing unit and disease model. |
-| `candidate_signature` | Pipe-separated variant key(s); currently each candidate contains one distinct variant. |
-| `affected_count`, `affected_pids` | Number and sorted IDs of affected samples supporting the signature. |
-| `minimum_PSAP` | Lowest non-missing PSAP value among the grouped affected candidates. |
-| `validation`, `control_count`, `control_pids` | Aggregated control-evidence fields. A `control_match` takes priority over `ok`, which takes priority over `no_controls`. |
+### Partition and diagnostic reports
 
-### Optional cohort-summary review annotations
+`cohort/partitions/<partition>.summary.tsv.gz` contains the corresponding
+per-partition affected evidence. `endpoint_diagnostics.tsv.gz` and
+`aggregation_diagnostics.tsv.gz` retain raw and mid-p diagnostics. The
+production aggregation policy is raw survival probabilities; the diagnostics
+exist to support calibration of any future alternative policy against real
+bundles and cohorts.
+
+### Optional candidate-review annotations
 
 `scripts/annotate_cohort_summary.py` is a standalone post-analysis utility. It
 does not modify workflow outputs: it appends CADD PHRED, a selected population
-AF INFO field, and `gene_name` from a GTF to a copy of `cohort_summary.tsv.gz`.
+AF INFO field, and `gene_name` from a GTF to a copy of `cohort_candidates.tsv.gz`.
 It treats `unit` as an Ensembl gene ID (and ignores an optional version suffix).
 All CADD tables and the population VCF must be BGZF-compressed and indexed.
 
 ```bash
 python scripts/annotate_cohort_summary.py \
-  results/apply/my-run/cohort/cohort_summary.tsv.gz \
-  results/apply/my-run/cohort/cohort_summary.review.tsv.gz \
+  results/apply/my-run/cohort/cohort_candidates.tsv.gz \
+  results/apply/my-run/cohort/cohort_candidates.review.tsv.gz \
   --cadd-snv reference/cadd_snv.tsv.gz \
   --cadd-indel reference/cadd_indel.tsv.gz \
   --population-vcf reference/population.vcf.gz \
@@ -337,8 +329,7 @@ python scripts/annotate_cohort_summary.py \
 ```
 
 The output preserves every input row and adds `gene_name`, `cadd_phred`, and
-`population_af`. A pipe-separated multi-allele candidate signature receives
-comma-separated CADD and AF values in the same order.
+`population_af` for the candidate's `variant_key`.
 
 ### `control_variants.tsv.gz`
 
@@ -348,8 +339,8 @@ control.
 | Column | Meaning |
 | --- | --- |
 | `pid`, `phenotype`, `sex` | Control sample metadata. `phenotype` is `unaffected`. |
-| `unit`, `model`, `variant_key` | The testing unit, compatible disease model, and carried variant. |
-| `PSAP` | Lowest available PSAP value for the exact evidence record; may be missing when no score is available. |
+| `unit`, `partition_id`, `model`, `variant_key` | The testing unit, owned partition, compatible disease model, and carried variant. |
+| `PSAP` | Lowest available PSAP value for the exact partition-aware evidence record; may be missing when no score is available. |
 
 ### Supporting outputs
 
@@ -480,31 +471,28 @@ the profile if they do not match the site or project allocation.
 
 ## Generated bundles and supporting outputs
 
-`generate` and `full` publish a versioned bundle under
-`<outdir>/generate/<generation_prefix>/bundle/`. The bundle contains HET/HOM
-lookups, an HEM lookup when enabled, eligible testing units, calibration and
-exclusion artifacts, `metadata.json`, `validation.json`, and `validation.ok`.
-The marker is written only after component size/checksum and semantic
-validation succeeds. `full` is the only mode that automatically binds this
-bundle to application; an `apply` manifest may also name a previously certified
-bundle explicitly.
+`generate` and `full` publish a `partitioned_null_bundle_v1` under
+`<outdir>/generate/<generation_prefix>/bundle/`. The bundle contains one
+partition/model lookup table for every enabled pair, resolved and eligible
+partition BEDs, calibration and exclusion artifacts, `metadata.json`,
+`validation.json`, and `validation.ok`. The marker is written only after
+component size/checksum and semantic validation succeeds. `full` automatically
+binds this bundle to application; an `apply` manifest may name another
+previously certified partitioned bundle explicitly.
 
-For a combined v3 bundle, retain `candidate_audit.tsv.gz` with the certificate
-when copying or archiving the bundle. It records structural indel rejections
-(for example, a candidate whose REF span crosses a calibration-mask boundary)
-that are intentionally distinct from population FILTER exclusions.
-
-See [docs/null_distribution_contract.md](docs/null_distribution_contract.md)
-for the generated-bundle interface and
-[docs/workflow_architecture.md](docs/workflow_architecture.md) for module and
-binding ownership.
+See the [pipeline guide](docs/pipeline.md#generated-bundle) for the generated
+bundle interface, the [generate architecture](docs/generate_workflow_architecture.md)
+for generation ownership, and the [apply architecture](docs/apply_workflow_architecture.md)
+for application ownership.
 
 ## Testing and contributing
 
-Test tiers, local commands, and CI coverage are documented in
-[docs/testing.md](docs/testing.md). Module boundaries, how to add resources or
-roles, and the schema/contract deprecation policy are in
-[docs/contributing.md](docs/contributing.md).
+Run a documented test tier from the repository root with, for example,
+`python tests/run_tier.py workflow`. The null-distribution fixtures are
+described in [tests/null_distribution/README.md](tests/null_distribution/README.md).
+Module boundaries and contract ownership are documented in the
+[generate architecture](docs/generate_workflow_architecture.md) and
+[apply architecture](docs/apply_workflow_architecture.md).
 
 ## References
 
@@ -526,3 +514,6 @@ roles, and the schema/contract deprecation policy are in
    leveraging population data to prioritize coding and non-coding variants in
    whole-genome sequencing for rare disease diagnosis. *Genetic Epidemiology*
    **49**, e22593 (2025).
+8. Liu, Y. *et al.* ACAT: A fast and powerful p value combination method for
+   rare-variant analysis in sequencing studies. *The American Journal of Human
+   Genetics* **104**, 410–421 (2019). https://doi.org/10.1016/j.ajhg.2019.01.002
