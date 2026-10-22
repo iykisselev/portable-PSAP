@@ -5,8 +5,8 @@ severity of an observed variant with what would be expected from population
 variation in the same genomic region. The workflow implements the single-case
 PSAP framework and extends it to testing units such as genes.
 
-The result is reproducible, model-aware evidence for prioritization—not a
-claim that a variant causes disease.
+The result is reproducible, model-aware evidence for prioritization. It does
+not establish that a variant causes disease.
 
 ## What the workflow is asking
 
@@ -86,7 +86,7 @@ the cohort result is therefore deterministic.
 The raw ordered partition BEDs are not used as-is. The calibration scope is
 built in four steps:
 
-1. The workflow starts with autosomes 1–22 and chromosome X represented by the
+1. The workflow starts with autosomes 1 through 22 and chromosome X represented by the
    FASTA index.
 2. It resolves partition ownership and removes pseudoautosomal intervals. Each
    unit/partition's supported, non-PAR bases form the denominator for its

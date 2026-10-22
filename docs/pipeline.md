@@ -1,8 +1,8 @@
 # Portable PSAP pipeline guide
 
-This document is the main technical and operational guide to Portable PSAP. It
-explains what the pipeline computes, how the three workflow modes fit together,
-what each stage expects and produces, and how to run or extend the workflow.
+This guide covers what Portable PSAP computes, how the three workflow modes fit
+together, what each stage expects and produces, and how to run or extend the
+workflow.
 
 For a shorter scientific introduction, read
 [project concepts](project_concepts.md). Developers working on one branch of
@@ -27,7 +27,7 @@ The workflow supports three modes:
 | `apply` | Cohort processing and scoring only | `all` | Cohort candidate, summary, and control reports |
 | `full` | Generation followed by application in one DAG | `all` | Both the certified bundle and cohort reports |
 
-At a high level, data move through the pipeline like this:
+Data move through the pipeline as follows:
 
 ```text
 Population AF + CADD + testing units + exclusions
@@ -461,7 +461,7 @@ combination of `unobserved_policy: mutation_rate` and
 `prepare_generation_scope` constructs the supported calibration space:
 
 1. Read testing-unit intervals and the FASTA index.
-2. Restrict the supported contigs to autosomes 1–22 and chromosome X.
+2. Restrict the supported contigs to autosomes 1 through 22 and chromosome X.
 3. Remove PAR to define the supported denominator for each unit.
 4. Subtract the union of primary and additional interval exclusions.
 5. Calculate retained fraction per unit and mark units below

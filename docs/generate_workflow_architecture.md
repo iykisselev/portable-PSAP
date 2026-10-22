@@ -1,8 +1,8 @@
 # Generate workflow architecture
 
-This is the developer guide to `workflow.mode: generate` and to the generation
-half of `workflow.mode: full`. Start with [project concepts](project_concepts.md)
-if you want the scientific reasoning before the implementation details.
+This guide covers `workflow.mode: generate` and the generation half of
+`workflow.mode: full`. Start with [project concepts](project_concepts.md) for
+the scientific reasoning behind the implementation.
 
 ## Entry point and module ownership
 
@@ -43,7 +43,8 @@ In standalone `generate` mode, the following bindings live under `generation`:
 | `af_source` | Yes | Names the overall, and when configured female/male, AF INFO tags. |
 
 The current scope supports SNVs and, when enabled, normalized indels on contigs
-`1`–`22` and `X`. Every calibration allele must have exactly one score row.
+`1` through `22` and `X`. Every calibration allele must have exactly one score
+row.
 Indel candidates are owned by their anchor-position window, while a bounded
 right halo ensures a REF span crossing that window boundary is evaluated
 once against the complete mask and testing-unit span. Invalid selected AF

@@ -1,8 +1,8 @@
 # Apply workflow architecture
 
-This is the developer guide to `workflow.mode: apply` and to the cohort-scoring
-half of `workflow.mode: full`. Read [project concepts](project_concepts.md)
-first if you want the scientific interpretation of PSAP.
+This guide covers `workflow.mode: apply` and the cohort-scoring half of
+`workflow.mode: full`. Read [project concepts](project_concepts.md) for the
+scientific interpretation of PSAP.
 
 ## Entry point and resource resolution
 
@@ -117,8 +117,8 @@ For `outdir` and `run.apply_prefix`, results are rooted at
 2. **Use the registry.** Add resources through `ApplyResourceRegistry`; do not
    add a rule-local source path or a second path-resolution mechanism.
 3. **Use the effective reference.** Bundle and full mode must stage/filter the
-   bundle's calibration scope, eligible units, and excluded alleles—not the
-   stale configured equivalents.
+   bundle's calibration scope, eligible units, and excluded alleles rather than
+   the stale configured equivalents.
 4. **Keep sample wildcards safe.** `sample_discovery.smk` builds wildcard lists
    from configured metadata, while the validated manifest gates processing.
    Preserve this split so malformed metadata fails clearly without weakening

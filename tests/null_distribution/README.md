@@ -1,7 +1,7 @@
 # Null-distribution fixtures
 
-These are independent fixtures for the null-distribution implementation. They
-are deliberately small enough to inspect and calculate by hand.
+These independent fixtures cover the null-distribution implementation. They
+are small enough to inspect and calculate by hand.
 
 - `population_af.vcf` selects `AF_CUSTOM` as the overall configured INFO tag,
   and supplies deliberately distinct `AF_FEMALE` and `AF_MALE` tags for X;

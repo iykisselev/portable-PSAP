@@ -92,7 +92,7 @@ Before processing variants, the workflow runs three validation stages:
 
 Each stage writes a JSON report; the reports are merged when validation
 finishes. Errors stop the run before the computationally expensive rules begin.
-Warnings do not stop the run, but remain recorded in `validation.json`.
+Warnings remain in `validation.json` and do not stop the run.
 
 ### 2. Resource staging and variant filtering
 
