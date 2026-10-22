@@ -331,33 +331,6 @@ python scripts/annotate_cohort_summary.py \
 The output preserves every input row and adds `gene_name`, `cadd_phred`, and
 `population_af` for the candidate's `variant_key`.
 
-### Optional CADD partition-by-constraint analysis
-
-`scripts/cadd_partition_constraint.py` is a standalone exploratory analysis that
-does not interact with the workflow. For every protein-coding gene in a GENCODE
-GTF, it defines disjoint CDS and intragenic noncoding partitions, plus the
-whole gene body that contains both, and assigns genes to LOEUF deciles using a
-gnomAD constraint table. It then samples genes from each decile and compares
-the CADD score distributions of all possible SNVs in each partition pair (CDS
-vs noncoding, CDS vs gene body, noncoding vs gene body), both within each gene
-and across deciles. It requires
-numpy, pandas, pysam, scipy and matplotlib. The CADD SNV table must be
-BGZF-compressed and tabix-indexed. All three resources must use the same
-genome build.
-
-```bash
-python scripts/cadd_partition_constraint.py \
-  --gtf reference/gencode.v46.basic.annotation.gtf.gz \
-  --cadd reference/whole_genome_SNVs.tsv.gz \
-  --constraint reference/gnomad.v4.1.constraint_metrics.tsv \
-  --output-dir results/cadd_partitions \
-  --genes-per-decile 200 --threads 8 --plot-formats png pdf
-```
-
-Run with `--help` to see the partition definitions (`--cds-transcripts`,
-`--noncoding non_cds|intronic`, `--noncoding-buffer`, `--overlap`) and the full
-list of output tables and figures.
-
 ### `control_variants.tsv.gz`
 
 One row for each carried variant/model evidence record from an unaffected
