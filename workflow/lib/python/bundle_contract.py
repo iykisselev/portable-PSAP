@@ -1,10 +1,4 @@
-"""Versioned generated-bundle names, roles, and upgrade policy.
-
-Only :data:`CURRENT_GENERATED_BUNDLE_CONTRACT` may be emitted by this version
-of the workflow.  Older contracts are accepted by consumers through the
-explicit compatibility registry; a future writer must add an upgrader rather
-than silently reinterpret an existing certificate.
-"""
+"""Shared constants and validation for the partitioned-null bundle contract."""
 
 from __future__ import annotations
 

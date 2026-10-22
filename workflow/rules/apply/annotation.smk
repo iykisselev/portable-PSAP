@@ -192,10 +192,14 @@ rule annotate_partition_memberships:
         annotations=rules.annotate_variants.output.annotations,
         resolved=list(LOOKUP_SOURCE.resolved_partitions.values()),
         eligible=list(LOOKUP_SOURCE.eligible_partitions.values()),
+        statuses=LOOKUP_SOURCE.partition_statuses,
         validated=rules.require_valid_inputs.output.ok,
     output:
         memberships=ensure(str(PARTITION_MEMBERSHIPS), non_empty=True),
     params:
         partition_ids=LOOKUP_SOURCE.partition_ids,
+    resources:
+        mem_mb=policy_resources("annotate_partition_memberships").mem_mb,
+        runtime=policy_resources("annotate_partition_memberships").runtime,
     script:
         str(APPLY_SCRIPT_DIR / "annotate_partition_memberships.py")

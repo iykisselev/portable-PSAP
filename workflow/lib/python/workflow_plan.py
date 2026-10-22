@@ -297,6 +297,7 @@ class LookupSource:
     marker: str | None = None
     resolved_partitions: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     eligible_partitions: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    partition_statuses: str | None = None
     calibration_mask: str | None = None
     excluded_alleles: tuple[str, ...] = ()
 
@@ -638,6 +639,7 @@ def _directory_lookup_source(source: Mapping[str, Any], key: str) -> LookupSourc
             excluded_alleles=(component("excluded_alleles"),),
             resolved_partitions=_frozen_mapping(resolved),
             eligible_partitions=_frozen_mapping(eligible),
+            partition_statuses=component("unit_partition_status"),
         )
     except (OSError, ValueError, TypeError, KeyError, OverflowError) as exc:
         raise WorkflowPlanError(
@@ -890,6 +892,7 @@ def _generated_lookup_source(
             partition_id: str(generation.bundle_dir / f"eligible.{partition_id}.bed.gz")
             for partition_id in partition_ids
         }),
+        partition_statuses=bundle_paths["unit_partition_status"],
     )
 
 

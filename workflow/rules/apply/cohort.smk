@@ -80,7 +80,9 @@ rule build_cohort_report:
     """
     input:
         candidates=per_sample(CANDIDATE_DIR, "affected"),
+        evidence=per_sample(ANNOTATED_DIR, "affected"),
         controls=rules.build_control_reference.output.control_variants,
+        partition_statuses=LOOKUP_SOURCE.partition_statuses,
     output:
         candidates=ensure(
             COHORT_OUTPUTS["cohort_candidates"],
@@ -90,6 +92,7 @@ rule build_cohort_report:
             COHORT_OUTPUTS["cohort_summary"],
             non_empty=True,
         ),
+        report_metadata=ensure(REPORT_METADATA, non_empty=True),
         partition_summaries=[ensure(path, non_empty=True) for path in PARTITION_SUMMARIES.values()],
     log:
         str(APPLY_LOG_DIR / "cohort" / "build_cohort_report.log"),
@@ -107,5 +110,7 @@ rule build_cohort_report:
         runtime=policy_resources("build_cohort_report").runtime,
     params:
         partition_ids=LOOKUP_SOURCE.partition_ids,
+        affected_pids=affected_pids,
+        affected_sexes=affected_sexes,
     script:
         str(APPLY_SCRIPT_DIR / "build_cohort_report.R")

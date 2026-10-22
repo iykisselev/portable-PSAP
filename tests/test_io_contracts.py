@@ -40,7 +40,7 @@ class IOContractTests(unittest.TestCase):
                 paths["marker"].write_text("")
                 with self.assertRaisesRegex(BundleCertificateError, "JSON objects"):
                     verify_bundle_certificate(
-                        contract="generated_bundle_v2",
+                        contract="partitioned_null_bundle_v1",
                         metadata_path=paths["metadata"],
                         validation_path=paths["validation"],
                         marker_path=paths["marker"],

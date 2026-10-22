@@ -26,6 +26,7 @@ from oracles import distribution, merge_statistics  # noqa: E402
 
 STATISTICS_COLUMNS = [
     "testing_unit_id",
+    "partition_id",
     "role",
     "bin",
     "certain_count",
@@ -99,6 +100,7 @@ class VectorizedReductionTests(unittest.TestCase):
                                 rows.append(
                                     (
                                         unit,
+                                        "cds",
                                         role,
                                         bin_number,
                                         certain_count,
@@ -118,7 +120,7 @@ class VectorizedReductionTests(unittest.TestCase):
                     paths, units, roles, bin_count
                 )
                 actual_lookups, actual_diagnostics = vectorized_lookup_rows(
-                    aggregate_statistics_vectorized(paths), units, roles, bin_count
+                    aggregate_statistics_vectorized(paths).drop("partition_id"), units, roles, bin_count
                 )
                 for expected, actual in zip(
                     expected_diagnostics, actual_diagnostics, strict=True

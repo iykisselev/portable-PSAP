@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import polars as pl
-from bundle_contract import GENERATED_ROLES
+from model_catalog import GENERATED_ROLES
 
 
 class EventAssemblyError(ValueError):

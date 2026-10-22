@@ -15,7 +15,10 @@ read_candidate_psap <- function(path) {
     "Affected PSAP table contains %d row(s) with missing unit, model, or variant key",
     sum(invalid)
   )
-  unique(psap[, .(unit, partition_id, model, variant_key, PSAP)], by = c("unit", "partition_id", "model", "variant_key", "PSAP"))
+  require_columns(psap, c("selected_score_bin", "next_PSAP"), "Affected PSAP table")
+  unique(psap[, .(unit, partition_id, model, variant_key, PSAP,
+    selected_score_bin = as.integer(selected_score_bin), next_PSAP = as.numeric(next_PSAP))],
+    by = c("unit", "partition_id", "model", "variant_key", "PSAP", "selected_score_bin", "next_PSAP"))
 }
 
 
@@ -23,7 +26,7 @@ empty_candidates <- function() {
   data.table(
     candidate_id = character(), pid = character(), phenotype = character(),
     sex = numeric(), unit = character(), partition_id = character(), model = character(),
-    variant_key = character(), PSAP = numeric()
+    variant_key = character(), PSAP = numeric(), selected_score_bin = integer(), next_PSAP = numeric()
   )
 }
 
@@ -46,7 +49,7 @@ build_candidates <- function(psap, pid, sex, candidate_id_separator = ":", candi
   )]
   candidates <- eligible[, .(
     candidate_id, pid = as.character(pid), phenotype = "affected",
-    sex = sex, unit, partition_id, model, variant_key, PSAP
+    sex = sex, unit, partition_id, model, variant_key, PSAP, selected_score_bin, next_PSAP
   )]
   setorderv(candidates, c("PSAP", "candidate_id", "variant_key"), c(1L, 1L, 1L), na.last = TRUE)
   candidates

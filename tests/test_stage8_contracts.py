@@ -33,7 +33,6 @@ class StageEightContracts(unittest.TestCase):
             (ROOT / "config" / "config.yaml").read_text(encoding="utf-8")
         )
         examples = {
-            "apply": ROOT / "runs" / "apply.example.yaml",
             "generate": ROOT / "runs" / "generate.example.yaml",
             "full": ROOT / "runs" / "full.example.yaml",
         }
@@ -43,6 +42,8 @@ class StageEightContracts(unittest.TestCase):
                     merge(science, yaml.safe_load(path.read_text(encoding="utf-8")))
                 )
                 self.assertEqual(mode, plan.mode)
+        apply_example = yaml.safe_load((ROOT / "runs" / "apply.example.yaml").read_text(encoding="utf-8"))
+        self.assertEqual("bundle", apply_example["bindings"]["reference"]["lookup_source"]["type"])
 
 
 if __name__ == "__main__":

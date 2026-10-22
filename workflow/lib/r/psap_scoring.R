@@ -10,7 +10,7 @@ empty_scoring_output <- function() {
 
 read_scoring_variants <- function(path) {
   variants <- read_tsv(path)
-  require_columns(variants, c("Key", "CHROM", "CADD_PHRED", "gt_class", "unit", "partition_id"), "PSAP-ready variant table")
+  require_columns(variants, c("Key", "CHROM", "CADD_PHRED", "gt_class", "unit", "partition_id", "partition_status"), "PSAP-ready variant table")
   variants[, CADD_PHRED := suppressWarnings(as.numeric(CADD_PHRED))]
   variants
 }
@@ -72,7 +72,7 @@ select_highest <- function(variants) {
 
 score_model <- function(variants, model, genotype_class, lookup, lookup_source) {
   selected <- variants[
-    gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id) & !is.na(.partition_id) & nzchar(.partition_id)
+    partition_status == "eligible" & gt_class == genotype_class & !is.na(CADD_PHRED) & !is.na(.testing_unit_id) & nzchar(.testing_unit_id) & !is.na(.partition_id) & nzchar(.partition_id)
   ]
   if (nrow(selected) == 0) return(NULL)
   selected <- select_highest(selected)

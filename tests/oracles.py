@@ -45,6 +45,7 @@ def merge_statistics(
     for path in files:
         for (
             unit,
+            _partition_id,
             role,
             bin_number,
             certain_count,

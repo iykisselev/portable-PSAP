@@ -28,9 +28,6 @@ bindings:
     exclusion:
       data: resources/exclusion.bed.gz
       index: resources/exclusion.bed.gz.tbi
-    testing_unit_bed:
-      data: resources/testing_units.bed.gz
-      index: resources/testing_units.bed.gz.tbi
     exclusions:
       encode-hg38-blacklist-v2:
         data: resources/variant_exclusions.bed.gz
@@ -39,12 +36,8 @@ bindings:
         data: resources/par_regions.bed.gz
         index: resources/par_regions.bed.gz.tbi
     lookup_source:
-      type: external
-      contract: external_legacy_v0
-      tables:
-        het: resources/lookup_het.tsv.gz
-        hom: resources/lookup_hom.tsv.gz
-        hem_chrX: resources/lookup_hem_chrX.tsv.gz
+      type: bundle
+      directory: results/generate/generate-demo/bundle
     cadd:
       snv:
         data: resources/cadd_snv.tsv.gz

@@ -35,3 +35,11 @@ def control_pids(wildcards):
 
 def control_sexes(wildcards):
     return SAMPLE_INDEX.sample_sexes("unaffected")
+
+
+def affected_pids(wildcards):
+    return SAMPLE_INDEX.sample_ids("affected")
+
+
+def affected_sexes(wildcards):
+    return SAMPLE_INDEX.sample_sexes("affected")

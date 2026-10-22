@@ -31,7 +31,8 @@ COHORT_OUTPUTS = {
     name: str(COHORT_DIR / f"{name}.tsv.gz")
     for name in ("cohort_candidates", "cohort_summary", "control_variants")
 }
+REPORT_METADATA = str(COHORT_DIR / "report_metadata.json")
 PARTITION_SUMMARIES = {
-    partition_id: str(COHORT_DIR / f"cohort_summary.{partition_id}.tsv.gz")
+    partition_id: str(COHORT_DIR / "partitions" / f"{partition_id}.summary.tsv.gz")
     for partition_id in APPLY_PLAN.lookup_source.partition_ids
 }

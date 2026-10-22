@@ -53,6 +53,7 @@ RULE_POLICY_NAMES = frozenset(
         "extract_gt",
         "prepare_sample_genotypes",
         "annotate_variants",
+        "annotate_partition_memberships",
         "summarize_annotations",
         "require_valid_annotations",
         "filter_calibration_regions",
@@ -129,6 +130,9 @@ EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
             mem_mb_per_gib=512,
             runtime_minutes_per_gib=30,
             scale_with_attempt=True,
+        ),
+        "annotate_partition_memberships": ExecutionPolicy(
+            baseline_mem_mb=4096, baseline_runtime_minutes=60
         ),
         "summarize_annotations": ExecutionPolicy(
             baseline_mem_mb=1024, baseline_runtime_minutes=30

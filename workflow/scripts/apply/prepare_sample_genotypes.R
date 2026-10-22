@@ -73,13 +73,16 @@ deduplicate_by_key <- function(genotypes) {
 
 expand_units <- function(genotypes, memberships) {
   if (nrow(genotypes) == 0L) {
-    genotypes[, `:=`(unit = character(), partition_id = character())]
+    genotypes[, `:=`(
+      unit = character(), partition_id = character(), partition_status = character(),
+      failed_roles_json = character()
+    )]
     return(genotypes)
   }
   memberships <- read_tsv(memberships)
-  require_columns(memberships, c("CHROM", "POS", "REF", "ALT", "unit", "partition_id"), "Certified partition membership")
+  require_columns(memberships, c("CHROM", "POS", "REF", "ALT", "unit", "partition_id", "partition_status", "failed_roles_json"), "Certified partition membership")
   memberships[, `:=`(POS = as.integer(POS), unit = clean_identifier(unit), partition_id = clean_identifier(partition_id))]
-  expanded <- merge(genotypes, memberships[, .(CHROM, POS, REF, ALT, unit, partition_id)],
+  expanded <- merge(genotypes, memberships[, .(CHROM, POS, REF, ALT, unit, partition_id, partition_status, failed_roles_json)],
     by = c("CHROM", "POS", "REF", "ALT"), all = FALSE, sort = FALSE)
   unique(expanded[!is.na(unit) & !is.na(partition_id)], by = c("Key", "unit", "partition_id"))
 }
@@ -107,7 +110,8 @@ run_sample_preparation <- function(config) {
 
   annotated <- expand_units(classified$genotypes, config$memberships)
   output_columns <- c(
-    "Key", "CADD_PHRED", "unit", "partition_id", "CHROM", "POS", "REF", "ALT", "GT", "gt_class"
+    "Key", "CADD_PHRED", "unit", "partition_id", "partition_status", "failed_roles_json",
+    "CHROM", "POS", "REF", "ALT", "GT", "gt_class"
   )
   write_tsv(
     annotated[, output_columns, with = FALSE], config$output,
