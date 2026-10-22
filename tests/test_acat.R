@@ -16,6 +16,7 @@ expect_equal(acat_interior(c(0.5, 0.5)), 0.5)
 expect_equal(acat_interior(c(0.25, 0.75)), 0.5)
 expect_equal(acat_interior(rep(0.2, 3)), 0.2)
 expect_equal(acat_interior(c(1e-6, 0.995)), 2.00040004708387e-6, tolerance = 1e-12)
+stopifnot(acat_interior(c(1e-20, 0.5)) > 0, acat_interior(c(1e-20, 0.5)) < 1e-15)
 
 combined <- combine_partition_psaps(c(0, 1, 1e-6))
 expect_equal(combined$PSAP, 0)

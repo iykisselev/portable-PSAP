@@ -1,10 +1,9 @@
-"""End-to-end coverage for the external-lookup apply workflow fixture."""
+"""End-to-end coverage for standalone apply from a certified partitioned bundle."""
 
 from __future__ import annotations
 
 import csv
 import gzip
-import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -15,96 +14,41 @@ import yaml
 from workflow_test_utils import ROOT, SNAKEMAKE, command_output, run_workflow
 
 
-def expected_digests() -> dict[str, str]:
-    """Read the stable digest manifest for the external-lookup reports."""
-    digests = {}
-    with (ROOT / "tests" / "smoke" / "expected_digests.sha256").open(
-        encoding="utf-8"
-    ) as handle:
-        for line in handle:
-            digest, filename = line.split()
-            digests[filename] = digest
-    return digests
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 @unittest.skipUnless(SNAKEMAKE, "Snakemake is required for workflow E2E tests")
 class ApplyWorkflowFixtureTests(unittest.TestCase):
-    def test_external_lookup_apply_fixture_completes_with_stable_reports(self) -> None:
-        with tempfile.TemporaryDirectory(
-            prefix="portable-psap-apply-workflow-"
-        ) as temporary_dir:
-            outdir = Path(temporary_dir) / "output"
-            manifest = yaml.safe_load((ROOT / "tests/smoke/run.yaml").read_text())
-            # Mixed known/unknown contig lengths must not drop chromosome X
-            # from interval-partitioned annotation.
-            vcf = Path(temporary_dir) / "unknown-length.vcf"
-            vcf.write_text(
-                (ROOT / "tests/smoke/data/cohort.vcf")
-                .read_text()
-                .replace("##contig=<ID=X,length=60>", "##contig=<ID=X>")
-            )
-            manifest["inputs"]["vcf"] = {"data": str(vcf), "index": None}
-            # Repeated exclusions must be subtracted once, never treated as an
-            # inclusion mask by the renamed primary input.
-            manifest["bindings"]["reference"]["exclusion"] = dict(
-                manifest["bindings"]["reference"]["exclusions"][
-                    "encode-hg38-blacklist-v2"
-                ]
-            )
-            manifest_path = Path(temporary_dir) / "run.yaml"
-            manifest_path.write_text(yaml.safe_dump(manifest))
-            result = run_workflow(manifest_path, outdir)
-            output = command_output(result)
-            self.assertEqual(0, result.returncode, output[-6000:])
-
-            apply_dir = outdir / "apply" / "smoke"
-            cohort = apply_dir / "cohort"
-            self.assertFalse((apply_dir / "standardized").exists())
-            self.assertFalse((apply_dir / "sex_classified").exists())
-            self.assertFalse(
-                any((apply_dir / "raw").rglob("*.tsv.gz")),
-                "temporary extracted genotype tables were retained",
-            )
-            self.assertFalse(
-                any((apply_dir / "raw").rglob("*.vcf.gz")),
-                "temporary split genotype VCFs were retained",
-            )
-            for role in ("het", "hom", "hem_chrX"):
-                self.assertTrue(
-                    (apply_dir / "prepared" / "lookups" / f"{role}.rds").is_file(),
-                    f"missing prepared lookup for {role}",
-                )
-            for filename, digest in expected_digests().items():
-                report = cohort / filename
-                self.assertTrue(report.is_file(), f"missing workflow output: {report}")
-                self.assertEqual(
-                    digest, sha256(report), f"changed fixture digest: {filename}"
-                )
-
-            with (apply_dir / "validation" / "model.json").open(
-                encoding="utf-8"
-            ) as handle:
-                model_validation = json.load(handle)
-            self.assertEqual("ok", model_validation["status"])
-            self.assertTrue(model_validation["summary"]["hemizygote_model"])
+    def test_bundle_apply_emits_partition_and_omnibus_reports(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="portable-psap-apply-workflow-") as temporary:
+            root = Path(temporary)
+            generated = root / "generated"
+            generated_result = run_workflow("tests/null_distribution/generate.run.yaml", generated)
+            self.assertEqual(0, generated_result.returncode, command_output(generated_result)[-6000:])
+            bundle = generated / "generate" / "fixture" / "bundle"
+            manifest = yaml.safe_load((ROOT / "tests/null_distribution/full.run.yaml").read_text())
+            manifest["workflow"] = {"mode": "apply"}
+            manifest["run"].pop("generation_prefix")
+            manifest.pop("generation")
+            manifest["reference"].pop("testing_unit_partitions")
+            reference = manifest["bindings"]["reference"]
+            for name in ("exclusion", "exclusions", "testing_unit_partitions"):
+                reference.pop(name)
+            reference["lookup_source"] = {"type": "bundle", "directory": str(bundle)}
+            path = root / "apply.yaml"
+            path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+            result = run_workflow(path, root / "applied")
+            self.assertEqual(0, result.returncode, command_output(result)[-6000:])
+            cohort = root / "applied" / "apply" / "fixture" / "cohort"
+            for name in ("cohort_summary.tsv.gz", "endpoint_diagnostics.tsv.gz", "aggregation_diagnostics.tsv.gz", "partitions/cds.summary.tsv.gz"):
+                self.assertTrue((cohort / name).is_file(), name)
+            with gzip.open(cohort / "cohort_summary.tsv.gz", "rt", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle, delimiter="\t"))
+            self.assertTrue(rows)
+            self.assertEqual("1", rows[0]["configured_partition_count"])
             self.assertEqual(
-                "external_legacy_v0", model_validation["summary"]["lookup_contract"]
+                float(rows[0]["PSAP"]),
+                float(json.loads(rows[0]["partition_psaps_json"])[0]["psap"]),
             )
-
-            with gzip.open(
-                cohort / "cohort_candidates.tsv.gz", "rt", encoding="utf-8"
-            ) as handle:
-                candidates = list(csv.DictReader(handle, delimiter="\t"))
-            self.assertTrue(candidates, "apply fixture produced no candidates")
-            self.assertIn("X-linked-hem", {row["model"] for row in candidates})
+            metadata = json.loads((cohort / "report_metadata.json").read_text())
+            self.assertEqual("raw_survival_v1", metadata["aggregation_input_policy"])
 
 
 if __name__ == "__main__":

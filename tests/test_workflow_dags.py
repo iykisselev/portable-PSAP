@@ -79,8 +79,8 @@ class WorkflowDagBaselineTests(unittest.TestCase):
         aliases = (
             ("tests/null_distribution/generate.run.yaml", "generate_results"),
             ("tests/null_distribution/generate.run.yaml", "null_distributions"),
-            ("tests/smoke/run.yaml", "apply_results"),
-            ("tests/null_distribution/full.run.yaml", "full_results"),
+            ("tests/null_distribution/full_partitioned.run.yaml", "apply_results"),
+            ("tests/null_distribution/full_partitioned.run.yaml", "full_results"),
         )
         for manifest, target in aliases:
             with (
@@ -107,7 +107,7 @@ class WorkflowDagBaselineTests(unittest.TestCase):
         ) as temporary_dir:
             root = Path(temporary_dir)
             manifest = yaml.safe_load(
-                (ROOT / "tests" / "smoke" / "run.yaml").read_text()
+                (ROOT / "tests" / "null_distribution" / "full_partitioned.run.yaml").read_text()
             )
             manifest["bindings"]["reference"]["cadd"]["indel"] = {
                 "data": None,

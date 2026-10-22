@@ -12,7 +12,6 @@ from workflow_test_utils import ROOT, SNAKEMAKE, command_output, run_workflow
 
 
 EXAMPLES = {
-    "apply": "runs/apply.example.yaml",
     "generate": "runs/generate.example.yaml",
     "full": "runs/full.example.yaml",
 }
@@ -66,6 +65,12 @@ class RunExampleTests(unittest.TestCase):
                 )
                 output = command_output(result)
                 self.assertEqual(0, result.returncode, output[-6000:])
+
+    def test_apply_example_requires_a_certified_bundle_directory(self) -> None:
+        apply = yaml.safe_load((ROOT / "runs/apply.example.yaml").read_text())
+        source = apply["bindings"]["reference"]["lookup_source"]
+        self.assertEqual("bundle", source["type"])
+        self.assertIn("directory", source)
 
 
 if __name__ == "__main__":

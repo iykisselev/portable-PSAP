@@ -41,7 +41,7 @@ class WorkflowPlanTests(unittest.TestCase):
     def test_apply_rejects_removed_external_lookup_form(self) -> None:
         config = merged_generate_config()
         config["workflow"] = {"mode": "apply"}
-        config["bindings"] = {"reference": {"lookup_source": {"type": "external_legacy_v0"}}}
+        config["bindings"] = {"reference": {"lookup_source": {"type": "external"}}}
         config.pop("generation", None)
         with self.assertRaisesRegex(WorkflowPlanError, "bundle"):
             build_workflow_plan(config)

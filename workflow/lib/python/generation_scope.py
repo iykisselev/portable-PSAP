@@ -121,9 +121,8 @@ def _validate_scope_inputs(
 
 
 def _scope_masks(inputs: GenerationScopeInputs) -> ScopeMasks:
-    partition_paths = inputs.testing_unit_partitions or (inputs.testing_units,)
     units_by_id: dict[str, list[tuple[str, int, int]]] = {}
-    for path in partition_paths:
+    for path in inputs.testing_unit_partitions:
         for unit_id, intervals in read_bed_units(path).items():
             if unit_id in units_by_id and units_by_id[unit_id][0][0] != intervals[0][0]:
                 raise ValueError(
@@ -349,9 +348,9 @@ def _write_partition_scope_artifacts(
     masks: ScopeMasks,
     params: GenerationScopeParameters,
 ) -> None:
-    """Materialize pair ownership/statuses without changing the legacy N=1 path."""
-    paths = inputs.testing_unit_partitions or (inputs.testing_units,)
-    identifiers = params.partition_ids or tuple(f"partition_{i}" for i in range(len(paths)))
+    """Materialize ordered unit/partition ownership and eligibility statuses."""
+    paths = inputs.testing_unit_partitions
+    identifiers = params.partition_ids
     if len(paths) != len(identifiers):
         raise ValueError("Partition IDs and testing-unit BED inputs must have equal length")
     partitions = [

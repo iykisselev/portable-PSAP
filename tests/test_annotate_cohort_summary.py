@@ -118,10 +118,10 @@ class CohortSummaryAnnotationTests(unittest.TestCase):
                 'gene_id "ENSG000001"; gene_name "GENE_A";\n',
                 encoding="utf-8",
             )
-            summary = root / "cohort_summary.tsv.gz"
+            summary = root / "cohort_candidates.tsv.gz"
             with gzip.open(summary, "wt", encoding="utf-8", newline="") as handle:
                 handle.write(
-                    "unit\tcandidate_signature\tminimum_PSAP\n"
+                    "unit\tvariant_key\tPSAP\n"
                     "ENSG000001.7\t1:10-10_A>G|1:20-21_AA>A\t0.01\n"
                 )
 

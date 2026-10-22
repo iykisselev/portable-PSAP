@@ -1,0 +1,53 @@
+outdir: /tmp/portable-psap-full-acat-fixture
+
+workflow:
+  mode: full
+
+run:
+  apply_prefix: acat
+  generation_prefix: acat
+
+model:
+  include_indels: false
+  hemizygote: false
+
+reference:
+  testing_unit_partitions:
+    cds: {id: fixture-cds}
+    intronic: {id: fixture-intronic}
+
+generation_settings:
+  variant_classes: [snv]
+
+inputs:
+  vcf: {data: tests/null_distribution/acat_cohort.vcf, index: null}
+  ped: null
+  samples: tests/smoke/data/samples.tsv
+
+bindings:
+  reference:
+    fasta:
+      data: tests/smoke/data/reference.fa
+      fai: tests/smoke/data/reference.fa.fai
+      gzi: null
+    exclusion: {data: tests/null_distribution/exclusion.bed, index: null}
+    testing_unit_partitions:
+      - id: cds
+        bed: {data: tests/null_distribution/acat_cds_units.bed, index: null}
+      - id: intronic
+        bed: {data: tests/null_distribution/acat_intronic_units.bed, index: null}
+    exclusions:
+      encode-hg38-blacklist-v2: {data: tests/smoke/data/exclude_full_span.bed, index: null}
+      par-regions: {data: tests/null_distribution/par_regions.bed, index: null}
+    cadd:
+      snv: {data: tests/null_distribution/generation_scores.tsv, index: null}
+
+generation:
+  execution:
+    allow_unindexed_fixture_inputs: true
+  unobserved_policy: zero
+  population_vcf: {data: tests/null_distribution/acat_population.vcf, index: null}
+  af_source:
+    overall: AF_CUSTOM
+    female: AF_FEMALE
+    male: AF_MALE

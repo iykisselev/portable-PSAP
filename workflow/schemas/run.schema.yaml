@@ -109,6 +109,7 @@ $defs:
         required: [lookup_source]
         properties:
           lookup_source: {$ref: "#/$defs/lookup_source"}
+          testing_unit_partitions: false
         if:
           properties:
             lookup_source:
@@ -197,6 +198,11 @@ $defs:
         properties:
           reference: {$ref: "#/$defs/apply_reference_binding"}
     allOf:
+      - not:
+          required: [reference]
+          properties:
+            reference:
+              required: [testing_unit_partitions]
       - if:
           properties: {model: {properties: {include_indels: {const: true}}, required: [include_indels]}}
           required: [model]

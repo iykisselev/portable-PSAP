@@ -1,0 +1,10 @@
+##fileformat=VCFv4.3
+##contig=<ID=chr1,length=60>
+##INFO=<ID=AF_CUSTOM,Number=A,Type=Float,Description="Configured population allele frequency">
+##INFO=<ID=AF_FEMALE,Number=A,Type=Float,Description="Female population allele frequency">
+##INFO=<ID=AF_MALE,Number=A,Type=Float,Description="Male population allele frequency">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+chr1	2	.	A	G	.	LowQual	AF_CUSTOM=0.2;AF_FEMALE=0.2;AF_MALE=0.2
+chr1	3	.	A	C	.	PASS	AF_CUSTOM=0.1;AF_FEMALE=0.1;AF_MALE=0.1
+chr1	4	.	A	T	.	LowQual	AF_CUSTOM=0.2;AF_FEMALE=0.2;AF_MALE=0.2
+chr1	10	.	A	C,G	.	PASS	AF_CUSTOM=0.125,0.375;AF_FEMALE=0.125,0.375;AF_MALE=0.125,0.375

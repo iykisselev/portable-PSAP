@@ -32,7 +32,7 @@ class GenerateWorkflowFixtureTests(unittest.TestCase):
             validation = json.loads(
                 (bundle / "validation.json").read_text(encoding="utf-8")
             )
-            self.assertEqual("generated_bundle_v2", metadata["contract"])
+            self.assertEqual("partitioned_null_bundle_v1", metadata["contract"])
             self.assertEqual(
                 "mutation_rate", metadata["model_assumptions"]["unobserved_policy"]
             )
@@ -55,7 +55,7 @@ class GenerateWorkflowFixtureTests(unittest.TestCase):
             self.assertEqual("ok", validation["status"])
             self.assertTrue((bundle / "validation.ok").is_file())
 
-    def test_indel_fixture_publishes_a_certified_v3_bundle(self) -> None:
+    def test_indel_fixture_publishes_a_certified_partitioned_bundle(self) -> None:
         with tempfile.TemporaryDirectory(
             prefix="portable-psap-indel-workflow-"
         ) as temporary:
@@ -71,7 +71,7 @@ class GenerateWorkflowFixtureTests(unittest.TestCase):
             validation = json.loads(
                 (bundle / "validation.json").read_text(encoding="utf-8")
             )
-            self.assertEqual("generated_bundle_v3", metadata["contract"])
+            self.assertEqual("partitioned_null_bundle_v1", metadata["contract"])
             self.assertEqual(
                 ["snv", "indel"], metadata["model_assumptions"]["variant_classes"]
             )

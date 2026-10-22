@@ -36,7 +36,7 @@ rule validate_cohort:
 
 
 rule validate_resources:
-    """Validate interval, exclusion, testing-unit, and CADD resources."""
+    """Validate interval, exclusion, and CADD resources."""
     input:
         **APPLY_RESOURCE_REGISTRY.validation_inputs(),
         vcf=apply_resource("cohort").source,
@@ -57,7 +57,6 @@ rule validate_resources:
         mem_mb=policy_resources("validate_resources").mem_mb,
         runtime=policy_resources("validate_resources").runtime,
     params:
-        unit=WORKFLOW_PLAN.model.unit,
         include_indels=WORKFLOW_PLAN.model.include_indels,
         resource_fields=APPLY_RESOURCE_REGISTRY.validation_fields(),
     script:
@@ -108,6 +107,7 @@ rule validate_model:
         lookup_contract=LOOKUP_SOURCE.contract,
         lookup_bin_width=LOOKUP_SOURCE.bin_width,
         lookup_component_keys=tuple(f"lookup.{partition_id}.{model_id}" for partition_id, model_id in LOOKUP_SOURCE.tables),
+        partition_ids=LOOKUP_SOURCE.partition_ids,
     script:
         str(APPLY_SCRIPT_DIR / "validate_model.py")
 

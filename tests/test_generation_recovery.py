@@ -102,7 +102,7 @@ class GenerationRecoveryTests(unittest.TestCase):
                 / "scalable"
                 / "calculated"
                 / "lookup_buckets"
-                / f"{bucket_id}.het.tsv"
+                / f"{bucket_id}.cds.DOM-het.tsv"
             )
             lookup.unlink()
             lookup_plan = self.run_workflow_assert(
@@ -134,9 +134,9 @@ class GenerationRecoveryTests(unittest.TestCase):
                 / "lookup_buckets"
             )
             self.assertNotIn("hem_chrX", metadata["model_assumptions"]["roles"])
-            self.assertNotIn("lookup_hem_chrX", metadata["components"])
-            self.assertFalse((bundle / "lookup_hem_chrX.tsv.gz").exists())
-            self.assertFalse(any(lookup_buckets.glob("*.hem_chrX.tsv")))
+            self.assertNotIn("lookup.cds.X-linked-hem", metadata["components"])
+            self.assertFalse((bundle / "lookup.cds.X-linked-hem.tsv.gz").exists())
+            self.assertFalse(any(lookup_buckets.glob("*.X-linked-hem.tsv")))
 
 
 if __name__ == "__main__":

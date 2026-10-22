@@ -69,7 +69,6 @@ class ApplyResourceRegistry:
         roles = {
             "calibration_regions",
             "variants_exclude",
-            "testing_units",
             "par_regions",
             "cadd_snv",
             "cadd_indel",
@@ -210,17 +209,8 @@ def build_apply_resource_registry(
         "variants_exclude",
         requires_chromosome_normalization=True,
     )
-    # Bundle apply reads the certified per-partition BEDs directly.  They are
-    # not staged as one pooled testing-unit annotation because that would lose
-    # the unit/partition relation needed by scoring.
-    if effective_reference.testing_unit_partitions:
-        add_table_resource(
-            "testing_units",
-            effective_reference.testing_unit_bed,
-            "bed",
-            "testing_units",
-            requires_chromosome_normalization=True,
-        )
+    # Bundle apply reads certified per-partition BEDs directly.  A pooled
+    # testing-unit staging resource would lose the unit/partition relation.
     add_table_resource(
         "cadd_snv",
         effective_reference.cadd_snv,

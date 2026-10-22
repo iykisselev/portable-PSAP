@@ -61,6 +61,7 @@ RULE_POLICY_NAMES = frozenset(
         "build_sample_candidates",
         "build_control_reference",
         "build_cohort_report",
+        "build_endpoint_diagnostics",
         "prepare_vcf_resource",
         "combine_exclusions",
         "apply_psap",
@@ -71,7 +72,6 @@ RULE_POLICY_NAMES = frozenset(
 TABLE_RESOURCE_POLICY_NAMES: Mapping[str, str] = MappingProxyType(
     {
         "calibration_regions": "stage_calibration_regions",
-        "testing_units": "stage_testing_units",
         "cadd_snv": "stage_cadd_snv",
         "cadd_indel": "stage_cadd_indel",
         "variants_exclude": "stage_variants_exclude",
@@ -163,6 +163,9 @@ EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
             runtime_minutes_per_gib=20,
             scale_with_attempt=True,
         ),
+        "build_endpoint_diagnostics": ExecutionPolicy(
+            baseline_mem_mb=1024, baseline_runtime_minutes=60
+        ),
         "prepare_vcf_resource": ExecutionPolicy(
             baseline_mem_mb=4096,
             baseline_runtime_minutes=180,
@@ -175,11 +178,6 @@ EXECUTION_POLICIES: Mapping[str, ExecutionPolicy] = MappingProxyType(
             baseline_mem_mb=16000, baseline_runtime_minutes=360
         ),
         "stage_calibration_regions": ExecutionPolicy(
-            baseline_mem_mb=2048,
-            baseline_runtime_minutes=60,
-            scale_with_attempt=True,
-        ),
-        "stage_testing_units": ExecutionPolicy(
             baseline_mem_mb=2048,
             baseline_runtime_minutes=60,
             scale_with_attempt=True,

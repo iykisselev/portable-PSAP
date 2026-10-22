@@ -45,9 +45,9 @@ Cohort VCF + sample metadata -> filter -> annotate -> classify -> score
                                          candidates + controls + summary
 ```
 
-In `apply` mode, the lookup bundle may be replaced by external legacy lookup
-tables. In `full` mode, application always consumes the bundle produced by the
-generation branch of the same DAG.
+In `apply` mode, scoring consumes a certified partitioned lookup bundle. In
+`full` mode, application consumes the bundle produced by the generation branch
+of the same DAG.
 
 ## Scientific model
 
@@ -141,38 +141,21 @@ requirements. A mismatch requires a compatible bundle or an explicit change
 to the run's scientific settings; the workflow does not infer new genotype
 models from metadata.
 
-Bundle apply uses certified eligibility, calibration regions and allele
-exclusions. Original `testing_unit_bed`, `exclusion`, and `exclusions` bindings
-are optional and do not add filtering to this branch if supplied. Remove these
-redundant bindings when migrating. Scientific identities in `config/config.yaml`
-still describe the reference and annotation resources.
-
-To migrate a verbose manifest, replace the entire `lookup_source` mapping with
-`{type: bundle, directory: /path/to/bundle}`. Do not mix the two forms. The
-existing explicit form is also supported:
+Bundle apply uses its certified resolved/eligible partition BEDs, calibration
+regions, and allele exclusions. It must be configured only as a bundle
+directory; source partition identities and source BEDs are generate/full-mode
+inputs and are rejected in apply mode:
 
 ```yaml
 lookup_source:
   type: bundle
-  contract: generated_bundle_v3
-  tables:
-    het: /path/to/bundle/lookup_het.tsv.gz
-    hom: /path/to/bundle/lookup_hom.tsv.gz
-    hem_chrX: /path/to/bundle/lookup_hem_chrX.tsv.gz
-  metadata: /path/to/bundle/metadata.json
-  validation: /path/to/bundle/validation.json
-  marker: /path/to/bundle/validation.ok
-  eligible_units: /path/to/bundle/eligible_testing_units.bed.gz
-  calibration_mask: /path/to/bundle/calibration_regions.bed.gz
-  excluded_alleles: /path/to/bundle/excluded_alleles.tsv.gz
-  excluded_units: /path/to/bundle/excluded_units.tsv.gz
+  directory: /path/to/partitioned-null-bundle
 ```
 
-Explicit bindings retain the previous behavior: configured score maximum and
-generation bin width must match the bundle. External legacy lookups still use
-their explicit tables and `external_legacy_v0` contract. Generated v1/v2/v3
-reader support is retained. Fresh `full` runs resolve future output paths from
-their generation plan and never try to discover an unpublished directory.
+Every fresh run writes and apply accepts only `partitioned_null_bundle_v1`.
+The bundle owns partition order, lookup tables, binning, and scope. Fresh full
+runs bind their future generated bundle directly rather than discovering an
+unpublished directory.
 
 ### Deployment verification
 
@@ -192,9 +175,8 @@ launching. Verify the check again after modules load: module activation can
 replace the interpreter or reintroduce external package paths. Merely
 activating a virtual environment on the submission host is insufficient.
 
-Deployment routes and older bundle readers remain supported. Retiring one
-requires evidence of usage and a migration proposal, rather than removal as a
-side effect of configuration cleanup.
+This branch accepts only `partitioned_null_bundle_v1`; regenerate older bundles
+before applying them.
 
 Paths in manifests are interpreted relative to the directory where Snakemake
 is invoked. For production and cluster runs, absolute paths are safer.
@@ -210,7 +192,7 @@ is invoked. For production and cluster runs, absolute paths are safer.
 | `model.unit` | Testing-unit identifier class |
 | `model.hemizygote` | Enables the chromosome-X HEM model |
 | `model.include_indels` | Enables indel annotation and, with `generation_settings.variant_classes: [snv, indel]`, combined SNV/indel generation |
-| `model.score_max` | Generation/external lookup maximum; directory bundle apply resolves its maximum from metadata |
+| `model.score_max` | Generation score maximum; bundle apply resolves the certified value from metadata |
 
 ### Resource identities versus paths
 
@@ -241,8 +223,9 @@ requires both `.fai` and `.gzi`.
 
 ### Testing-unit BED
 
-Generation and external lookup application require this binding. Generated
-bundle application uses the bundle's eligible testing units instead.
+Generate and full manifests provide an ordered `testing_unit_partitions` list.
+Bundle apply reads its resolved and eligible partition BEDs from the certified
+bundle and does not accept source partition BED overrides.
 
 The testing-unit file needs at least four columns:
 
@@ -414,7 +397,11 @@ generation:
   population_vcf: {data: /shared/resources/population.vcf.gz, index: /shared/resources/population.vcf.gz.tbi}
   score_snv: {data: /shared/resources/cadd.tsv.gz, index: /shared/resources/cadd.tsv.gz.tbi}
   exclusion: {data: /shared/resources/exclusion.bed.gz, index: /shared/resources/exclusion.bed.gz.tbi}
-  testing_unit_bed: {data: /shared/resources/units.bed.gz, index: /shared/resources/units.bed.gz.tbi}
+  testing_unit_partitions:
+    - id: cds
+      bed: {data: /shared/resources/cds-units.bed.gz, index: /shared/resources/cds-units.bed.gz.tbi}
+    - id: intronic
+      bed: {data: /shared/resources/intronic-units.bed.gz, index: /shared/resources/intronic-units.bed.gz.tbi}
   par_regions: {data: /shared/resources/par.bed.gz, index: /shared/resources/par.bed.gz.tbi}
   fasta:
     data: /shared/resources/reference.fa
@@ -514,26 +501,16 @@ that marker rather than only checking for lookup files.
 
 ### Lookup sources
 
-External lookup tables use:
+Apply reads only a certified partitioned bundle:
 
 ```yaml
 lookup_source:
-  type: external
-  contract: external_legacy_v0
-  tables:
-    het: /shared/lookups/lookup_het.tsv.gz
-    hom: /shared/lookups/lookup_hom.tsv.gz
-    hem_chrX: /shared/lookups/lookup_hem_chrX.tsv.gz
+  type: bundle
+  directory: /shared/lookups/partitioned-null-bundle
 ```
 
-A certified bundle uses `type: bundle` and supplies its tables, metadata,
-validation report, marker, eligible units, calibration mask, excluded alleles,
-and excluded units. Contracts `generated_bundle_v1`, `generated_bundle_v2`,
-and `generated_bundle_v3` are readable. SNV-only generation writes v2, while
-combined SNV/indel generation writes v3 with the indel candidate-universe,
-class-specific counts, score identities, and candidate audit. A bundle cannot
-be silently upgraded across contract versions and should be regenerated when
-the newer semantics are required.
+The directory contains one lookup per partition/model pair and owns the
+partition scope and binning. Apply verifies its certificate before annotation.
 
 ### Apply stages
 
@@ -544,8 +521,8 @@ Three rules run independently:
 - `validate_cohort` checks the VCF, metadata, FASTA, sample agreement,
   normalization, and sex-chromosome requirements, and writes the canonical
   sample manifest.
-- `validate_resources` checks calibration regions, exclusions, testing units, CADD
-  structure, contigs, and indexes.
+- `validate_resources` checks calibration regions, exclusions, CADD structure,
+  contigs, and indexes; bundle validation checks the certified partition scope.
 - `validate_model` checks lookup roles, score-grid compatibility, testing-unit
   overlap, and bundle certification when applicable.
 
@@ -562,9 +539,9 @@ the same registry, preventing path drift between stages.
 
 #### 3. Coverage and exclusion filtering
 
-`filter_calibration_regions` keeps records overlapping a generated bundle's
-calibration mask. External apply mode passes all variants through this stage;
-the following exclusion filter removes the primary and additional exclusions.
+`filter_calibration_regions` keeps records overlapping the generated bundle's
+calibration mask; the following exclusion filter removes certified and
+configured exclusions.
 
 `combine_exclusions` projects interval and exact-allele exclusions onto the
 cohort. `filter_excluded_records` subtracts the combined set once.
@@ -623,10 +600,10 @@ only after generation has produced a certified bundle.
 | FASTA | `bindings.reference.fasta` | The same configured FASTA |
 | CADD SNV | `bindings.reference.cadd.snv` | The same configured CADD table |
 | Exclusion / retained scope | Configured exclusion intervals are subtracted | Generated `calibration_regions.bed.gz` is an inclusion mask |
-| Testing units | Configured testing-unit BED | Generated `eligible_testing_units.bed.gz` |
+| Testing units | Ordered configured partition BEDs | Generated `resolved.<partition>.bed.gz` and `eligible.<partition>.bed.gz` |
 | Variant exclusions | Configured `variants_exclude` resources | Generated `excluded_alleles.tsv.gz` |
 | PAR | Exactly one configured `par_regions` resource | Already reflected in generated scope |
-| Lookup tables | Generated from population inputs | Generated HET/HOM/HEM tables |
+| Lookup tables | Generated from population inputs | One certified table per partition/model pair |
 
 This handoff ensures that lookup values are applied only within the scope for
 which they were generated.
@@ -637,13 +614,15 @@ which they were generated.
 
 ```text
 <outdir>/generate/<generation_prefix>/bundle/
-├── lookup_het.tsv.gz
-├── lookup_hom.tsv.gz
-├── lookup_hem_chrX.tsv.gz        # when HEM is enabled
-├── eligible_testing_units.bed.gz
+├── lookup.<partition>.DOM-het.tsv.gz
+├── lookup.<partition>.REC-hom.tsv.gz
+├── lookup.<partition>.X-linked-*.tsv.gz
+├── resolved.<partition>.bed.gz
+├── eligible.<partition>.bed.gz
 ├── calibration_regions.bed.gz
 ├── excluded_alleles.tsv.gz
-├── excluded_units.tsv.gz
+├── unit_partition_status.tsv.gz
+├── testing_unit_id_overlap.tsv.gz
 ├── metadata.json
 ├── validation.json
 └── validation.ok
@@ -675,13 +654,23 @@ as recovery points for large runs.
 └── cohort/
     ├── cohort_candidates.tsv.gz
     ├── cohort_summary.tsv.gz
-    └── control_variants.tsv.gz
+    ├── control_variants.tsv.gz
+    ├── endpoint_diagnostics.tsv.gz
+    ├── aggregation_diagnostics.tsv.gz
+    ├── report_metadata.json
+    └── partitions/<partition>.summary.tsv.gz
 ```
 
 The candidate report contains affected-sample evidence, PSAP values, exact
-variant keys, control-match status, and matching control IDs. The summary
-groups recurring unit/model/candidate signatures across affected samples. The
-control report contains the evidence records used for comparison.
+variant keys, control-match status, and matching control IDs. The main summary
+contains the individual testing-unit/model ACAT result and each partition gets
+its own summary file. Endpoint and aggregation diagnostics retain raw and
+mid-p inputs while upper-tail calibration is evaluated. The control report
+contains the evidence records used for comparison.
+
+JSON cells retain configured partition order as arrays. `report_metadata.json`
+records the explicit 17-digit jsonlite serialization fallback used to preserve
+interior probabilities immediately below one in the supported runtime.
 
 Logs are written below `<outdir>/logs/generate/<generation_prefix>/` and
 `<outdir>/logs/apply/<apply_prefix>/`.

@@ -8,7 +8,6 @@ from typing import Sequence
 from validation import (
     IndexedResource,
     read_vcf_header_facts,
-    validate_annotation_chromosome_names,
     validate_cadd_chromosome_names,
     validate_cadd_resources,
     validate_reference_tables,
@@ -22,11 +21,9 @@ def validate_resource_inputs(
     vcf: str | Path,
     calibration_regions: IndexedResource | None,
     exclusions: Sequence[IndexedResource],
-    testing_units: IndexedResource | None,
     par_regions: Sequence[IndexedResource],
     cadd_snv: IndexedResource,
     cadd_indel: IndexedResource | None,
-    unit: str,
     include_indels: bool,
 ) -> dict[str, object]:
     """Validate reference formats and chromosome compatibility in one category."""
@@ -35,9 +32,7 @@ def validate_resource_inputs(
     reference_chromosomes = validate_reference_tables(
         calibration_regions=calibration_regions,
         exclusions=exclusions,
-        testing_units=testing_units,
         par_regions=par_regions,
-        unit=unit,
         errors=errors,
         warnings=warnings,
     )
@@ -49,13 +44,6 @@ def validate_resource_inputs(
         "Exclusion interval files",
         warnings,
     )
-    if testing_units is not None:
-        validate_annotation_chromosome_names(
-            reference_chromosomes["testing_unit"],
-            vcf_chromosomes,
-            f"Configured {unit} testing-unit BED file",
-            warnings,
-        )
     cadd_chromosomes = validate_cadd_resources(
         cadd_snv.path,
         cadd_indel.path if cadd_indel else None,

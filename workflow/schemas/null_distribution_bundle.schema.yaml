@@ -66,6 +66,8 @@ properties:
     properties:
       report: {const: validation.json}
       marker: {const: validation.ok}
+  indel_universe: {type: object}
+  variant_class_counts: {type: object}
 $defs:
   component:
     type: object

@@ -17,12 +17,10 @@ from validation import (  # noqa: E402
     read_vcf_header_facts,
     read_ped,
     read_samples_tsv,
-    read_testing_unit_ids,
     validate_cadd_chromosome_names,
     validate_fasta,
     validate_hemizygote_chromosomes,
     validate_indexed_table,
-    validate_lookup_unit_overlap,
     validate_reference_tables,
     validate_region_chromosomes,
 )
@@ -32,17 +30,6 @@ from validation_resources import validate_resource_inputs  # noqa: E402
 
 
 class ValidationTests(unittest.TestCase):
-    def test_testing_unit_id_reader_reports_bad_coordinates_and_keeps_valid_rows(self):
-        with TemporaryDirectory() as temporary:
-            path = Path(temporary) / "units.bed"
-            path.write_text(
-                "track name=units\n1\t0\t3\tGOOD\n1\t5\t2\tBAD\n1\t6\t9\tLATER\n"
-            )
-            errors = []
-            self.assertEqual({"GOOD", "LATER"}, read_testing_unit_ids(path, errors))
-        self.assertEqual(1, len(errors))
-        self.assertIn("BED line 3 must satisfy 0 <= start < end", errors[0])
-
     def test_vcf_facts_use_index_statistics_when_contig_headers_are_absent(
         self,
     ) -> None:
@@ -194,29 +181,6 @@ class ValidationTests(unittest.TestCase):
         self.assertIn("no canonical chromosome overlap", errors[0])
         self.assertEqual(warnings, [])
 
-    def test_lookup_with_zero_testing_unit_overlap_fails(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            bed = temp_path / "units.bed"
-            lookup = temp_path / "lookup.tsv"
-            bed.write_text("chr1\t0\t10\tGENE1\n", encoding="utf-8")
-            lookup.write_text("OTHER\t0.1\t0.2\n", encoding="utf-8")
-            errors: list[str] = []
-
-            summary = validate_lookup_unit_overlap(
-                bed,
-                {"het": str(lookup), "hom": str(lookup), "hem_chrX": ""},
-                {"hemizygote": False, "include_indels": False},
-                errors,
-            )
-
-            self.assertEqual(summary["het"]["overlap_count"], 0)
-            self.assertEqual(summary["hom"]["overlap_count"], 0)
-            self.assertEqual(len(errors), 2)
-            self.assertTrue(
-                all("zero testing-unit ID overlap" in error for error in errors)
-            )
-
     def test_fasta_uses_the_declared_index_binding(self) -> None:
         with TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -258,13 +222,11 @@ class ValidationTests(unittest.TestCase):
     def test_reference_tables_preserve_comma_paths_and_index_bindings(self) -> None:
         with TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            testing_units = temp_path / "units.bed"
             unindexed_exclusion = temp_path / "first,exclusion.bed"
             indexed_exclusion = temp_path / "second-exclusion.bed"
             exclusion_index = temp_path / "second-exclusion.index.tbi"
             par_regions = temp_path / "par.bed"
             for path, contents in (
-                (testing_units, "1\t0\t10\tUNIT1\n"),
                 (unindexed_exclusion, "1\t0\t5\n"),
                 (indexed_exclusion, "1\t5\t10\n"),
                 (par_regions, "X\t0\t10\n"),
@@ -280,15 +242,12 @@ class ValidationTests(unittest.TestCase):
                     IndexedResource(unindexed_exclusion),
                     IndexedResource(indexed_exclusion, exclusion_index),
                 ),
-                testing_units=IndexedResource(testing_units),
                 par_regions=(IndexedResource(par_regions),),
-                unit="gene",
                 errors=errors,
                 warnings=warnings,
             )
 
             self.assertEqual(errors, [])
-            self.assertEqual(chromosomes["testing_unit"], {"1"})
             self.assertEqual(chromosomes["exclusions"], {"1", "X"})
             self.assertTrue(
                 any("first,exclusion.bed" in warning for warning in warnings)
@@ -320,7 +279,7 @@ class ValidationTests(unittest.TestCase):
         with (
             patch(
                 "validation_resources.validate_reference_tables",
-                return_value={"testing_unit": {"1"}, "exclusions": {"1"}},
+                return_value={"exclusions": {"1"}},
             ) as validate_tables,
             patch(
                 "validation_resources.read_vcf_header_facts",
@@ -334,11 +293,9 @@ class ValidationTests(unittest.TestCase):
                 vcf="cohort.vcf.gz",
                 calibration_regions=None,
                 exclusions=exclusions,
-                testing_units=IndexedResource("units.bed", "units.bed.tbi"),
                 par_regions=(),
                 cadd_snv=IndexedResource("cadd.tsv.gz", "cadd.tsv.gz.tbi"),
                 cadd_indel=None,
-                unit="gene",
                 include_indels=False,
             )
 
@@ -390,132 +347,6 @@ class ValidationTests(unittest.TestCase):
 
         self.assertIs(validate_hemizygote.call_args.args[0], True)
         self.assertIs(validate_normalized.call_args.args[-1], facts)
-
-    @unittest.skip("legacy lookup validation was removed; partitioned bundle validation is workflow-covered")
-    def test_model_validation_passes_native_model_booleans(self) -> None:
-        with (
-            patch("validation_model.validate_lookup_files", return_value=[]) as files,
-            patch("validation_model.validate_lookup_unit_overlap", return_value={}),
-        ):
-            report = validate_model_inputs(
-                score_max=20.0,
-                assembly="GRCh38",
-                unit="gene",
-                hemizygote_model=True,
-                include_indels=False,
-                testing_unit_bed="units.bed",
-                lookup_tables={
-                    "het": "het.tsv",
-                    "hom": "hom.tsv",
-                    "hem_chrX": "hem.tsv",
-                },
-                lookup_contract="external_legacy_v0",
-                lookup_bin_width=None,
-                bundle_certificate=None,
-                bundle_components={},
-            )
-
-        self.assertEqual(
-            files.call_args.args[1],
-            {"hemizygote": True, "include_indels": False},
-        )
-        self.assertIs(report["summary"]["hemizygote_model"], True)
-        self.assertIs(report["summary"]["include_indels"], False)
-
-    @unittest.skip("legacy lookup validation was removed; partitioned bundle validation is workflow-covered")
-    def test_generated_bundle_variant_classes_must_match_the_model(self) -> None:
-        metadata = {
-            "model_assumptions": {"roles": ["het", "hom"], "variant_classes": ["snv"]},
-            "assembly": "GRCh38",
-            "testing_unit_type": "gene",
-            "binning": {"score_max": 20.0, "bin_width": 0.1},
-        }
-        with (
-            patch("validation_model.validate_lookup_files", return_value=[]),
-            patch("validation_model.validate_lookup_unit_overlap", return_value={}),
-            patch("validation_model.verify_bundle_certificate", return_value=metadata),
-        ):
-            report = validate_model_inputs(
-                score_max=20.0,
-                assembly="GRCh38",
-                unit="gene",
-                hemizygote_model=False,
-                include_indels=True,
-                testing_unit_bed="units.bed",
-                lookup_tables={"het": "het.tsv", "hom": "hom.tsv", "hem_chrX": ""},
-                lookup_contract="generated_bundle_v3",
-                lookup_bin_width=0.1,
-                bundle_certificate={
-                    "metadata": "metadata.json",
-                    "validation": "validation.json",
-                    "marker": "validation.ok",
-                },
-                bundle_components={},
-            )
-        self.assertIn(
-            "Generated lookup variant classes do not match model.include_indels",
-            report["errors"],
-        )
-
-    @unittest.skip("legacy lookup validation was removed; partitioned bundle validation is workflow-covered")
-    def test_generated_bundle_without_resolved_bin_width_reports_a_clear_error(
-        self,
-    ) -> None:
-        metadata = {
-            "model_assumptions": {"roles": ["het", "hom"], "variant_classes": ["snv"]},
-            "assembly": "GRCh38",
-            "testing_unit_type": "gene",
-            "binning": {"score_max": 20.0, "bin_width": 0.1},
-        }
-        with (
-            patch("validation_model.validate_lookup_files", return_value=[]),
-            patch("validation_model.validate_lookup_unit_overlap", return_value={}),
-            patch("validation_model.verify_bundle_certificate", return_value=metadata),
-        ):
-            report = validate_model_inputs(
-                score_max=20.0,
-                assembly="GRCh38",
-                unit="gene",
-                hemizygote_model=False,
-                include_indels=False,
-                testing_unit_bed="units.bed",
-                lookup_tables={"het": "het.tsv", "hom": "hom.tsv", "hem_chrX": ""},
-                lookup_contract="generated_bundle_v2",
-                lookup_bin_width=None,
-                bundle_certificate={
-                    "metadata": "metadata.json",
-                    "validation": "validation.json",
-                    "marker": "validation.ok",
-                },
-                bundle_components={},
-            )
-        self.assertIn(
-            "Generated lookup bundle has no resolved lookup bin_width",
-            report["errors"],
-        )
-        self.assertFalse(
-            any(
-                "Could not validate generated lookup bundle contract" in error
-                for error in report["errors"]
-            )
-        )
-
-    @unittest.skip("legacy lookup validation was removed; partitioned bundle validation is workflow-covered")
-    def test_all_declared_exclusion_components_are_passed_to_certificate_verification(
-        self,
-    ) -> None:
-        components = certificate_components_with_exclusions(
-            {"lookup_het": "het.tsv.gz"},
-            ("excluded_alleles.tsv.gz", "additional_exclusions.tsv.gz"),
-        )
-        self.assertEqual(
-            {
-                "lookup_het": "het.tsv.gz",
-                "excluded_alleles": "excluded_alleles.tsv.gz",
-                "excluded_alleles_001": "additional_exclusions.tsv.gz",
-            },
-            components,
-        )
 
     def test_staging_accepts_a_declared_nonconventional_index(self) -> None:
         with TemporaryDirectory() as temp_dir:

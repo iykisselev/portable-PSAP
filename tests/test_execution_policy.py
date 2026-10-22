@@ -50,13 +50,13 @@ class ExecutionPolicyTests(unittest.TestCase):
             "build_sample_candidates",
             "build_control_reference",
             "build_cohort_report",
+            "build_endpoint_diagnostics",
             "prepare_vcf_resource",
             "combine_exclusions",
             "apply_psap",
         }
         expected_staging_roles = {
             "calibration_regions": "stage_calibration_regions",
-            "testing_units": "stage_testing_units",
             "cadd_snv": "stage_cadd_snv",
             "cadd_indel": "stage_cadd_indel",
             "variants_exclude": "stage_variants_exclude",

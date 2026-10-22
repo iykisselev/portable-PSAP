@@ -34,7 +34,7 @@ In standalone `generate` mode, the following bindings live under `generation`:
 | `score_snv` and optional index | Yes | Allele-level CADD score for each calibrated SNV. |
 | `score_indel` and optional index | When `model.include_indels: true` | Normalized, finite indel candidate universe and CADD score. |
 | `exclusion` | Binding required; data may be null | Intervals to subtract, independent of source. Combined with other interval exclusions. |
-| `testing_unit_bed` | Yes | Unit intervals and stable unit IDs. |
+| `testing_unit_partitions` | Yes | Ordered biological-partition BEDs with stable unit IDs. Earlier entries own overlap bases. |
 | `fasta` and `.fai` | Yes | Contig lengths, windowing, and reference allele enumeration. |
 | `par_regions` | Yes | Pseudoautosomal intervals excluded before X-role assignment. |
 | `exclusions` | Optional | Additional intervals excluded from calibration. |
@@ -124,18 +124,16 @@ The public bundle lives at
 `<outdir>/generate/<generation_prefix>/bundle/`. Its filenames are defined in
 one place, `bundle_contract.py`. The public components are:
 
-- HET and HOM lookup tables; HEM chromosome-X lookup table when enabled;
-- eligible testing-unit BED and calibration-region BED;
-- excluded alleles, excluded units, and (for v3) the indel candidate audit;
+- One `lookup.<partition>.<model>.tsv.gz` table for every enabled partition/model pair;
+- one resolved and one eligible BED for every partition, plus the calibration-region BED;
+- excluded alleles, candidate audit, scope-status and testing-unit-overlap audit tables;
 - `metadata.json`, `validation.json`, and `validation.ok`.
 
 `metadata.json` records contract and schema versions, assembly, score-grid
-parameters, roles, absent-allele and X policies, source and component
-checksums, and counts. A combined SNV/indel run writes `generated_bundle_v3`
-with both score identities, class-specific candidate counts, and the indel
-candidate-universe conventions; SNV-only runs write v2. Readers support v1–v3
-but do not reinterpret an older bundle as v3. Downstream apply rules should use
-`validation.ok` as the completion boundary.
+parameters, model catalog, partition order, overlap policy, absent-allele and
+X policies, source and component checksums, and counts. Every fresh generation
+run writes `partitioned_null_bundle_v1`; apply accepts only this certified
+contract. Downstream rules use `validation.ok` as the completion boundary.
 
 ## Rules worth protecting when changing generation
 

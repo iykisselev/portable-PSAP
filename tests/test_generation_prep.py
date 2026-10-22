@@ -39,9 +39,33 @@ from generation_bindings import (  # noqa: E402
     GenerationScopeParameters,
 )
 from generation_scope import _scope_masks, prepare_generation_scope
+from partition_audit import partition_id_overlap_rows
+from partition_scope import build_partition_scope
 
 
 class GenerationPreparationTests(unittest.TestCase):
+    def test_partition_identifier_audit_reports_empty_and_low_overlap_cases(self):
+        row = partition_id_overlap_rows(
+            [("cds", {"A": None, "B": None}), ("intronic", {"B": None, "C": None})]
+        )[0]
+        self.assertEqual((1, 3, 0.5), (row["intersection_count"], row["union_count"], row["minimum_overlap_fraction"]))
+        self.assertFalse(row["low_overlap_warning"])
+        empty = partition_id_overlap_rows([("cds", {}), ("intronic", {"A": None})])[0]
+        self.assertEqual("left_empty", empty["empty_set_status"])
+
+    def test_partition_scope_precedence_precedes_retention(self):
+        scope = build_partition_scope(
+            [("cds", {"GENE": [("1", 100, 200)]}), ("intronic", {"GENE": [("1", 50, 250)]})],
+            {"1": [(0, 1000)]}, {"1": [(50, 100), (200, 225)]}, 0.5,
+        )
+        self.assertEqual("fully_excluded", scope.rows[0]["status"])
+        self.assertEqual((200, 100, 75), (scope.rows[1]["raw_bases"], scope.rows[1]["resolved_bases"], scope.rows[1]["retained_bases"]))
+        empty = build_partition_scope(
+            [("first", {"G": [("1", 0, 10)]}), ("second", {"G": [("1", 0, 10)]})],
+            {"1": [(0, 10)]}, {"1": [(0, 10)]}, 0.5,
+        )
+        self.assertEqual("empty_after_priority", empty.rows[1]["status"])
+
     def test_scope_bucketing_unions_testing_units_across_partitions(self):
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)
@@ -52,7 +76,7 @@ class GenerationPreparationTests(unittest.TestCase):
             masks = _scope_masks(GenerationScopeInputs(
                 population_vcf=fixture / "population_af.vcf", population_vcf_index=None,
                 score_snv=fixture / "generation_scores.tsv", score_snv_index=None,
-                exclusion=None, testing_units=first, testing_unit_partitions=(first, second),
+                exclusion=None, testing_unit_partitions=(first, second),
                 par_regions=fixture / "par_regions.bed", exclusions=(),
                 fasta=ROOT / "tests/smoke/data/reference.fa",
                 fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
@@ -136,7 +160,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 mutation_rate_index=None,
                 exclusion=None,
                 exclusions=(),
-                testing_units=units,
+                testing_unit_partitions=(units,),
                 par_regions=par_regions,
                 fasta=fasta,
                 fasta_fai=fasta_index,
@@ -159,7 +183,7 @@ class GenerationPreparationTests(unittest.TestCase):
                     inputs,
                     outputs,
                     GenerationScopeParameters(
-                        0.5, 10, 10, "zstd", {"overall": "AF"}, False, 50
+                        0.5, 10, 10, "zstd", {"overall": "AF"}, False, 50, ("default",)
                     ),
                 )
 
@@ -172,7 +196,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 pl.read_parquet(outputs.unit_intervals)["CHROM"].unique().to_list(),
             )
             self.assertEqual(
-                [("AUTOSOMAL", "partition_0")],
+                [("AUTOSOMAL", "default")],
                 pl.read_parquet(outputs.partition_statuses)
                 .select("testing_unit_id", "partition_id")
                 .rows(),
@@ -242,7 +266,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 mutation_rate_index=None,
                 exclusion=fixture / "exclusion.bed",
                 exclusions=(extra,),
-                testing_units=fixture / "testing_units.bed",
+                testing_unit_partitions=(fixture / "testing_units.bed",),
                 par_regions=fixture / "par_regions.bed",
                 fasta=ROOT / "tests/smoke/data/reference.fa",
                 fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
@@ -256,7 +280,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 effective_mask=directory / "mask",
             )
             params = GenerationScopeParameters(
-                0.5, 10, 250, "zstd", {"overall": "AF_CUSTOM"}, False, 50
+                0.5, 10, 250, "zstd", {"overall": "AF_CUSTOM"}, False, 50, ("default",)
             )
             prepare_generation_scope(inputs, outputs, params)
             unit_intervals = pl.read_parquet(outputs.unit_intervals)
@@ -316,7 +340,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 score_snv_index=None,
                 exclusion=None,
                 exclusions=(),
-                testing_units=units,
+                testing_unit_partitions=(units,),
                 par_regions=par_regions,
                 fasta=fasta,
                 fasta_fai=fasta_index,
@@ -337,7 +361,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 inputs,
                 outputs,
                 GenerationScopeParameters(
-                    0.5, 10, 10, "zstd", {"overall": "AF"}, True, 3
+                    0.5, 10, 10, "zstd", {"overall": "AF"}, True, 3, ("default",)
                 ),
             )
             windows = json.loads(outputs.windows.read_text(encoding="utf-8"))["windows"]

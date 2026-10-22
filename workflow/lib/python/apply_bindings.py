@@ -41,7 +41,6 @@ class ResourceValidationInputs:
 
 @dataclass(frozen=True)
 class ResourceValidationParameters:
-    unit: str
     include_indels: bool
     resource_fields: Mapping[str, Mapping[str, str]]
 
@@ -70,6 +69,23 @@ class ModelValidationParameters:
     lookup_contract: str
     lookup_bin_width: float | None
     lookup_component_keys: tuple[str, ...]
+    partition_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EndpointDiagnosticsInputs:
+    lookup_tables: tuple[PathLike, ...]
+
+
+@dataclass(frozen=True)
+class EndpointDiagnosticsOutputs:
+    diagnostics: PathLike
+
+
+@dataclass(frozen=True)
+class EndpointDiagnosticsParameters:
+    lookup_keys: tuple[str, ...]
+    near_one_thresholds: tuple[float, ...]
 
 
 @dataclass(frozen=True)

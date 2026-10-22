@@ -18,6 +18,7 @@ workflow_config <- function() {
     output_candidates = snakemake@output[["candidates"]],
     output_summary = snakemake@output[["summary"]],
     output_report_metadata = snakemake@output[["report_metadata"]],
+    output_aggregation_diagnostics = snakemake@output[["aggregation_diagnostics"]],
     output_partition_summaries = as.character(snakemake@output[["partition_summaries"]]),
     partition_ids = as.character(snakemake@params[["partition_ids"]]),
     affected_pids = as.character(snakemake@params[["affected_pids"]]),
@@ -40,6 +41,7 @@ if (exists("snakemake", inherits = FALSE)) {
   )
   write_tsv(triaged, config$output_candidates, threads = config$threads)
   write_tsv(reports$main, config$output_summary, threads = config$threads)
+  write_tsv(reports$aggregation_diagnostics, config$output_aggregation_diagnostics, threads = config$threads)
   for (i in seq_along(config$partition_ids)) write_tsv(reports$partitions[[i]], config$output_partition_summaries[[i]], threads = config$threads)
   jsonlite::write_json(list(
     schema_version = 1L,
@@ -49,6 +51,11 @@ if (exists("snakemake", inherits = FALSE)) {
     aggregation_weights = "equal_among_contributing_partitions",
     availability_policy = "compatible_evidence_universe_v1",
     aggregation_input_policy = "raw_survival_v1",
+    aggregation_policy_status = "pending_real_bundle_endpoint_calibration",
+    aggregation_policy_note = "Raw and mid-p ACAT diagnostics are emitted; production upper-tail policy remains unselected until real-bundle calibration is recorded.",
+    json_numeric_serialization = "jsonlite_digits_17_fallback_for_interior_probability_round_trip",
+    endpoint_diagnostics = "endpoint_diagnostics.tsv.gz",
+    aggregation_diagnostics = "aggregation_diagnostics.tsv.gz",
     zero_precedence = "validated_raw_zero_returns_zero_before_endpoint_handling",
     upper_tail_policy = "diagnostic_upper_endpoint_unresolved",
     endpoint_statuses = list(
@@ -57,5 +64,5 @@ if (exists("snakemake", inherits = FALSE)) {
     ),
     near_one_thresholds = c(0.99, 0.999999, 0.999999999),
     output_counts = list(main_rows = nrow(reports$main), partition_rows = vapply(reports$partitions, nrow, integer(1)))
-  ), config$output_report_metadata, auto_unbox = TRUE, digits = NA, na = "null", pretty = TRUE)
+  ), config$output_report_metadata, auto_unbox = TRUE, digits = I(17), na = "null", pretty = TRUE)
 }

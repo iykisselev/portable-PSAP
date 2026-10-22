@@ -278,8 +278,14 @@ def _partition_statuses_for_publication(inputs, params):
                     failed_roles.append(model.role)
             if failed_roles:
                 row["status"] = "zero_event_mass"
+        ordered_failed_roles = tuple(
+            role for role in GENERATED_ROLES if role in set(failed_roles)
+        )
+        validate_status(
+            str(row["status"]), "scope", failed_roles=ordered_failed_roles
+        )
         row["failed_roles_json"] = json.dumps(
-            [role for role in GENERATED_ROLES if role in set(failed_roles)], separators=(",", ":")
+            list(ordered_failed_roles), separators=(",", ":")
         )
         published.append(row)
     return published
@@ -363,7 +369,12 @@ def finalize_partitioned_bundle(
         ([row.get(name) for name in status_header] for row in status_rows),
     )
     overlap = pl.read_parquet(inputs.testing_unit_id_overlap).to_dicts() if inputs.testing_unit_id_overlap else []
-    overlap_header = list(overlap[0]) if overlap else ["left_partition_id", "right_partition_id", "empty_set_status"]
+    overlap_header = list(overlap[0]) if overlap else [
+        "left_partition_id", "right_partition_id", "left_unique_id_count",
+        "right_unique_id_count", "intersection_count", "union_count",
+        "left_overlap_fraction", "right_overlap_fraction",
+        "minimum_overlap_fraction", "empty_set_status", "low_overlap_warning",
+    ]
     _, components["testing_unit_id_overlap"] = write_gzip_tsv_atomic(
         outputs.testing_unit_id_overlap, overlap_header,
         ([row.get(name) for name in overlap_header] for row in overlap),

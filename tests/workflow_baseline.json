@@ -1,27 +1,4 @@
 {
-  "apply": {
-    "manifest": "tests/smoke/run.yaml",
-    "initial_dry_run_jobs": 28,
-    "terminal_outputs": [
-      "apply/smoke/cohort/cohort_candidates.tsv.gz",
-      "apply/smoke/cohort/cohort_summary.tsv.gz",
-      "apply/smoke/cohort/control_variants.tsv.gz"
-    ],
-    "important_outputs": [
-      "apply/smoke/validation.json",
-      "apply/smoke/validation.ok",
-      "apply/smoke/validation/model.json"
-    ],
-    "required_rules": [
-      "validate_cohort",
-      "validate_resources",
-      "validate_model",
-      "require_valid_inputs",
-      "prepare_lookups",
-      "build_cohort_report",
-      "all"
-    ]
-  },
   "generate": {
     "manifest": "tests/null_distribution/generate.run.yaml",
     "initial_dry_run_jobs": 4,
@@ -34,7 +11,7 @@
       "generate/fixture/scalable/prepared/windows.json",
       "generate/fixture/scalable/prepared/unit_buckets.json",
       "generate/fixture/bundle/metadata.json",
-      "generate/fixture/bundle/lookup_hem_chrX.tsv.gz"
+      "generate/fixture/bundle/lookup.cds.DOM-het.tsv.gz"
     ],
     "required_rules": [
       "prepare_generation_scope",
@@ -46,17 +23,19 @@
     ]
   },
   "full": {
-    "manifest": "tests/null_distribution/full.run.yaml",
+    "manifest": "tests/null_distribution/full_partitioned.run.yaml",
     "initial_dry_run_jobs": 31,
     "checkpoint_target": "prepare_generation_scope",
     "resolved_dry_run_jobs": 35,
-    "fresh_execution_steps": 36,
-    "resume_dry_run_jobs": 0,
     "terminal_outputs": [
       "generate/fixture/bundle/validation.ok",
       "apply/fixture/cohort/cohort_candidates.tsv.gz",
       "apply/fixture/cohort/cohort_summary.tsv.gz",
-      "apply/fixture/cohort/control_variants.tsv.gz"
+      "apply/fixture/cohort/control_variants.tsv.gz",
+      "apply/fixture/cohort/endpoint_diagnostics.tsv.gz",
+      "apply/fixture/cohort/aggregation_diagnostics.tsv.gz",
+      "apply/fixture/cohort/partitions/cds.summary.tsv.gz",
+      "apply/fixture/cohort/partitions/intronic.summary.tsv.gz"
     ],
     "important_outputs": [
       "generate/fixture/bundle/metadata.json",
@@ -69,7 +48,7 @@
       "reduce_null_distribution_bucket",
       "validate_null_distribution_bundle",
       "validate_model",
-      "prepare_lookups",
+      "build_endpoint_diagnostics",
       "build_cohort_report",
       "all"
     ]

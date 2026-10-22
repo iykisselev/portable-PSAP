@@ -15,8 +15,8 @@ min_version("8.0")
 configfile: str(Path(workflow.basedir).parent / "config" / "config.yaml")
 
 
-# Older run manifests did not name a workflow mode. Normalize a copy so they
-# still work, while leaving Snakemake's original configuration untouched.
+# Copy the merged configuration before validation so plan resolution never
+# mutates Snakemake's shared configuration mapping.
 WORKFLOW_PLAN = build_workflow_plan(config)
 WORKFLOW_MODE = WORKFLOW_PLAN.mode
 
@@ -79,6 +79,8 @@ elif WORKFLOW_MODE in {"apply", "full"}:
                 COHORT_OUTPUTS["cohort_summary"],
                 COHORT_OUTPUTS["control_variants"],
                 REPORT_METADATA,
+                ENDPOINT_DIAGNOSTICS,
+                AGGREGATION_DIAGNOSTICS,
                 list(PARTITION_SUMMARIES.values()),
 
     else:
@@ -91,6 +93,8 @@ elif WORKFLOW_MODE in {"apply", "full"}:
                 cohort_summary=COHORT_OUTPUTS["cohort_summary"],
                 control_variants=COHORT_OUTPUTS["control_variants"],
                 report_metadata=REPORT_METADATA,
+                endpoint_diagnostics=ENDPOINT_DIAGNOSTICS,
+                aggregation_diagnostics=AGGREGATION_DIAGNOSTICS,
                 partition_summaries=list(PARTITION_SUMMARIES.values()),
                 generation=generation_outputs,
 

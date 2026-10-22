@@ -65,7 +65,7 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             score_snv=self.path,
             score_snv_index=None,
             exclusion=None,
-            testing_units=self.path,
+            testing_unit_partitions=(self.path,),
             par_regions=self.path,
             exclusions=(),
             fasta=self.path,
@@ -81,7 +81,7 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             masked_unit_intervals=self.path,
             effective_mask=self.path,
         )
-        params = GenerationScopeParameters(0.5, 10, 10, "zstd", {}, False, 50)
+        params = GenerationScopeParameters(0.5, 10, 10, "zstd", {}, False, 50, ("unit",))
         with patch("generation_scope.read_bed_units") as read_units:
             with self.assertRaisesRegex(ValueError, "up to 1 MiB"):
                 prepare_generation_scope(inputs, outputs, params)

@@ -1,231 +1,64 @@
-"""End-to-end execution exclusion for the staged full workflow fixture."""
+"""End-to-end N-by-M generation and ACAT reporting coverage."""
 
 from __future__ import annotations
 
+import csv
 import gzip
-import hashlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
-import yaml
-
-from workflow_test_utils import (
-    ROOT,
-    SNAKEMAKE,
-    command_output,
-    completed_step_count,
-    planned_job_count,
-    run_workflow,
-)
-
-BASELINE_PATH = ROOT / "tests" / "workflow_baseline.json"
-FULL_MANIFEST = "tests/null_distribution/full.run.yaml"
-FULL_INDEL_MANIFEST = "tests/null_distribution/full_indel.run.yaml"
+from workflow_test_utils import SNAKEMAKE, command_output, run_workflow
 
 
 @unittest.skipUnless(SNAKEMAKE, "Snakemake is required for workflow E2E tests")
 class FullWorkflowFixtureTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls) -> None:
-        with BASELINE_PATH.open(encoding="utf-8") as handle:
-            cls.baseline = json.load(handle)["full"]
+    def test_two_scored_partitions_write_raw_and_mid_p_acat_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="portable-psap-acat-workflow-") as temporary:
+            outdir = Path(temporary) / "output"
+            result = run_workflow("tests/null_distribution/full_acat.run.yaml", outdir)
+            self.assertEqual(0, result.returncode, command_output(result)[-6000:])
+            cohort = outdir / "apply" / "acat" / "cohort"
+            with gzip.open(cohort / "cohort_summary.tsv.gz", "rt", encoding="utf-8") as handle:
+                summary = list(csv.DictReader(handle, delimiter="\t"))
+            self.assertEqual(1, len(summary))
+            self.assertEqual("2", summary[0]["contributing_partition_count"])
+            self.assertEqual("upper_endpoint_unresolved", summary[0]["aggregation_status"])
+            with gzip.open(cohort / "aggregation_diagnostics.tsv.gz", "rt", encoding="utf-8") as handle:
+                diagnostics = list(csv.DictReader(handle, delimiter="\t"))
+            self.assertEqual("mid_p_exact_one_adjusted", diagnostics[0]["mid_p_aggregation_status"])
+            self.assertGreater(float(diagnostics[0]["mid_p_ACAT_PSAP"]), 0)
 
-    def assert_directory_apply_matches(self, manifest_path, bundle, cohort, root):
-        """A fresh apply discovers the generated grid despite different config defaults."""
-        manifest = yaml.safe_load((ROOT / manifest_path).read_text())
-        manifest["workflow"]["mode"] = "apply"
-        manifest.pop("generation")
-        manifest["run"].pop("generation_prefix")
-        reference = manifest["bindings"]["reference"]
-        for name in ("exclusion", "exclusions", "testing_unit_bed"):
-            reference.pop(name)
-        reference["lookup_source"] = {"type": "bundle", "directory": str(bundle)}
-        # These values are intentionally different: directory bundles own the grid.
-        manifest["model"]["score_max"] = 23
-        manifest.setdefault("generation_settings", {})["score_bin_width"] = 0.2
-        run_path = root / "directory-apply.yaml"
-        run_path.write_text(yaml.safe_dump(manifest))
-        apply_out = root / "directory-output"
-        result = run_workflow(run_path, apply_out)
-        self.assertEqual(0, result.returncode, command_output(result)[-6000:])
-        applied = apply_out / "apply" / manifest["run"]["apply_prefix"]
-        for original in cohort.glob("*.tsv.gz"):
-            self.assertEqual(
-                hashlib.sha256(original.read_bytes()).hexdigest(),
-                hashlib.sha256(
-                    (applied / "cohort" / original.name).read_bytes()
-                ).hexdigest(),
-                original.name,
-            )
-        validation = json.loads((applied / "validation" / "model.json").read_text())
-        metadata = json.loads((bundle / "metadata.json").read_text())
-        self.assertEqual(
-            metadata["binning"]["score_max"], validation["summary"]["lookup_score_max"]
-        )
-        self.assertEqual(
-            metadata["binning"]["bin_width"], validation["summary"]["lookup_bin_width"]
-        )
-        # Discovery is not certificate verification: changed bytes fail at the barrier.
-        with (bundle / "excluded_units.tsv.gz").open("ab") as handle:
-            handle.write(b"tampered")
-        rejected = run_workflow(run_path, root / "tampered-output")
-        self.assertNotEqual(0, rejected.returncode)
-        failed_model = json.loads(
-            (
-                root
-                / "tampered-output"
-                / "apply"
-                / manifest["run"]["apply_prefix"]
-                / "validation"
-                / "model.json"
-            ).read_text()
-        )
-        self.assertTrue(any("wrong size" in error for error in failed_model["errors"]))
-        self.assertFalse(
-            (
-                root
-                / "tampered-output"
-                / "apply"
-                / manifest["run"]["apply_prefix"]
-                / "annotations"
-            ).exists()
-        )
-
-    def test_full_fixture_generates_and_applies_hem_bundle(self) -> None:
-        """Execute the complete DAG and verify its generated bundle is consumed."""
-        with tempfile.TemporaryDirectory(
-            prefix="portable-psap-full-workflow-"
-        ) as temporary_dir:
-            temporary_root = Path(temporary_dir)
-            outdir = temporary_root / "output"
-            result = run_workflow(FULL_MANIFEST, outdir)
-            if result.returncode:
-                output = command_output(result)[-6000:]
-                self.fail(
-                    f"full fixture failed with exit code {result.returncode}:\n{output}"
-                )
-            self.assertEqual(
-                self.baseline["fresh_execution_steps"], completed_step_count(result)
-            )
-
+    def test_two_partition_full_fixture_certifies_and_reports_all_partitions(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="portable-psap-full-workflow-") as temporary:
+            outdir = Path(temporary) / "output"
+            result = run_workflow("tests/null_distribution/full_partitioned.run.yaml", outdir)
+            self.assertEqual(0, result.returncode, command_output(result)[-6000:])
             bundle = outdir / "generate" / "fixture" / "bundle"
             cohort = outdir / "apply" / "fixture" / "cohort"
-            for path in (
-                bundle / "lookup_het.tsv.gz",
-                bundle / "lookup_hom.tsv.gz",
-                bundle / "lookup_hem_chrX.tsv.gz",
-                bundle / "metadata.json",
-                bundle / "validation.json",
-                bundle / "validation.ok",
-                outdir / "apply" / "fixture" / "validation" / "model.json",
-                cohort / "cohort_candidates.tsv.gz",
-                cohort / "cohort_summary.tsv.gz",
-                cohort / "control_variants.tsv.gz",
-            ):
-                self.assertTrue(path.is_file(), f"missing workflow output: {path}")
-                self.assertGreater(
-                    path.stat().st_size, 0, f"empty workflow output: {path}"
-                )
-
-            with (bundle / "metadata.json").open(encoding="utf-8") as handle:
-                metadata = json.load(handle)
-            self.assertEqual("generated_bundle_v2", metadata["contract"])
-            self.assertIn("lookup_hem_chrX", metadata["components"])
-            self.assertIn("hem_chrX", metadata["model_assumptions"]["roles"])
-
-            with (ROOT / "tests" / "null_distribution" / "full.run.yaml").open(
-                encoding="utf-8"
-            ) as handle:
-                shared_reference = yaml.safe_load(handle)["bindings"]["reference"]
-            resource_paths = metadata["resource_identities"]
-            self.assertEqual(
-                shared_reference["fasta"]["data"], resource_paths["fasta"]["path"]
-            )
-            self.assertEqual(
-                shared_reference["cadd"]["snv"]["data"],
-                resource_paths["score_snv"]["path"],
-            )
-            self.assertEqual(
-                shared_reference["testing_unit_bed"]["data"],
-                resource_paths["testing_units"]["path"],
-            )
-            self.assertEqual(
-                shared_reference["exclusion"]["data"],
-                resource_paths["exclusion"]["path"],
-            )
-            self.assertEqual(
-                shared_reference["exclusions"]["encode-hg38-blacklist-v2"]["data"],
-                resource_paths["encode-hg38-blacklist-v2"]["path"],
-            )
-            self.assertEqual(
-                shared_reference["exclusions"]["par-regions"]["data"],
-                resource_paths["par_regions"]["path"],
-            )
-
-            with (outdir / "apply" / "fixture" / "validation" / "model.json").open(
-                encoding="utf-8"
-            ) as handle:
-                model_validation = json.load(handle)
-            self.assertEqual("ok", model_validation["status"])
-            self.assertTrue(model_validation["summary"]["hemizygote_model"])
-            self.assertEqual(
-                "generated_bundle_v2", model_validation["summary"]["lookup_contract"]
-            )
-            self.assertIn(
-                str(bundle / "lookup_hem_chrX.tsv.gz"),
-                model_validation["summary"]["lookup_files_checked"],
-            )
-
-            with gzip.open(
-                cohort / "cohort_summary.tsv.gz", "rt", encoding="utf-8"
-            ) as handle:
-                header = handle.readline().rstrip("\n").split("\t")
-            self.assertIn("minimum_PSAP", header)
-
-            resumed = run_workflow(FULL_MANIFEST, outdir, dry_run=True)
-            resumed_output = command_output(resumed)
-            self.assertEqual(0, resumed.returncode, resumed_output[-6000:])
-            self.assertIn("Nothing to be done", resumed_output)
-            self.assertEqual(
-                self.baseline["resume_dry_run_jobs"], planned_job_count(resumed)
-            )
-            self.assert_directory_apply_matches(
-                FULL_MANIFEST, bundle, cohort, temporary_root
-            )
-
-    def test_full_indel_fixture_consumes_the_generated_v3_bundle(self) -> None:
-        with tempfile.TemporaryDirectory(
-            prefix="portable-psap-full-indel-workflow-"
-        ) as temporary:
-            outdir = Path(temporary) / "output"
-            manifest = yaml.safe_load((ROOT / FULL_INDEL_MANIFEST).read_text())
-            manifest["model"]["score_max"] = 50
-            manifest["generation_settings"]["score_bin_width"] = 0.3
-            generation_run = Path(temporary) / "nondefault-grid.yaml"
-            generation_run.write_text(yaml.safe_dump(manifest))
-            result = run_workflow(generation_run, outdir)
-            output = command_output(result)
-            self.assertEqual(0, result.returncode, output[-6000:])
-
-            bundle = outdir / "generate" / "indel-fixture" / "bundle"
-            model = outdir / "apply" / "indel-fixture" / "validation" / "model.json"
-            metadata = json.loads(
-                (bundle / "metadata.json").read_text(encoding="utf-8")
-            )
-            model_validation = json.loads(model.read_text(encoding="utf-8"))
-            self.assertEqual("generated_bundle_v3", metadata["contract"])
-            self.assertEqual(
-                "generated_bundle_v3", model_validation["summary"]["lookup_contract"]
-            )
-            self.assertTrue((bundle / "validation.ok").is_file())
-            self.assert_directory_apply_matches(
-                FULL_INDEL_MANIFEST,
-                bundle,
-                outdir / "apply" / "indel-fixture" / "cohort",
-                Path(temporary),
-            )
+            metadata = json.loads((bundle / "metadata.json").read_text())
+            self.assertEqual("partitioned_null_bundle_v1", metadata["contract"])
+            self.assertEqual(["cds", "intronic"], [entry["id"] for entry in metadata["partitions"]])
+            self.assertEqual(10, len([key for key in metadata["components"] if key.startswith("lookup.")]))
+            for partition in ("cds", "intronic"):
+                self.assertTrue((bundle / f"resolved.{partition}.bed.gz").is_file())
+                self.assertTrue((bundle / f"eligible.{partition}.bed.gz").is_file())
+                self.assertTrue((cohort / "partitions" / f"{partition}.summary.tsv.gz").is_file())
+            for name in ("cohort_summary.tsv.gz", "endpoint_diagnostics.tsv.gz", "aggregation_diagnostics.tsv.gz"):
+                self.assertTrue((cohort / name).is_file())
+            with gzip.open(cohort / "cohort_summary.tsv.gz", "rt", encoding="utf-8") as handle:
+                summary = list(csv.DictReader(handle, delimiter="\t"))
+            self.assertTrue(summary)
+            self.assertEqual("ACAT", summary[0]["aggregation_method"])
+            self.assertEqual("2", summary[0]["configured_partition_count"])
+            with gzip.open(cohort / "endpoint_diagnostics.tsv.gz", "rt", encoding="utf-8") as handle:
+                diagnostics = list(csv.DictReader(handle, delimiter="\t"))
+            self.assertTrue(diagnostics)
+            self.assertIn("exact_one_carrier_rate", diagnostics[0])
+            resumed = run_workflow("tests/null_distribution/full_partitioned.run.yaml", outdir, dry_run=True)
+            self.assertEqual(0, resumed.returncode, command_output(resumed)[-6000:])
+            self.assertIn("Nothing to be done", command_output(resumed))
 
 
 if __name__ == "__main__":

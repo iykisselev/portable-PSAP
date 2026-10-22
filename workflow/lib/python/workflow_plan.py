@@ -31,6 +31,7 @@ from bundle_contract import (
 from partitioned_bundle_contract import (
     PARTITIONED_NULL_BUNDLE_CONTRACT,
     bundle_component_paths,
+    require_partition_id,
 )
 
 
@@ -272,16 +273,6 @@ class ReferenceBindings:
     cadd_indel: FileBinding | None
     calibration_regions: FileBinding | None = None
 
-    @property
-    def testing_unit_bed(self) -> FileBinding:
-        """Expose the sole N=1 partition to pre-partition pipeline adapters."""
-        if len(self.testing_unit_partitions) != 1:
-            raise WorkflowPlanError(
-                "This pipeline stage must be updated to consume partitioned testing units"
-            )
-        return self.testing_unit_partitions[0].bed
-
-
 @dataclass(frozen=True)
 class LookupSource:
     """Resolved lookup tables and optional generated-bundle certificate files."""
@@ -350,15 +341,6 @@ class GenerationPlan:
     window_size_bp: int
     unit_bucket_size: int
     parquet_compression: str
-
-    @property
-    def testing_unit_bed(self) -> FileBinding:
-        """Expose the sole N=1 partition while generation is migrated in stages."""
-        if len(self.testing_unit_partitions) != 1:
-            raise WorkflowPlanError(
-                "Generation requires partition-aware scope preparation for N > 1"
-            )
-        return self.testing_unit_partitions[0].bed
 
     @property
     def scalable_dir(self) -> Path:
@@ -610,6 +592,10 @@ def _directory_lookup_source(source: Mapping[str, Any], key: str) -> LookupSourc
 
         partitions = metadata["partitions"]
         partition_ids = tuple(entry["id"] for entry in partitions)
+        if not partition_ids or len(partition_ids) != len(set(partition_ids)):
+            raise ValueError("partitions must have unique IDs")
+        for partition_id in partition_ids:
+            require_partition_id(partition_id)
         if [entry["order"] for entry in partitions] != list(range(len(partition_ids))):
             raise ValueError("partitions must have contiguous configured order")
         tables = {}

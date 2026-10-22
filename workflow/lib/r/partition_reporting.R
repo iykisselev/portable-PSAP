@@ -1,7 +1,60 @@
 # Partition-level PSAP selection and per-person/model ACAT aggregation.
 
+json_scalar <- function(value) {
+  if (length(value) != 1L) abort("JSON scalar values must have length one")
+  if (is.na(value)) return(NULL)
+  jsonlite::unbox(value)
+}
+
+
 json_array <- function(values) {
-  jsonlite::toJSON(as.list(values), auto_unbox = TRUE, digits = NA, na = "null")
+  # jsonlite 2.0.0 rounds values immediately below one to an endpoint with
+  # digits = NA. Keep the requested null/array semantics and use its tested
+  # 17-digit exception so aggregation inputs retain their classification.
+  jsonlite::toJSON(
+    lapply(values, json_scalar), dataframe = "rows", digits = I(17),
+    na = "null", null = "null", auto_unbox = FALSE, pretty = FALSE
+  )
+}
+
+
+json_partition_records <- function(partition_ids, values) {
+  if (length(partition_ids) != length(values)) abort("Partition IDs and values must have equal lengths")
+  records <- lapply(seq_along(partition_ids), function(index) {
+    list(partition_id = jsonlite::unbox(as.character(partition_ids[[index]])),
+         psap = json_scalar(values[[index]]))
+  })
+  jsonlite::toJSON(
+    records, dataframe = "rows", digits = I(17), na = "null", null = "null",
+    auto_unbox = FALSE, pretty = FALSE
+  )
+}
+
+
+json_partition_status_records <- function(partition_ids, statuses, failed_roles) {
+  if (length(partition_ids) != length(statuses) || length(statuses) != length(failed_roles)) {
+    abort("Partition status record fields must have equal lengths")
+  }
+  records <- lapply(seq_along(partition_ids), function(index) {
+    list(
+      partition_id = jsonlite::unbox(as.character(partition_ids[[index]])),
+      status = jsonlite::unbox(as.character(statuses[[index]])),
+      failed_roles = lapply(failed_roles[[index]], jsonlite::unbox)
+    )
+  })
+  jsonlite::toJSON(
+    records, dataframe = "rows", digits = I(17), na = "null", null = "null",
+    auto_unbox = FALSE, pretty = FALSE
+  )
+}
+
+
+decode_failed_roles <- function(value) {
+  parsed <- jsonlite::fromJSON(value, simplifyVector = FALSE)
+  if (is.null(parsed) || (is.list(parsed) && !length(parsed))) return(character())
+  if (is.list(parsed)) parsed <- unlist(parsed, use.names = FALSE)
+  if (!is.character(parsed)) abort("Certified failed_roles_json must be an array of strings")
+  parsed
 }
 
 
@@ -95,6 +148,17 @@ empty_main_report <- function() {
 }
 
 
+empty_aggregation_diagnostics <- function() {
+  data.table::data.table(
+    pid = character(), phenotype = character(), sex = numeric(), testing_unit_id = character(),
+    model = character(), contributing_partition_count = integer(), partition_psaps_json = character(),
+    mid_p_inputs_json = character(), raw_ACAT_PSAP = numeric(), raw_aggregation_status = character(),
+    mid_p_ACAT_PSAP = numeric(), mid_p_aggregation_status = character(),
+    rank_comparison_status = character()
+  )
+}
+
+
 json_control_ids <- function(value) {
   value <- value[!is.na(value) & nzchar(value)]
   if (!length(value)) return(json_array(character()))
@@ -108,6 +172,10 @@ read_partition_statuses <- function(path) {
   statuses[, `:=`(testing_unit_id = clean_identifier(testing_unit_id), partition_id = clean_identifier(partition_id), failed_roles_json = normalize_json_cell(failed_roles_json))]
   if (anyNA(statuses$testing_unit_id) | anyNA(statuses$partition_id) || anyDuplicated(statuses, by = c("testing_unit_id", "partition_id"))) {
     abort("Certified unit/partition statuses must have unique nonmissing unit/partition keys")
+  }
+  for (index in seq_len(nrow(statuses))) {
+    failed_roles <- decode_failed_roles(statuses$failed_roles_json[[index]])
+    validate_status(statuses$status[[index]], "scope", failed_roles = failed_roles)
   }
   statuses
 }
@@ -153,7 +221,7 @@ partitioned_cohort_reports <- function(candidates, configured_partition_ids,
   } else {
     statuses <- read_partition_statuses(partition_statuses)
   }
-  if (!nrow(universe)) return(list(main = empty_main_report(), partitions = replicate(length(configured_partition_ids), empty_partition_report(), simplify = FALSE), detail = empty_partition_report()))
+  if (!nrow(universe)) return(list(main = empty_main_report(), partitions = replicate(length(configured_partition_ids), empty_partition_report(), simplify = FALSE), detail = empty_partition_report(), aggregation_diagnostics = empty_aggregation_diagnostics()))
 
   rows <- vector("list", nrow(universe) * length(configured_partition_ids))
   cursor <- 0L
@@ -203,27 +271,49 @@ partitioned_cohort_reports <- function(candidates, configured_partition_ids,
     ordered <- .SD[match(configured_partition_ids, partition_id)]
     available <- ordered$status == "scored"
     combined <- combine_partition_psaps(ordered$PSAP[available])
-    raw_pairs <- lapply(seq_along(configured_partition_ids), function(i) list(id = configured_partition_ids[[i]], value = ordered$PSAP[[i]]))
-    status_pairs <- lapply(seq_along(configured_partition_ids), function(i) list(id = configured_partition_ids[[i]], status = ordered$status[[i]], failed_roles = jsonlite::fromJSON(ordered$failed_roles_json[[i]])))
+    failed_roles <- lapply(ordered$failed_roles_json, decode_failed_roles)
+    for (index in seq_along(ordered$status)) {
+      validate_status(ordered$status[[index]], "partition", failed_roles = failed_roles[[index]])
+    }
     controls <- ordered$control_pids[available]
+    validate_status(combined$aggregation_status, "aggregation", production = FALSE)
     list(
       PSAP = combined$PSAP, aggregation_method = "ACAT", aggregation_status = combined$aggregation_status,
       aggregation_input_policy = "raw_survival_v1", configured_partition_count = length(configured_partition_ids),
       eligible_partition_count = sum(ordered$scope_status == "eligible"), contributing_partition_count = sum(available),
       contributing_partition_ids_json = json_array(configured_partition_ids[available]),
-      partition_psaps_json = jsonlite::toJSON(raw_pairs, auto_unbox = TRUE, digits = NA, na = "null"),
-      aggregation_inputs_json = json_array(combined$aggregation_inputs),
-      partition_statuses_json = jsonlite::toJSON(status_pairs, auto_unbox = TRUE, digits = NA, na = "null"),
+      partition_psaps_json = json_partition_records(configured_partition_ids, ordered$PSAP),
+      aggregation_inputs_json = json_partition_records(configured_partition_ids[available], combined$aggregation_inputs),
+      partition_statuses_json = json_partition_status_records(configured_partition_ids, ordered$status, failed_roles),
       raw_zero_count = sum(ordered$PSAP[available] == 0), raw_one_count = sum(ordered$PSAP[available] == 1),
-      raw_near_one_counts_json = jsonlite::toJSON(list(`0.99` = sum(ordered$PSAP[available] >= 0.99), `0.999999` = sum(ordered$PSAP[available] >= 0.999999), `0.999999999` = sum(ordered$PSAP[available] >= 0.999999999)), auto_unbox = TRUE, digits = NA, na = "null"),
+      raw_near_one_counts_json = jsonlite::toJSON(list(`0.99` = sum(ordered$PSAP[available] >= 0.99), `0.999999` = sum(ordered$PSAP[available] >= 0.999999), `0.999999999` = sum(ordered$PSAP[available] >= 0.999999999)), auto_unbox = TRUE, digits = I(17), na = "null"),
       validation = if (!any(available)) "not_evaluated" else validation_priority(ordered$validation[available]),
       control_count = length(unique(unlist(lapply(controls, function(cell) jsonlite::fromJSON(cell)), use.names = FALSE))),
       control_pids = json_array(sort(unique(unlist(lapply(controls, function(cell) jsonlite::fromJSON(cell)), use.names = FALSE)))),
       affected_count = 1L, affected_pids = json_array(pid[[1L]])
     )
   }, by = .(pid, phenotype, sex, testing_unit_id, model)]
+  aggregation_diagnostics <- detail[, {
+    ordered <- .SD[match(configured_partition_ids, partition_id)]
+    available <- ordered$status == "scored"
+    raw <- ordered$PSAP[available]
+    mid <- ordered$mid_PSAP_candidate[available]
+    raw_combined <- combine_partition_psaps(raw)
+    mid_combined <- combine_partition_psaps(raw, mid, input_policy = "mid_p")
+    list(
+      contributing_partition_count = sum(available),
+      partition_psaps_json = json_partition_records(ordered$partition_id[available], raw),
+      mid_p_inputs_json = json_partition_records(ordered$partition_id[available], mid),
+      raw_ACAT_PSAP = raw_combined$PSAP,
+      raw_aggregation_status = raw_combined$aggregation_status,
+      mid_p_ACAT_PSAP = mid_combined$PSAP,
+      mid_p_aggregation_status = mid_combined$aggregation_status,
+      rank_comparison_status = if (!length(raw)) "no_contributing_partitions" else if (identical(raw_combined$PSAP, mid_combined$PSAP)) "unchanged" else "raw_mid_p_comparison"
+    )
+  }, by = .(pid, phenotype, sex, testing_unit_id, model)]
   data.table::setorderv(detail, c("PSAP", "testing_unit_id", "model", "pid", "partition_id"), na.last = TRUE)
   data.table::setorderv(main, c("PSAP", "testing_unit_id", "model", "pid"), na.last = TRUE)
+  data.table::setorderv(aggregation_diagnostics, c("raw_ACAT_PSAP", "testing_unit_id", "model", "pid"), na.last = TRUE)
   partitions <- lapply(configured_partition_ids, function(id) detail[partition_id == id])
-  list(main = main, partitions = partitions, detail = detail)
+  list(main = main, partitions = partitions, detail = detail, aggregation_diagnostics = aggregation_diagnostics)
 }

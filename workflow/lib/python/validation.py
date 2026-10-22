@@ -21,7 +21,6 @@ from genomic_contracts import (
     parse_contig_id,
     read_fai,
 )
-from bundle_contract import model_roles
 from io_contracts import BedFormatError, is_missing_token, iter_bed, open_text
 from sample_metadata import iter_sample_rows, normalize_sample
 
@@ -808,120 +807,11 @@ def validate_hemizygote_chromosomes(
         )
 
 
-def validate_lookup_files(
-    lookup_paths: dict[str, str],
-    settings: dict[str, bool],
-    errors: list[str],
-) -> list[str]:
-    required = required_lookup_names(settings)
-
-    checked_paths: list[str] = []
-    for name in required:
-        path = lookup_paths.get(name, "").strip()
-        if is_missing_token(path):
-            errors.append(
-                f"PSAP lookup path for {name!r} is required when its model is enabled"
-            )
-            continue
-        has_data_row(path, f"PSAP {name} lookup file", errors)
-        checked_paths.append(path)
-
-    return checked_paths
-
-
-def required_lookup_names(settings: dict[str, bool]) -> list[str]:
-    return list(model_roles(settings["hemizygote"]))
-
-
-def read_testing_unit_ids(
-    path: str | Path,
-    errors: list[str],
-) -> set[str]:
-    if not require_file(path, "Testing-unit BED file", errors):
-        return set()
-
-    identifiers: set[str] = set()
-    try:
-        for row in iter_bed(
-            path,
-            min_columns=4,
-            errors="replace",
-            on_error=lambda issue: errors.append(f"Testing-unit BED file {issue}"),
-        ):
-            identifier = row.fields[3].strip()
-            if not is_missing_token(identifier):
-                identifiers.add(identifier)
-    except OSError as exc:
-        errors.append(f"Could not read testing-unit IDs from {path}: {exc}")
-    return identifiers
-
-
-def read_lookup_unit_ids(
-    path: str | Path,
-    description: str,
-    errors: list[str],
-) -> set[str]:
-    if not Path(path).is_file():
-        return set()
-
-    identifiers: set[str] = set()
-    try:
-        with open_text(path, errors="replace") as handle:
-            for row in csv.reader(handle, delimiter="\t"):
-                if not row or not row[0].strip() or row[0].lstrip().startswith("#"):
-                    continue
-                identifier = row[0].strip()
-                if identifier.lower() == "testing_unit_id":
-                    continue
-                identifiers.add(identifier)
-    except OSError as exc:
-        errors.append(
-            f"Could not read testing-unit IDs from {description}: {path}: {exc}"
-        )
-    return identifiers
-
-
-def validate_lookup_unit_overlap(
-    testing_unit_bed: str | Path,
-    lookup_paths: dict[str, str],
-    settings: dict[str, bool],
-    errors: list[str],
-) -> dict[str, dict[str, int]]:
-    """Reject lookup sets that cannot possibly score the configured units."""
-    testing_unit_ids = read_testing_unit_ids(testing_unit_bed, errors)
-    summary: dict[str, dict[str, int]] = {}
-
-    for name in required_lookup_names(settings):
-        path = lookup_paths.get(name, "").strip()
-        if is_missing_token(path):
-            continue
-        lookup_ids = read_lookup_unit_ids(
-            path,
-            f"PSAP {name} lookup file",
-            errors,
-        )
-        overlap = testing_unit_ids & lookup_ids
-        summary[name] = {
-            "testing_unit_id_count": len(testing_unit_ids),
-            "lookup_id_count": len(lookup_ids),
-            "overlap_count": len(overlap),
-        }
-        if testing_unit_ids and lookup_ids and not overlap:
-            errors.append(
-                f"PSAP {name} lookup file has zero testing-unit ID overlap with "
-                f"the configured testing-unit BED: {path}"
-            )
-
-    return summary
-
-
 def validate_reference_tables(
     *,
     calibration_regions: IndexedResource | None,
     exclusions: Sequence[IndexedResource],
-    testing_units: IndexedResource | None,
     par_regions: Sequence[IndexedResource],
-    unit: str,
     errors: list[str],
     warnings: list[str],
 ) -> dict[str, set[str]]:
@@ -944,17 +834,6 @@ def validate_reference_tables(
                 warnings,
                 calibration_regions.index,
             )
-
-    unit_chromosomes: set[str] = set()
-    if testing_units is not None:
-        unit_description = f"Configured {unit} testing-unit BED file"
-        validate_indexed_table(
-            testing_units.path, unit_description, errors, warnings, testing_units.index,
-        )
-        unit_chromosomes = validate_bed_regions(
-            testing_units.path, unit_description, errors, required_columns=4,
-            require_unit_id=True,
-        )
 
     configured_exclusions = [*exclusions, *par_regions]
     if not configured_exclusions:
@@ -988,7 +867,6 @@ def validate_reference_tables(
             )
 
     return {
-        "testing_unit": unit_chromosomes,
         "exclusions": exclusion_chromosomes,
     }
 

@@ -24,6 +24,16 @@ def main() -> None:
         if len(component_keys) != len(inputs.lookup_tables):
             raise ValueError("lookup component keys do not match paths")
         components = dict(zip(component_keys, inputs.lookup_tables, strict=True))
+        if len(inputs.resolved_partitions) != len(params.partition_ids) or len(inputs.eligible_partitions) != len(params.partition_ids):
+            raise ValueError("partition BED components do not match certified partition IDs")
+        components.update({
+            f"resolved.{partition_id}": path
+            for partition_id, path in zip(params.partition_ids, inputs.resolved_partitions, strict=True)
+        })
+        components.update({
+            f"eligible.{partition_id}": path
+            for partition_id, path in zip(params.partition_ids, inputs.eligible_partitions, strict=True)
+        })
         components.update({
             "calibration_regions": inputs.lookup_calibration_mask,
             "excluded_alleles": inputs.lookup_excluded_alleles[0],

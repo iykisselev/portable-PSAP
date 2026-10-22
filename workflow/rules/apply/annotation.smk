@@ -196,6 +196,15 @@ rule annotate_partition_memberships:
         validated=rules.require_valid_inputs.output.ok,
     output:
         memberships=ensure(str(PARTITION_MEMBERSHIPS), non_empty=True),
+    log:
+        str(APPLY_LOG_DIR / "annotation" / "annotate_partition_memberships.log"),
+    conda:
+        env("validation")
+    container:
+        sif("validation")
+    envmodules:
+        *mod("validation"),
+    threads: 1
     params:
         partition_ids=LOOKUP_SOURCE.partition_ids,
     resources:

@@ -27,21 +27,17 @@ implementation in `workflow/lib/python` or `workflow/lib/r`, and reserve
 
 ## Lookup source and full mode
 
-Apply mode can use external lookup tables or a certified bundle. The source
-always supplies HET and HOM tables, plus the chromosome-X HEM table when
-`model.hemizygote` is enabled. A bundle also supplies metadata, validation and
-marker files, eligible units, calibration regions, excluded alleles, and
-excluded units.
+Apply mode consumes a certified `partitioned_null_bundle_v1` directory. The
+bundle supplies partition/model lookup tables, metadata, validation and marker
+files, resolved and eligible partition BEDs, calibration regions, and excluded
+alleles.
 
 When the source is a bundle, `workflow_plan._effective_bundle_reference()`
-uses the bundle's inclusion mask as `calibration_regions`, and replaces the
-testing-unit BED and variant exclusions with bundle artifacts. The configured
-`exclusion` is already reflected in that mask and is not reapplied. FASTA and
-CADD remain the configured physical resources. For external lookups, the
-source-neutral `exclusion` binding joins the ordinary exclusion sources; it is
-never interpreted as an inclusion mask.
-In `full` mode, the source is always the bundle produced by the same DAG. The
-generated scope therefore becomes the apply scope, and the bundle's
+uses the bundle's calibration mask and partition ownership artifacts. The
+configured exclusion is already reflected in that mask and is not reapplied.
+FASTA and CADD remain configured physical resources. In `full` mode, the source
+is always the bundle produced by the same DAG.
+The generated scope therefore becomes the apply scope, and the bundle's
 `validation.ok` gates scoring.
 
 ## Inputs
@@ -51,11 +47,11 @@ generated scope therefore becomes the apply scope, and the bundle's
 | Cohort VCF and optional index | Yes | Normalized/split VCF with `GT` and sample IDs matching metadata. |
 | PED or sample sheet | Exactly one | Sample ID, phenotype, and sex used to build the DAG and classify genotypes. |
 | FASTA, `.fai`, and optional `.gzi` | Yes | Assembly validation and VCF/resource compatibility. |
-| Calibration-region resource | Optional in external apply; bundle-derived in full/bundle apply | Optional callable interval filter. |
-| Testing-unit BED | Yes in configured bindings; bundle-derived when applicable | Fourth column is the unit ID joined to lookup rows. |
+| Calibration-region resource | Bundle-derived | Callable interval filter. |
+| Partition BEDs | Bundle-derived | Resolved ownership and eligible unit/partition membership. |
 | CADD SNV and optional indel resource | SNV yes; indel when `include_indels` | Allele-level scores used for lookup-bin selection. |
 | Exclusions | Optional | BED/TSV/VCF intervals or exact alleles removed from the cohort. |
-| Lookup source | Yes | External HET/HOM(/HEM) tables or a certified generated bundle. |
+| Lookup source | Yes | A certified partitioned generated bundle. |
 
 Indexes are optional for stageable VCF, BED, and TSV resources. The workflow
 creates indexed working copies under `prepared/`; FASTA companion indexes are
@@ -73,7 +69,7 @@ in parallel.
 | Staging: `prepare_vcf_resource`, `prepare_table_resource` | Sources and optional indexes from `ApplyResourceRegistry` | Normalize chromosome names when needed, sort/compress/index stageable VCF/BED/TSV resources. | `prepared/cohort.vcf.gz`, staged tables and indexes |
 | Exclusion projection: `combine_exclusions` | Staged cohort and every configured exclusion | Project full-span intervals and exact alleles to a cohort-aligned exclusion VCF. | `prepared/combined_exclusions.vcf` |
 | Variant filtering: `filter_calibration_regions`, `filter_excluded_records` | Staged cohort, optional bundle calibration regions, combined exclusions | Restrict to generated calibration regions when present, then subtract excluded records. | In-scope BCF/CSI and filtered VCF/CSI |
-| Annotation: `annotate_variants`, `summarize_annotations`, `require_valid_annotations` | Filtered VCF, CADD, testing BED | Attach CADD and testing-unit INFO fields, then reject complete expected annotation misses. | Annotated VCF and annotation QC |
+| Annotation: `annotate_variants`, `summarize_annotations`, `require_valid_annotations` | Filtered VCF, CADD, resolved partition BEDs | Attach CADD and unit/partition memberships, then reject complete expected annotation misses. | Annotated VCF and annotation QC |
 | Per-sample processing: `split_genotypes`, `extract_gt`, `prepare_sample_genotypes` | Annotated VCF | Split non-reference calls, retain the two INFO fields, normalize ploidy/alleles, assign sex-aware genotype classes, and expand multi-unit annotations in memory. | Temporary `raw/` calls and `annotated/` tables |
 | Scoring: `apply_psap` | Per-sample annotations and lookup source/certificate | Keep compatible best-scoring variants and map score bins to role-specific PSAP values. | `scored/<sample>.<unit>.tsv.gz` |
 | Cohort aggregation: `build_sample_candidates`, `build_control_reference`, `build_cohort_report` | Affected scores, unaffected annotations/scores, manifest | Build candidates, preserve control evidence, compare exact matching variants, and aggregate reports. | Candidate intermediates plus three final cohort reports |
@@ -106,7 +102,9 @@ For `outdir` and `run.apply_prefix`, results are rooted at
 | `raw/`, `standardized/`, `sex_classified/`, `annotated/`, `scored/` | Per-sample intermediates. |
 | `candidates/` | Affected-only candidate intermediates. |
 | `cohort/cohort_candidates.tsv.gz` | Candidate-level affected evidence and control comparison. |
-| `cohort/cohort_summary.tsv.gz` | Aggregated affected candidate signatures. |
+| `cohort/cohort_summary.tsv.gz` | Per-affected-individual, testing-unit/model ACAT omnibus results. |
+| `cohort/partitions/<partition>.summary.tsv.gz` | Per-partition affected evidence summaries. |
+| `cohort/{endpoint,aggregation}_diagnostics.tsv.gz` | Endpoint and raw-versus-mid-p ACAT diagnostics. |
 | `cohort/control_variants.tsv.gz` | Unaffected participant evidence. |
 | `benchmarks/` | Benchmark output for selected high-cost rules. |
 
