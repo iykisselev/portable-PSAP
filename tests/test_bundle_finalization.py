@@ -16,7 +16,10 @@ import polars as pl
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "workflow" / "lib" / "python"))
 
-from bundle_finalization import variant_class_counts, write_finalization_allele_artifacts  # noqa: E402
+from bundle_finalization import (
+    variant_class_counts,
+    write_finalization_allele_artifacts,
+)  # noqa: E402
 
 
 def allele_outputs(directory: Path) -> SimpleNamespace:

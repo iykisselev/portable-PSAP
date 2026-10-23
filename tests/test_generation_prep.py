@@ -38,7 +38,11 @@ from generation_bindings import (  # noqa: E402
     GenerationScopeOutputs,
     GenerationScopeParameters,
 )
-from generation_scope import _partition_scope_tables, _scope_masks, prepare_generation_scope
+from generation_scope import (
+    _partition_scope_tables,
+    _scope_masks,
+    prepare_generation_scope,
+)
 from partition_audit import partition_id_overlap_rows
 from partition_scope import build_partition_scope
 
@@ -48,21 +52,42 @@ class GenerationPreparationTests(unittest.TestCase):
         row = partition_id_overlap_rows(
             [("cds", {"A": None, "B": None}), ("intronic", {"B": None, "C": None})]
         )[0]
-        self.assertEqual((1, 3, 0.5), (row["intersection_count"], row["union_count"], row["minimum_overlap_fraction"]))
+        self.assertEqual(
+            (1, 3, 0.5),
+            (
+                row["intersection_count"],
+                row["union_count"],
+                row["minimum_overlap_fraction"],
+            ),
+        )
         self.assertFalse(row["low_overlap_warning"])
         empty = partition_id_overlap_rows([("cds", {}), ("intronic", {"A": None})])[0]
         self.assertEqual("left_empty", empty["empty_set_status"])
 
     def test_partition_scope_precedence_precedes_retention(self):
         scope = build_partition_scope(
-            [("cds", {"GENE": [("1", 100, 200)]}), ("intronic", {"GENE": [("1", 50, 250)]})],
-            {"1": [(0, 1000)]}, {"1": [(50, 100), (200, 225)]}, 0.5,
+            [
+                ("cds", {"GENE": [("1", 100, 200)]}),
+                ("intronic", {"GENE": [("1", 50, 250)]}),
+            ],
+            {"1": [(0, 1000)]},
+            {"1": [(50, 100), (200, 225)]},
+            0.5,
         )
         self.assertEqual("fully_excluded", scope.rows[0]["status"])
-        self.assertEqual((200, 100, 75), (scope.rows[1]["raw_bases"], scope.rows[1]["resolved_bases"], scope.rows[1]["retained_bases"]))
+        self.assertEqual(
+            (200, 100, 75),
+            (
+                scope.rows[1]["raw_bases"],
+                scope.rows[1]["resolved_bases"],
+                scope.rows[1]["retained_bases"],
+            ),
+        )
         empty = build_partition_scope(
             [("first", {"G": [("1", 0, 10)]}), ("second", {"G": [("1", 0, 10)]})],
-            {"1": [(0, 10)]}, {"1": [(0, 10)]}, 0.5,
+            {"1": [(0, 10)]},
+            {"1": [(0, 10)]},
+            0.5,
         )
         self.assertEqual("empty_after_priority", empty.rows[1]["status"])
 
@@ -73,15 +98,22 @@ class GenerationPreparationTests(unittest.TestCase):
             first.write_text("1\t0\t2\tFIRST\n", encoding="utf-8")
             second.write_text("1\t4\t6\tSECOND\n", encoding="utf-8")
             fixture = ROOT / "tests/null_distribution"
-            masks = _scope_masks(GenerationScopeInputs(
-                population_vcf=fixture / "population_af.vcf", population_vcf_index=None,
-                score_snv=fixture / "generation_scores.tsv", score_snv_index=None,
-                exclusion=None, testing_unit_partitions=(first, second),
-                par_regions=fixture / "par_regions.bed", exclusions=(),
-                fasta=ROOT / "tests/smoke/data/reference.fa",
-                fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
-                mutation_rate=None, mutation_rate_index=None,
-            ))
+            masks = _scope_masks(
+                GenerationScopeInputs(
+                    population_vcf=fixture / "population_af.vcf",
+                    population_vcf_index=None,
+                    score_snv=fixture / "generation_scores.tsv",
+                    score_snv_index=None,
+                    exclusion=None,
+                    testing_unit_partitions=(first, second),
+                    par_regions=fixture / "par_regions.bed",
+                    exclusions=(),
+                    fasta=ROOT / "tests/smoke/data/reference.fa",
+                    fasta_fai=ROOT / "tests/smoke/data/reference.fa.fai",
+                    mutation_rate=None,
+                    mutation_rate_index=None,
+                )
+            )
             scope = build_partition_scope(
                 [
                     ("first", read_bed_units(first)),
@@ -95,7 +127,11 @@ class GenerationPreparationTests(unittest.TestCase):
             self.assertEqual({"FIRST", "SECOND"}, set(tables.units["testing_unit_id"]))
             self.assertEqual(
                 {"FIRST", "SECOND"},
-                set(unit_bucket_frame(tables.units, 10, tables.unit_intervals)["testing_unit_id"]),
+                set(
+                    unit_bucket_frame(tables.units, 10, tables.unit_intervals)[
+                        "testing_unit_id"
+                    ]
+                ),
             )
 
     def test_partition_ownership_subtracts_only_within_each_testing_unit(self):
@@ -118,9 +154,7 @@ class GenerationPreparationTests(unittest.TestCase):
                 ),
             ]
         )
-        self.assertEqual(
-            resolved["cds"]["GENE1"], [("1", 100, 200)]
-        )
+        self.assertEqual(resolved["cds"]["GENE1"], [("1", 100, 200)])
         self.assertEqual(
             resolved["intronic"]["GENE1"], [("1", 50, 100), ("1", 200, 250)]
         )
@@ -200,11 +234,15 @@ class GenerationPreparationTests(unittest.TestCase):
 
             self.assertEqual(
                 ["AUTOSOMAL"],
-                pl.read_parquet(outputs.partition_statuses)["testing_unit_id"].to_list(),
+                pl.read_parquet(outputs.partition_statuses)[
+                    "testing_unit_id"
+                ].to_list(),
             )
             self.assertEqual(
                 ["1"],
-                pl.read_parquet(outputs.resolved_partition_intervals)["CHROM"].unique().to_list(),
+                pl.read_parquet(outputs.resolved_partition_intervals)["CHROM"]
+                .unique()
+                .to_list(),
             )
             self.assertEqual(
                 [("AUTOSOMAL", "default")],
@@ -364,7 +402,8 @@ class GenerationPreparationTests(unittest.TestCase):
                 windows=directory / "windows.json",
                 buckets=directory / "buckets.json",
                 effective_mask=directory / "mask.parquet",
-                resolved_partition_intervals=directory / "resolved_partition_intervals.parquet",
+                resolved_partition_intervals=directory
+                / "resolved_partition_intervals.parquet",
                 partition_statuses=directory / "partition_statuses.parquet",
                 testing_unit_id_overlap=directory / "testing_unit_id_overlap.parquet",
             )

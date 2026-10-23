@@ -27,6 +27,8 @@ BUNDLE_ARTIFACT_FILENAMES: Mapping[str, str] = MappingProxyType(
         "marker": VALIDATION_ARTIFACT_FILENAMES["marker"],
     }
 )
+
+
 class BundleContractError(ValueError):
     """Raised when a bundle cannot be read or upgraded under this release."""
 

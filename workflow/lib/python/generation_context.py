@@ -213,7 +213,9 @@ class GenerationRuleContext:
     def bucket_partition_model_artifact(
         self, bucket_id: str, partition_id: str, model_id: str
     ) -> str:
-        return str(self.lookup_bucket_dir / f"{bucket_id}.{partition_id}.{model_id}.tsv")
+        return str(
+            self.lookup_bucket_dir / f"{bucket_id}.{partition_id}.{model_id}.tsv"
+        )
 
     def statistics_artifact(self, window_id: str, bucket_id: str) -> str:
         """Return one window-local statistics artifact path."""

@@ -26,8 +26,12 @@ def partition_id_overlap_rows(
                     "intersection_count": intersection,
                     "union_count": union,
                     "left_overlap_fraction": intersection / len(left) if left else None,
-                    "right_overlap_fraction": intersection / len(right) if right else None,
-                    "minimum_overlap_fraction": intersection / minimum if minimum else None,
+                    "right_overlap_fraction": intersection / len(right)
+                    if right
+                    else None,
+                    "minimum_overlap_fraction": intersection / minimum
+                    if minimum
+                    else None,
                     "empty_set_status": (
                         "both_empty"
                         if not left and not right
@@ -37,7 +41,9 @@ def partition_id_overlap_rows(
                         if not right
                         else "nonempty"
                     ),
-                    "low_overlap_warning": bool(minimum and intersection / minimum < 0.5),
+                    "low_overlap_warning": bool(
+                        minimum and intersection / minimum < 0.5
+                    ),
                 }
             )
     return rows

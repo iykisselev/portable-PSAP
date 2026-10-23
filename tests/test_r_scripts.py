@@ -49,7 +49,10 @@ class RScriptTests(unittest.TestCase):
             self.skipTest("Rscript is unavailable")
         result = subprocess.run(
             [rscript, str(TEST_DIR / "test_partition_reporting.R")],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)
 

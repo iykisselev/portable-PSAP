@@ -47,7 +47,10 @@ INDEL_MEMBERSHIP_SCHEMA = {
     "SPAN_END": pl.Int64,
     "variant_class": pl.String,
 }
-PARTITIONED_INDEL_MEMBERSHIP_SCHEMA = {**INDEL_MEMBERSHIP_SCHEMA, "partition_id": pl.String}
+PARTITIONED_INDEL_MEMBERSHIP_SCHEMA = {
+    **INDEL_MEMBERSHIP_SCHEMA,
+    "partition_id": pl.String,
+}
 
 INDEL_REJECTION_SCHEMA = {
     "CHROM": pl.String,
@@ -266,11 +269,14 @@ def partitioned_indel_candidate_memberships(
         # Ownership is decided before eligibility.  An excluded earlier owner
         # therefore suppresses this membership instead of leaking it into a
         # later partition.
-        if eligible_pairs is None or (row["testing_unit_id"], partition) in eligible_pairs:
+        if (
+            eligible_pairs is None
+            or (row["testing_unit_id"], partition) in eligible_pairs
+        ):
             memberships.append({**row, "partition_id": partition})
     return (
-        pl.DataFrame(memberships, schema=PARTITIONED_INDEL_MEMBERSHIP_SCHEMA, strict=False).unique(
-            maintain_order=True
-        ),
+        pl.DataFrame(
+            memberships, schema=PARTITIONED_INDEL_MEMBERSHIP_SCHEMA, strict=False
+        ).unique(maintain_order=True),
         rejected,
     )

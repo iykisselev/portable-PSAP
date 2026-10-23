@@ -81,7 +81,9 @@ class GenerationResourcePolicyTests(unittest.TestCase):
             partition_statuses=self.path,
             testing_unit_id_overlap=self.path,
         )
-        params = GenerationScopeParameters(0.5, 10, 10, "zstd", {}, False, 50, ("unit",))
+        params = GenerationScopeParameters(
+            0.5, 10, 10, "zstd", {}, False, 50, ("unit",)
+        )
         with patch("generation_scope.read_bed_units") as read_units:
             with self.assertRaisesRegex(ValueError, "up to 1 MiB"):
                 prepare_generation_scope(inputs, outputs, params)

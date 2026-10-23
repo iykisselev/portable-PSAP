@@ -120,7 +120,10 @@ class VectorizedReductionTests(unittest.TestCase):
                     paths, units, roles, bin_count
                 )
                 actual_lookups, actual_diagnostics = vectorized_lookup_rows(
-                    aggregate_statistics_vectorized(paths).drop("partition_id"), units, roles, bin_count
+                    aggregate_statistics_vectorized(paths).drop("partition_id"),
+                    units,
+                    roles,
+                    bin_count,
                 )
                 for expected, actual in zip(
                     expected_diagnostics, actual_diagnostics, strict=True

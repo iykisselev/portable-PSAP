@@ -34,7 +34,9 @@ def partition_model_lookup_rows(
     required = {"testing_unit_id", "partition_id", "role", "bin"}
     missing = required - set(statistics.columns)
     if missing:
-        raise ValueError("Partition statistics are missing columns: " + ", ".join(sorted(missing)))
+        raise ValueError(
+            "Partition statistics are missing columns: " + ", ".join(sorted(missing))
+        )
     by_partition: dict[str, list[dict[str, object]]] = defaultdict(list)
     for row in eligible_pairs:
         by_partition[str(row["partition_id"])].append(row)
@@ -44,13 +46,9 @@ def partition_model_lookup_rows(
         partition_statistics = statistics.filter(pl.col("partition_id") == partition_id)
         for model in enabled_models(hemizygote):
             units = _model_units(pairs, model)
-            role_statistics = (
-                partition_statistics.filter(
-                    (pl.col("role") == model.role)
-                    & pl.col("testing_unit_id").is_in(units)
-                )
-                .drop("partition_id")
-            )
+            role_statistics = partition_statistics.filter(
+                (pl.col("role") == model.role) & pl.col("testing_unit_id").is_in(units)
+            ).drop("partition_id")
             lookups, model_diagnostics = vectorized_lookup_rows(
                 role_statistics, units, (model.role,), bin_count
             )

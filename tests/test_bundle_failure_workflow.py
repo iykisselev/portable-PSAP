@@ -17,13 +17,19 @@ from workflow_test_utils import ROOT, SNAKEMAKE, command_output, run_workflow
 class BundleFailureWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.temporary = tempfile.TemporaryDirectory(prefix="portable-psap-bundle-failure-")
+        cls.temporary = tempfile.TemporaryDirectory(
+            prefix="portable-psap-bundle-failure-"
+        )
         cls.root = Path(cls.temporary.name)
-        result = run_workflow("tests/null_distribution/generate.run.yaml", cls.root / "generated")
+        result = run_workflow(
+            "tests/null_distribution/generate.run.yaml", cls.root / "generated"
+        )
         if result.returncode:
             raise AssertionError(command_output(result)[-6000:])
         cls.bundle = cls.root / "generated" / "generate" / "fixture" / "bundle"
-        cls.base_manifest = yaml.safe_load((ROOT / "tests/null_distribution/full.run.yaml").read_text())
+        cls.base_manifest = yaml.safe_load(
+            (ROOT / "tests/null_distribution/full.run.yaml").read_text()
+        )
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -48,17 +54,23 @@ class BundleFailureWorkflowTests(unittest.TestCase):
         shutil.copytree(self.bundle, bundle)
         with (bundle / "lookup.cds.DOM-het.tsv.gz").open("ab") as handle:
             handle.write(b"corrupt")
-        result = run_workflow(self.apply_manifest(bundle, "corrupt"), self.root / "corrupt-output")
+        result = run_workflow(
+            self.apply_manifest(bundle, "corrupt"), self.root / "corrupt-output"
+        )
         output = command_output(result)
         self.assertNotEqual(0, result.returncode)
         self.assertRegex(output, r"lookup\.cds\.DOM-het has the wrong (size|checksum)")
         self.assertNotIn("rule annotate_variants:", output)
 
-    def test_missing_certified_partition_component_fails_before_annotation(self) -> None:
+    def test_missing_certified_partition_component_fails_before_annotation(
+        self,
+    ) -> None:
         bundle = self.root / "incomplete-bundle"
         shutil.copytree(self.bundle, bundle)
         (bundle / "eligible.cds.bed.gz").unlink()
-        result = run_workflow(self.apply_manifest(bundle, "incomplete"), self.root / "incomplete-output")
+        result = run_workflow(
+            self.apply_manifest(bundle, "incomplete"), self.root / "incomplete-output"
+        )
         output = command_output(result)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("eligible.cds.bed.gz", output)

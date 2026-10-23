@@ -96,7 +96,9 @@ class GenerationIndelTests(unittest.TestCase):
 
     def test_partitioned_membership_uses_the_earliest_overlapping_owner(self) -> None:
         candidates = pl.DataFrame(
-            [("1", 10, "AAA", "A", 9, 12, 20.0)], schema=INDEL_SCORE_SCHEMA, orient="row"
+            [("1", 10, "AAA", "A", 9, 12, 20.0)],
+            schema=INDEL_SCORE_SCHEMA,
+            orient="row",
         )
         memberships, _ = partitioned_indel_candidate_memberships(
             candidates,

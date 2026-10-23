@@ -121,7 +121,9 @@ def generated_bundle_paths(bundle_dir: Path) -> Mapping[str, str]:
                 bundle_dir / "population_af_zero_imputations.tsv.gz"
             ),
             "unit_partition_status": str(bundle_dir / "unit_partition_status.tsv.gz"),
-            "testing_unit_id_overlap": str(bundle_dir / "testing_unit_id_overlap.tsv.gz"),
+            "testing_unit_id_overlap": str(
+                bundle_dir / "testing_unit_id_overlap.tsv.gz"
+            ),
         }
     )
 
@@ -174,7 +176,9 @@ def _testing_unit_partitions(value: Any, key: str) -> tuple[TestingUnitPartition
                 f"{item_key}.id must match ^[A-Za-z0-9][A-Za-z0-9_-]*$"
             )
         if identifier in seen:
-            raise WorkflowPlanError(f"{key} contains duplicate partition ID {identifier!r}")
+            raise WorkflowPlanError(
+                f"{key} contains duplicate partition ID {identifier!r}"
+            )
         seen.add(identifier)
         partitions.append(
             TestingUnitPartition(
@@ -192,8 +196,14 @@ def _validate_partition_identity_set(
     identity_key: str,
     binding_key: str,
 ) -> None:
-    identity_ids, binding_ids = set(identities), {item.identifier for item in partitions}
-    missing, extra = sorted(binding_ids - identity_ids), sorted(identity_ids - binding_ids)
+    identity_ids, binding_ids = (
+        set(identities),
+        {item.identifier for item in partitions},
+    )
+    missing, extra = (
+        sorted(binding_ids - identity_ids),
+        sorted(identity_ids - binding_ids),
+    )
     if missing or extra:
         details = []
         if missing:
@@ -270,6 +280,7 @@ class ReferenceBindings:
     cadd_indel: FileBinding | None
     calibration_regions: FileBinding | None = None
 
+
 @dataclass(frozen=True)
 class LookupSource:
     """Resolved lookup tables and optional generated-bundle certificate files."""
@@ -283,8 +294,12 @@ class LookupSource:
     metadata: str | None = None
     validation: str | None = None
     marker: str | None = None
-    resolved_partitions: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
-    eligible_partitions: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    resolved_partitions: Mapping[str, str] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    eligible_partitions: Mapping[str, str] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     partition_statuses: str | None = None
     calibration_mask: str | None = None
     excluded_alleles: tuple[str, ...] = ()
@@ -438,9 +453,9 @@ def _reference_metadata(config: Mapping[str, Any]) -> ReferenceMetadata:
         testing_unit_partitions=_frozen_mapping(
             {
                 identifier: _required(
-                    _mapping(value, f"reference.testing_unit_partitions.{identifier}").get(
-                        "id"
-                    ),
+                    _mapping(
+                        value, f"reference.testing_unit_partitions.{identifier}"
+                    ).get("id"),
                     f"reference.testing_unit_partitions.{identifier}.id",
                 )
                 for identifier, value in partition_identities.items()
@@ -561,8 +576,12 @@ def _lookup_source(
             "partitioned_null_bundle_v1"
         )
     lookup = _directory_lookup_source(source, key)
-    if model.hemizygote != any(model_id == "X-linked-hem" for _, model_id in lookup.tables):
-        raise WorkflowPlanError(f"{key}.directory: bundle HEM model differs from model.hemizygote")
+    if model.hemizygote != any(
+        model_id == "X-linked-hem" for _, model_id in lookup.tables
+    ):
+        raise WorkflowPlanError(
+            f"{key}.directory: bundle HEM model differs from model.hemizygote"
+        )
     return lookup
 
 
@@ -853,8 +872,12 @@ def _generated_lookup_source(
     generation: GenerationPlan, model: ModelPlan, settings: GenerationSettings
 ) -> LookupSource:
     bundle_paths = generated_bundle_paths(generation.bundle_dir)
-    partition_ids = tuple(partition.identifier for partition in generation.testing_unit_partitions)
-    tables = bundle_component_paths(generation.bundle_dir, partition_ids, model.hemizygote)
+    partition_ids = tuple(
+        partition.identifier for partition in generation.testing_unit_partitions
+    )
+    tables = bundle_component_paths(
+        generation.bundle_dir, partition_ids, model.hemizygote
+    )
     return LookupSource(
         source_type="bundle",
         contract=PARTITIONED_NULL_BUNDLE_CONTRACT,
@@ -867,14 +890,22 @@ def _generated_lookup_source(
         marker=bundle_paths["marker"],
         calibration_mask=bundle_paths["calibration_regions"],
         excluded_alleles=(bundle_paths["excluded_alleles"],),
-        resolved_partitions=_frozen_mapping({
-            partition_id: str(generation.bundle_dir / f"resolved.{partition_id}.bed.gz")
-            for partition_id in partition_ids
-        }),
-        eligible_partitions=_frozen_mapping({
-            partition_id: str(generation.bundle_dir / f"eligible.{partition_id}.bed.gz")
-            for partition_id in partition_ids
-        }),
+        resolved_partitions=_frozen_mapping(
+            {
+                partition_id: str(
+                    generation.bundle_dir / f"resolved.{partition_id}.bed.gz"
+                )
+                for partition_id in partition_ids
+            }
+        ),
+        eligible_partitions=_frozen_mapping(
+            {
+                partition_id: str(
+                    generation.bundle_dir / f"eligible.{partition_id}.bed.gz"
+                )
+                for partition_id in partition_ids
+            }
+        ),
         partition_statuses=bundle_paths["unit_partition_status"],
     )
 

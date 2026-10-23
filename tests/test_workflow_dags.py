@@ -107,7 +107,9 @@ class WorkflowDagBaselineTests(unittest.TestCase):
         ) as temporary_dir:
             root = Path(temporary_dir)
             manifest = yaml.safe_load(
-                (ROOT / "tests" / "null_distribution" / "full_partitioned.run.yaml").read_text()
+                (
+                    ROOT / "tests" / "null_distribution" / "full_partitioned.run.yaml"
+                ).read_text()
             )
             manifest["bindings"]["reference"]["cadd"]["indel"] = {
                 "data": None,

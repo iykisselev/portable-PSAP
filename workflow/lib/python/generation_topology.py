@@ -54,7 +54,9 @@ def build_generation_scope_artifacts(plan: GenerationPlan) -> GenerationScopeArt
                 "resolved_partition_intervals": str(
                     prepared_dir / "resolved_partition_intervals.parquet"
                 ),
-                "partition_statuses": str(prepared_dir / "unit_partition_status.parquet"),
+                "partition_statuses": str(
+                    prepared_dir / "unit_partition_status.parquet"
+                ),
                 "testing_unit_id_overlap": str(
                     prepared_dir / "testing_unit_id_overlap.parquet"
                 ),
@@ -88,7 +90,8 @@ def build_generation_execution_layout(
         resolved_partition_paths=MappingProxyType(
             {
                 partition.identifier: str(
-                    plan.bundle_dir / f"resolved.{require_partition_id(partition.identifier)}.bed.gz"
+                    plan.bundle_dir
+                    / f"resolved.{require_partition_id(partition.identifier)}.bed.gz"
                 )
                 for partition in plan.testing_unit_partitions
             }
@@ -96,7 +99,8 @@ def build_generation_execution_layout(
         eligible_partition_paths=MappingProxyType(
             {
                 partition.identifier: str(
-                    plan.bundle_dir / f"eligible.{require_partition_id(partition.identifier)}.bed.gz"
+                    plan.bundle_dir
+                    / f"eligible.{require_partition_id(partition.identifier)}.bed.gz"
                 )
                 for partition in plan.testing_unit_partitions
             }

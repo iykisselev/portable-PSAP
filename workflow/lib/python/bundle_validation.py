@@ -50,7 +50,9 @@ def data_row_count(path: str | Path) -> int:
         return sum(1 for _ in rows)
 
 
-def _read_partition_bed(path: str | Path, label: str) -> list[tuple[str, int, int, str]]:
+def _read_partition_bed(
+    path: str | Path, label: str
+) -> list[tuple[str, int, int, str]]:
     """Read one certified four-column BED while retaining each interval."""
     rows: list[tuple[str, int, int, str]] = []
     with open_text(path, newline="", require_gzip=True) as handle:
@@ -85,7 +87,9 @@ def _validate_resolved_ownership(
         )
         row_set = set(rows)
         if len(row_set) != len(rows):
-            raise ValueError(f"Resolved partition {identifier} contains duplicate intervals")
+            raise ValueError(
+                f"Resolved partition {identifier} contains duplicate intervals"
+            )
         by_partition[identifier] = row_set
         all_rows.extend((*row, identifier) for row in rows)
     for (chromosome, unit), rows in _group_intervals(all_rows).items():
@@ -100,7 +104,9 @@ def _validate_resolved_ownership(
     return by_partition
 
 
-def _group_intervals(rows: list[tuple[str, int, int, str, str]]) -> dict[tuple[str, str], list[tuple[int, int, str]]]:
+def _group_intervals(
+    rows: list[tuple[str, int, int, str, str]],
+) -> dict[tuple[str, str], list[tuple[int, int, str]]]:
     grouped: dict[tuple[str, str], list[tuple[int, int, str]]] = {}
     for chromosome, start, end, unit, partition in rows:
         grouped.setdefault((chromosome, unit), []).append((start, end, partition))
@@ -110,7 +116,8 @@ def _group_intervals(rows: list[tuple[str, int, int, str, str]]) -> dict[tuple[s
 
 
 def _validate_eligible_subset(
-    partitions: list[dict[str, object]], components: dict[str, str | Path],
+    partitions: list[dict[str, object]],
+    components: dict[str, str | Path],
     resolved: dict[str, set[tuple[str, int, int, str]]],
 ) -> dict[str, set[str]]:
     """Require each eligible interval to be fully covered by its resolved owner."""
@@ -138,11 +145,21 @@ def _validate_eligible_subset(
     return eligible_ids
 
 
-def _read_status_rows(path: str | Path, partition_ids: list[str]) -> list[dict[str, str]]:
+def _read_status_rows(
+    path: str | Path, partition_ids: list[str]
+) -> list[dict[str, str]]:
     required = {
-        "testing_unit_id", "partition_id", "CHROM", "raw_bases",
-        "priority_removed_bases", "resolved_bases", "supported_bases",
-        "retained_bases", "retained_fraction", "status", "failed_roles_json",
+        "testing_unit_id",
+        "partition_id",
+        "CHROM",
+        "raw_bases",
+        "priority_removed_bases",
+        "resolved_bases",
+        "supported_bases",
+        "retained_bases",
+        "retained_fraction",
+        "status",
+        "failed_roles_json",
     }
     with open_text(path, newline="", require_gzip=True) as handle:
         reader = csv.DictReader(handle, delimiter="\t")
@@ -153,35 +170,65 @@ def _read_status_rows(path: str | Path, partition_ids: list[str]) -> list[dict[s
     for row in rows:
         key = (row["testing_unit_id"], row["partition_id"])
         if not all(key) or key in seen or key[1] not in partition_ids:
-            raise ValueError("Partition status table has invalid or duplicate pair keys")
+            raise ValueError(
+                "Partition status table has invalid or duplicate pair keys"
+            )
         seen.add(key)
         try:
             failed_roles = json.loads(row["failed_roles_json"])
         except json.JSONDecodeError as exc:
-            raise ValueError("Partition status table has invalid failed_roles_json") from exc
-        if not isinstance(failed_roles, list) or any(not isinstance(role, str) for role in failed_roles):
-            raise ValueError("Partition status failed_roles_json must be an array of strings")
+            raise ValueError(
+                "Partition status table has invalid failed_roles_json"
+            ) from exc
+        if not isinstance(failed_roles, list) or any(
+            not isinstance(role, str) for role in failed_roles
+        ):
+            raise ValueError(
+                "Partition status failed_roles_json must be an array of strings"
+            )
         validate_status(row["status"], "scope", failed_roles=tuple(failed_roles))
-        numeric = ("raw_bases", "priority_removed_bases", "resolved_bases", "supported_bases", "retained_bases", "retained_fraction")
+        numeric = (
+            "raw_bases",
+            "priority_removed_bases",
+            "resolved_bases",
+            "supported_bases",
+            "retained_bases",
+            "retained_fraction",
+        )
         try:
             values = {name: float(row[name]) for name in numeric}
         except ValueError as exc:
-            raise ValueError("Partition status table has nonnumeric scope fields") from exc
+            raise ValueError(
+                "Partition status table has nonnumeric scope fields"
+            ) from exc
         if any(not math.isfinite(value) or value < 0 for value in values.values()):
             raise ValueError("Partition status table has invalid scope values")
-        if values["priority_removed_bases"] + values["resolved_bases"] != values["raw_bases"]:
+        if (
+            values["priority_removed_bases"] + values["resolved_bases"]
+            != values["raw_bases"]
+        ):
             raise ValueError("Partition status row has inconsistent ownership bases")
-        if values["retained_bases"] > values["supported_bases"] or values["supported_bases"] > values["resolved_bases"]:
+        if (
+            values["retained_bases"] > values["supported_bases"]
+            or values["supported_bases"] > values["resolved_bases"]
+        ):
             raise ValueError("Partition status row has inconsistent retained bases")
     return rows
 
 
 def _validate_overlap_audit(path: str | Path, partition_ids: list[str]) -> None:
     expected = {
-        "left_partition_id", "right_partition_id", "left_unique_id_count",
-        "right_unique_id_count", "intersection_count", "union_count",
-        "left_overlap_fraction", "right_overlap_fraction", "minimum_overlap_fraction",
-        "empty_set_status", "low_overlap_warning",
+        "left_partition_id",
+        "right_partition_id",
+        "left_unique_id_count",
+        "right_unique_id_count",
+        "intersection_count",
+        "union_count",
+        "left_overlap_fraction",
+        "right_overlap_fraction",
+        "minimum_overlap_fraction",
+        "empty_set_status",
+        "low_overlap_warning",
     }
     with open_text(path, newline="", require_gzip=True) as handle:
         reader = csv.DictReader(handle, delimiter="\t")
@@ -191,20 +238,33 @@ def _validate_overlap_audit(path: str | Path, partition_ids: list[str]) -> None:
     pairs = {(row["left_partition_id"], row["right_partition_id"]) for row in rows}
     expected_pairs = {
         (partition_ids[left], partition_ids[right])
-        for left in range(len(partition_ids)) for right in range(left + 1, len(partition_ids))
+        for left in range(len(partition_ids))
+        for right in range(left + 1, len(partition_ids))
     }
     if pairs != expected_pairs or len(rows) != len(pairs):
-        raise ValueError("Testing-unit ID-overlap audit does not cover configured partition pairs")
+        raise ValueError(
+            "Testing-unit ID-overlap audit does not cover configured partition pairs"
+        )
     for row in rows:
         try:
             left, right, intersection, union = (
-                int(row[name]) for name in (
-                    "left_unique_id_count", "right_unique_id_count", "intersection_count", "union_count"
+                int(row[name])
+                for name in (
+                    "left_unique_id_count",
+                    "right_unique_id_count",
+                    "intersection_count",
+                    "union_count",
                 )
             )
         except ValueError as exc:
-            raise ValueError("Testing-unit ID-overlap audit has noninteger counts") from exc
-        if min(left, right, intersection, union) < 0 or intersection > min(left, right) or union != left + right - intersection:
+            raise ValueError(
+                "Testing-unit ID-overlap audit has noninteger counts"
+            ) from exc
+        if (
+            min(left, right, intersection, union) < 0
+            or intersection > min(left, right)
+            or union != left + right - intersection
+        ):
             raise ValueError("Testing-unit ID-overlap audit has inconsistent counts")
 
 
@@ -236,10 +296,14 @@ def validate_generated_bundle(
     expected_lookup_count = len(partitions) * len(enabled_models(hemizygote))
     if len(inputs.partition_lookups) != expected_lookup_count:
         raise ValueError("Partition/model lookup input count does not match metadata")
-    if len(inputs.resolved_partitions) != len(partitions) or len(inputs.eligible_partitions) != len(partitions):
+    if len(inputs.resolved_partitions) != len(partitions) or len(
+        inputs.eligible_partitions
+    ) != len(partitions):
         raise ValueError("Partition BED input count does not match metadata")
     if inputs.partition_statuses is None or inputs.testing_unit_id_overlap is None:
-        raise ValueError("Partitioned bundle validation requires scope audit components")
+        raise ValueError(
+            "Partitioned bundle validation requires scope audit components"
+        )
     components = {
         "calibration_regions": inputs.calibration_regions,
         "excluded_alleles": inputs.excluded_alleles,
@@ -276,10 +340,11 @@ def validate_generated_bundle(
         for partition in partition_ids
     }
     if {
-        partition: set(rows)
-        for partition, rows in eligible_by_partition.items()
+        partition: set(rows) for partition, rows in eligible_by_partition.items()
     } != eligible_ids_from_bed:
-        raise ValueError("Eligible partition BED membership differs from scope statuses")
+        raise ValueError(
+            "Eligible partition BED membership differs from scope statuses"
+        )
     for partition in partitions:
         identifier = str(partition["id"])
         declared = sum(row["partition_id"] == identifier for row in status_rows)
@@ -292,12 +357,17 @@ def validate_generated_bundle(
         ids_by_model = {
             model.identifier: validate_lookup(
                 components[partition["lookups"][model.identifier]], binning["bin_count"]
-            ) for model in enabled_models(hemizygote)
+            )
+            for model in enabled_models(hemizygote)
         }
         for model in enabled_models(hemizygote):
             expected = {
-                unit for unit, chromosome in eligible_by_partition[partition["id"]].items()
-                if any(item.identifier == model.identifier for item in models_for_chromosome(chromosome, hemizygote))
+                unit
+                for unit, chromosome in eligible_by_partition[partition["id"]].items()
+                if any(
+                    item.identifier == model.identifier
+                    for item in models_for_chromosome(chromosome, hemizygote)
+                )
             }
             if ids_by_model[model.identifier] != expected:
                 raise ValueError(

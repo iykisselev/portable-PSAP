@@ -21,7 +21,12 @@ from bundle_contract import (
     model_roles,
 )
 from io_contracts import GzipTsvAtomicWriter, write_gzip_tsv_atomic, write_json_atomic
-from model_catalog import GENERATED_ROLES, enabled_models, models_for_chromosome, validate_status
+from model_catalog import (
+    GENERATED_ROLES,
+    enabled_models,
+    models_for_chromosome,
+    validate_status,
+)
 from partitioned_bundle_contract import (
     PARTITIONED_NULL_BUNDLE_CONTRACT,
     PARTITIONED_NULL_BUNDLE_SCHEMA_VERSION,
@@ -229,12 +234,13 @@ def write_finalization_allele_artifacts(
     )
 
 
-
 def _partition_model_bucket_paths(
     paths: tuple[str | Path, ...], keys: tuple[str, ...]
 ) -> dict[tuple[str, str], tuple[str | Path, ...]]:
     if not keys or len(paths) % len(keys):
-        raise ValueError("Partition/model lookup bucket paths do not match declared keys")
+        raise ValueError(
+            "Partition/model lookup bucket paths do not match declared keys"
+        )
     grouped: dict[tuple[str, str], list[str | Path]] = defaultdict(list)
     for offset, path in enumerate(paths):
         partition_id, model_id = keys[offset % len(keys)].split("\t", 1)
@@ -254,7 +260,9 @@ def _partition_statuses_for_publication(inputs, params):
     status_rows = pl.read_parquet(inputs.partition_statuses).to_dicts()
     diagnostics: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in _partition_model_diagnostic_rows(inputs.partition_model_diagnostics):
-        diagnostics[(row["testing_unit_id"], row["partition_id"], row["model"])].append(row)
+        diagnostics[(row["testing_unit_id"], row["partition_id"], row["model"])].append(
+            row
+        )
     published: list[dict[str, object]] = []
     for row in status_rows:
         failed_roles: list[str] = []
@@ -273,7 +281,9 @@ def _partition_statuses_for_publication(inputs, params):
                 value = values[0]
                 validate_status(value["status"], "role", role=model.role)
                 if value["status"] == "numerical_failure":
-                    raise ValueError("Numerical distribution failure prevents bundle publication")
+                    raise ValueError(
+                        "Numerical distribution failure prevents bundle publication"
+                    )
                 if value["status"] != "ok":
                     failed_roles.append(model.role)
             if failed_roles:
@@ -281,9 +291,7 @@ def _partition_statuses_for_publication(inputs, params):
         ordered_failed_roles = tuple(
             role for role in GENERATED_ROLES if role in set(failed_roles)
         )
-        validate_status(
-            str(row["status"]), "scope", failed_roles=ordered_failed_roles
-        )
+        validate_status(str(row["status"]), "scope", failed_roles=ordered_failed_roles)
         row["failed_roles_json"] = json.dumps(
             list(ordered_failed_roles), separators=(",", ":")
         )
@@ -292,7 +300,9 @@ def _partition_statuses_for_publication(inputs, params):
 
 
 def _write_partition_bed(path, rows):
-    return write_gzip_tsv_atomic(path, ["#CHROM", "START", "END", "testing_unit_id"], rows)
+    return write_gzip_tsv_atomic(
+        path, ["#CHROM", "START", "END", "testing_unit_id"], rows
+    )
 
 
 def finalize_partitioned_bundle(
@@ -301,7 +311,10 @@ def finalize_partitioned_bundle(
     params: BundleFinalizationParameters,
 ) -> None:
     """Publish the sole partitioned-null bundle contract from bounded shards."""
-    if not params.partition_ids or tuple(dict.fromkeys(params.partition_ids)) != params.partition_ids:
+    if (
+        not params.partition_ids
+        or tuple(dict.fromkeys(params.partition_ids)) != params.partition_ids
+    ):
         raise ValueError("Partitioned bundle requires ordered unique partition IDs")
     expected_keys = tuple(
         f"{partition_id}\t{model.identifier}"
@@ -309,110 +322,229 @@ def finalize_partitioned_bundle(
         for model in enabled_models(params.hemizygote)
     )
     if params.partition_lookup_keys != expected_keys:
-        raise ValueError("Partition/model lookup keys do not match the enabled model catalog")
+        raise ValueError(
+            "Partition/model lookup keys do not match the enabled model catalog"
+        )
     if len(outputs.partition_lookups) != len(expected_keys):
-        raise ValueError("Partition/model final lookup outputs do not match declared keys")
-    if len(outputs.resolved_partitions) != len(params.partition_ids) or len(outputs.eligible_partitions) != len(params.partition_ids):
-        raise ValueError("Partition BED output count does not match configured partitions")
+        raise ValueError(
+            "Partition/model final lookup outputs do not match declared keys"
+        )
+    if len(outputs.resolved_partitions) != len(params.partition_ids) or len(
+        outputs.eligible_partitions
+    ) != len(params.partition_ids):
+        raise ValueError(
+            "Partition BED output count does not match configured partitions"
+        )
     if outputs.partition_statuses is None or outputs.testing_unit_id_overlap is None:
         raise ValueError("Partitioned bundle requires public scope audit outputs")
 
     status_rows = _partition_statuses_for_publication(inputs, params)
     eligible_pairs = {
         (str(row["testing_unit_id"]), str(row["partition_id"]))
-        for row in status_rows if row["status"] == "eligible"
+        for row in status_rows
+        if row["status"] == "eligible"
     }
     lookup_buckets = _partition_model_bucket_paths(
         inputs.partition_model_lookups, params.partition_lookup_keys
     )
-    header = ["testing_unit_id", *[str(value) for value in range(1, params.bin_count + 1)]]
+    header = [
+        "testing_unit_id",
+        *[str(value) for value in range(1, params.bin_count + 1)],
+    ]
     components: dict[str, object] = {}
     model_outputs = dict(zip(expected_keys, outputs.partition_lookups, strict=True))
     for key, path in model_outputs.items():
         partition_id, model_id = key.split("\t", 1)
-        _model = next(model for model in enabled_models(params.hemizygote) if model.identifier == model_id)
+        _model = next(
+            model
+            for model in enabled_models(params.hemizygote)
+            if model.identifier == model_id
+        )
         allowed = {
-            unit for unit, partition in eligible_pairs
+            unit
+            for unit, partition in eligible_pairs
             if partition == partition_id
-            and any(candidate.identifier == model_id for candidate in models_for_chromosome(
-                next(row["CHROM"] for row in status_rows if row["testing_unit_id"] == unit and row["partition_id"] == partition),
-                params.hemizygote,
-            ))
+            and any(
+                candidate.identifier == model_id
+                for candidate in models_for_chromosome(
+                    next(
+                        row["CHROM"]
+                        for row in status_rows
+                        if row["testing_unit_id"] == unit
+                        and row["partition_id"] == partition
+                    ),
+                    params.hemizygote,
+                )
+            )
         }
-        _, inventory = write_gzip_tsv_atomic(path, header, lookup_rows(lookup_buckets[(partition_id, model_id)], allowed))
+        _, inventory = write_gzip_tsv_atomic(
+            path, header, lookup_rows(lookup_buckets[(partition_id, model_id)], allowed)
+        )
         components[f"lookup.{partition_id}.{model_id}"] = inventory
 
     if inputs.resolved_partition_intervals is None:
         raise ValueError("Partitioned bundle requires resolved ownership intervals")
     resolved = pl.read_parquet(inputs.resolved_partition_intervals)
-    for partition_id, path in zip(params.partition_ids, outputs.resolved_partitions, strict=True):
+    for partition_id, path in zip(
+        params.partition_ids, outputs.resolved_partitions, strict=True
+    ):
         _, inventory = _write_partition_bed(
             path,
             resolved.filter(pl.col("partition_id") == partition_id)
-            .select("CHROM", "START", "END", "testing_unit_id").iter_rows(),
+            .select("CHROM", "START", "END", "testing_unit_id")
+            .iter_rows(),
         )
         components[f"resolved.{partition_id}"] = inventory
-    for partition_id, path in zip(params.partition_ids, outputs.eligible_partitions, strict=True):
+    for partition_id, path in zip(
+        params.partition_ids, outputs.eligible_partitions, strict=True
+    ):
         _, inventory = _write_partition_bed(
             path,
             resolved.filter(
                 (pl.col("partition_id") == partition_id)
                 & pl.struct("testing_unit_id", "partition_id").is_in(
-                    [{"testing_unit_id": unit, "partition_id": partition} for unit, partition in eligible_pairs]
+                    [
+                        {"testing_unit_id": unit, "partition_id": partition}
+                        for unit, partition in eligible_pairs
+                    ]
                 )
-            ).select("CHROM", "START", "END", "testing_unit_id").iter_rows(),
+            )
+            .select("CHROM", "START", "END", "testing_unit_id")
+            .iter_rows(),
         )
         components[f"eligible.{partition_id}"] = inventory
-    status_header = list(status_rows[0]) if status_rows else ["testing_unit_id", "partition_id", "CHROM", "status", "failed_roles_json"]
+    status_header = (
+        list(status_rows[0])
+        if status_rows
+        else ["testing_unit_id", "partition_id", "CHROM", "status", "failed_roles_json"]
+    )
     _, components["unit_partition_status"] = write_gzip_tsv_atomic(
-        outputs.partition_statuses, status_header,
+        outputs.partition_statuses,
+        status_header,
         ([row.get(name) for name in status_header] for row in status_rows),
     )
-    overlap = pl.read_parquet(inputs.testing_unit_id_overlap).to_dicts() if inputs.testing_unit_id_overlap else []
-    overlap_header = list(overlap[0]) if overlap else [
-        "left_partition_id", "right_partition_id", "left_unique_id_count",
-        "right_unique_id_count", "intersection_count", "union_count",
-        "left_overlap_fraction", "right_overlap_fraction",
-        "minimum_overlap_fraction", "empty_set_status", "low_overlap_warning",
-    ]
+    overlap = (
+        pl.read_parquet(inputs.testing_unit_id_overlap).to_dicts()
+        if inputs.testing_unit_id_overlap
+        else []
+    )
+    overlap_header = (
+        list(overlap[0])
+        if overlap
+        else [
+            "left_partition_id",
+            "right_partition_id",
+            "left_unique_id_count",
+            "right_unique_id_count",
+            "intersection_count",
+            "union_count",
+            "left_overlap_fraction",
+            "right_overlap_fraction",
+            "minimum_overlap_fraction",
+            "empty_set_status",
+            "low_overlap_warning",
+        ]
+    )
     _, components["testing_unit_id_overlap"] = write_gzip_tsv_atomic(
-        outputs.testing_unit_id_overlap, overlap_header,
+        outputs.testing_unit_id_overlap,
+        overlap_header,
         ([row.get(name) for name in overlap_header] for row in overlap),
     )
     calibration_count, components["calibration_regions"] = write_gzip_tsv_atomic(
-        outputs.calibration_regions, ["#CHROM", "START", "END", "source"],
+        outputs.calibration_regions,
+        ["#CHROM", "START", "END", "source"],
         parquet_rows([inputs.effective_mask], ["CHROM", "START", "END", "mask_state"]),
     )
-    rejected_count, components["excluded_alleles"], components["candidate_audit"], zero_count, components["population_af_zero_imputations"], class_counts = write_finalization_allele_artifacts(
-        inputs.allele_states, inputs.candidate_audit, outputs,
+    (
+        rejected_count,
+        components["excluded_alleles"],
+        components["candidate_audit"],
+        zero_count,
+        components["population_af_zero_imputations"],
+        class_counts,
+    ) = write_finalization_allele_artifacts(
+        inputs.allele_states,
+        inputs.candidate_audit,
+        outputs,
         include_variant_class_counts=params.variant_classes == ("snv", "indel"),
     )
     partition_metadata = []
     for index, partition_id in enumerate(params.partition_ids):
         rows = [row for row in status_rows if row["partition_id"] == partition_id]
-        partition_metadata.append({
-            "id": partition_id, "order": index,
-            "source_identity": params.resource_identities[f"testing_unit_partition.{partition_id}"]["identity"],
-            "resolved_component": f"resolved.{partition_id}",
-            "eligible_component": f"eligible.{partition_id}",
-            "lookups": {model.identifier: f"lookup.{partition_id}.{model.identifier}" for model in enabled_models(params.hemizygote)},
-            "pair_counts": {"declared": len(rows), "eligible": sum(row["status"] == "eligible" for row in rows)},
-        })
+        partition_metadata.append(
+            {
+                "id": partition_id,
+                "order": index,
+                "source_identity": params.resource_identities[
+                    f"testing_unit_partition.{partition_id}"
+                ]["identity"],
+                "resolved_component": f"resolved.{partition_id}",
+                "eligible_component": f"eligible.{partition_id}",
+                "lookups": {
+                    model.identifier: f"lookup.{partition_id}.{model.identifier}"
+                    for model in enabled_models(params.hemizygote)
+                },
+                "pair_counts": {
+                    "declared": len(rows),
+                    "eligible": sum(row["status"] == "eligible" for row in rows),
+                },
+            }
+        )
     metadata = {
         "schema_version": PARTITIONED_NULL_BUNDLE_SCHEMA_VERSION,
         "contract": PARTITIONED_NULL_BUNDLE_CONTRACT,
-        "assembly": params.assembly, "contig_convention": CANONICAL_CONTIG_CONVENTION,
-        "testing_unit_type": params.testing_unit_type, "af_info_tags": dict(params.af_tags),
-        "binning": {"algorithm": FIXED_WIDTH_BINNING_ALGORITHM, "score_max": params.score_max, "bin_width": params.bin_width, "bin_count": params.bin_count, "maximum_in_final_bin": True},
-        "model_assumptions": {"roles": list(model_roles(params.hemizygote)), "variant_classes": list(params.variant_classes), "unobserved_policy": params.policy, "mutation_conversion": params.conversion if params.policy == "mutation_rate" else None, "allele_events_independent": True, "par_policy": "excluded_before_event_assignment", "hemizygote_role": "hem_chrX" if params.hemizygote else None, "minimum_retained_fraction": params.minimum_retained_fraction, "retention_denominator": "resolved_supported_non_PAR_unit_bases_before_interval_exclusions", "x_chromosome": {"af_policy": params.x_af_policy, "mutation_rate_policy": params.x_mutation_rate_policy, "hemizygote_scope": "non_PAR_chrX_only"}},
+        "assembly": params.assembly,
+        "contig_convention": CANONICAL_CONTIG_CONVENTION,
+        "testing_unit_type": params.testing_unit_type,
+        "af_info_tags": dict(params.af_tags),
+        "binning": {
+            "algorithm": FIXED_WIDTH_BINNING_ALGORITHM,
+            "score_max": params.score_max,
+            "bin_width": params.bin_width,
+            "bin_count": params.bin_count,
+            "maximum_in_final_bin": True,
+        },
+        "model_assumptions": {
+            "roles": list(model_roles(params.hemizygote)),
+            "variant_classes": list(params.variant_classes),
+            "unobserved_policy": params.policy,
+            "mutation_conversion": params.conversion
+            if params.policy == "mutation_rate"
+            else None,
+            "allele_events_independent": True,
+            "par_policy": "excluded_before_event_assignment",
+            "hemizygote_role": "hem_chrX" if params.hemizygote else None,
+            "minimum_retained_fraction": params.minimum_retained_fraction,
+            "retention_denominator": "resolved_supported_non_PAR_unit_bases_before_interval_exclusions",
+            "x_chromosome": {
+                "af_policy": params.x_af_policy,
+                "mutation_rate_policy": params.x_mutation_rate_policy,
+                "hemizygote_scope": "non_PAR_chrX_only",
+            },
+        },
         "partitions": partition_metadata,
         "overlap_policy": "earlier_partition_owns_overlapping_bases_v1",
         "indel_assignment_policy": "first_overlapping_resolved_partition_v1",
-        "counts": {"eligible_pairs": len(eligible_pairs), "declared_pairs": len(status_rows), "excluded_alleles": rejected_count, "calibration_intervals": calibration_count, "population_af_zero_imputations": zero_count},
-        "resource_identities": dict(params.resource_identities), "components": components,
+        "counts": {
+            "eligible_pairs": len(eligible_pairs),
+            "declared_pairs": len(status_rows),
+            "excluded_alleles": rejected_count,
+            "calibration_intervals": calibration_count,
+            "population_af_zero_imputations": zero_count,
+        },
+        "resource_identities": dict(params.resource_identities),
+        "components": components,
         "validation_artifacts": dict(VALIDATION_ARTIFACT_FILENAMES),
     }
     if class_counts is not None:
-        metadata["indel_universe"] = {"candidate_universe": params.indel_candidate_universe, "normalization": "vcf_minimal_left_aligned_v1", "reference_span": "zero_based_half_open_ref_span_v1", "membership": params.indel_membership, "mask_policy": params.indel_mask_policy, "max_reference_length": params.indel_max_reference_length, "max_alternate_length": params.indel_max_alternate_length}
+        metadata["indel_universe"] = {
+            "candidate_universe": params.indel_candidate_universe,
+            "normalization": "vcf_minimal_left_aligned_v1",
+            "reference_span": "zero_based_half_open_ref_span_v1",
+            "membership": params.indel_membership,
+            "mask_policy": params.indel_mask_policy,
+            "max_reference_length": params.indel_max_reference_length,
+            "max_alternate_length": params.indel_max_alternate_length,
+        }
         metadata["variant_class_counts"] = class_counts
     write_json_atomic(outputs.metadata, metadata)

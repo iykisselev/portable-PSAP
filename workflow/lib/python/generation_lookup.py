@@ -37,17 +37,19 @@ def reduce_window_statistics(
     if inputs.partition_statuses is None:
         raise ValueError("Partition/model lookup reduction requires partition statuses")
     pairs = (
-            pl.scan_parquet(inputs.partition_statuses)
-            .filter(
-                (pl.col("status") == "eligible")
-                & pl.col("testing_unit_id").is_in(units)
-            )
-            .select("testing_unit_id", "partition_id", "CHROM")
-            .collect(engine="streaming")
-            .to_dicts()
+        pl.scan_parquet(inputs.partition_statuses)
+        .filter(
+            (pl.col("status") == "eligible") & pl.col("testing_unit_id").is_in(units)
+        )
+        .select("testing_unit_id", "partition_id", "CHROM")
+        .collect(engine="streaming")
+        .to_dicts()
     )
     model_rows, model_diagnostics = partition_model_lookup_rows(
-        statistics, pairs, hemizygote="hem_chrX" in params.roles, bin_count=params.bin_count
+        statistics,
+        pairs,
+        hemizygote="hem_chrX" in params.roles,
+        bin_count=params.bin_count,
     )
     for path, key in zip(
         outputs.partition_model_lookups, params.partition_lookup_keys, strict=True
@@ -57,11 +59,31 @@ def reduce_window_statistics(
     write_tsv_atomic(
         outputs.partition_model_diagnostics,
         [
-            "partition_id", "model", "testing_unit_id", "role", "event_mass",
-            "status", "event_count", "snv_event_count", "indel_event_count",
+            "partition_id",
+            "model",
+            "testing_unit_id",
+            "role",
+            "event_mass",
+            "status",
+            "event_count",
+            "snv_event_count",
+            "indel_event_count",
         ],
-        ([row[column] for column in (
-            "partition_id", "model", "testing_unit_id", "role", "event_mass",
-            "status", "event_count", "snv_event_count", "indel_event_count",
-        )] for row in model_diagnostics),
+        (
+            [
+                row[column]
+                for column in (
+                    "partition_id",
+                    "model",
+                    "testing_unit_id",
+                    "role",
+                    "event_mass",
+                    "status",
+                    "event_count",
+                    "snv_event_count",
+                    "indel_event_count",
+                )
+            ]
+            for row in model_diagnostics
+        ),
     )

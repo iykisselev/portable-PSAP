@@ -187,7 +187,9 @@ def _partition_scope_tables(scope, masks: ScopeMasks) -> ScopeTables:
             masks.calibration_mask.get(chromosome, []),
         )
         if retained:
-            callable_by_unit.setdefault(unit_id, {}).setdefault(chromosome, []).extend(retained)
+            callable_by_unit.setdefault(unit_id, {}).setdefault(chromosome, []).extend(
+                retained
+            )
 
     unit_rows: list[tuple[str, str]] = []
     interval_rows: list[tuple[str, str, int, int]] = []
@@ -308,7 +310,9 @@ def _write_partition_scope_artifacts(
     paths = inputs.testing_unit_partitions
     identifiers = params.partition_ids
     if len(paths) != len(identifiers):
-        raise ValueError("Partition IDs and testing-unit BED inputs must have equal length")
+        raise ValueError(
+            "Partition IDs and testing-unit BED inputs must have equal length"
+        )
     partitions = [
         (
             identifier,
@@ -335,7 +339,14 @@ def _write_partition_scope_artifacts(
     write_parquet_atomic(
         pl.DataFrame(
             resolved_rows,
-            schema=["testing_unit_id", "partition_id", "partition_order", "CHROM", "START", "END"],
+            schema=[
+                "testing_unit_id",
+                "partition_id",
+                "partition_order",
+                "CHROM",
+                "START",
+                "END",
+            ],
             orient="row",
         ).sort("CHROM", "START", "END", "testing_unit_id", "partition_id"),
         outputs.resolved_partition_intervals,

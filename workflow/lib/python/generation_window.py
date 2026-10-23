@@ -82,7 +82,10 @@ def prepare_generation_window(
         snv_memberships = partition_membership_rows(
             window,
             mask,
-            [(unit, partition, start, end) for unit, partition, _, start, end in intervals],
+            [
+                (unit, partition, start, end)
+                for unit, partition, _, start, end in intervals
+            ],
             reference,
         ).with_columns(pl.lit("snv").alias("variant_class"))
         indel_scores = pl.DataFrame(schema=SCORE_SCHEMA)
@@ -102,14 +105,16 @@ def prepare_generation_window(
                 max_reference_length=params.indel_max_reference_length,
                 max_alternate_length=params.indel_max_alternate_length,
             )
-            indel_memberships, indel_rejections = partitioned_indel_candidate_memberships(
-                catalog,
-                indel_mask,
-                ownership_frame.rows(),
-                {
-                    (str(row["testing_unit_id"]), str(row["partition_id"]))
-                    for row in eligible_pairs.to_dicts()
-                },
+            indel_memberships, indel_rejections = (
+                partitioned_indel_candidate_memberships(
+                    catalog,
+                    indel_mask,
+                    ownership_frame.rows(),
+                    {
+                        (str(row["testing_unit_id"]), str(row["partition_id"]))
+                        for row in eligible_pairs.to_dicts()
+                    },
+                )
             )
             indel_scores = catalog.select(*ALLELE_COLUMNS, "score")
     finally:

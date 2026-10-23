@@ -109,7 +109,9 @@ def read_model_catalog(path: str | Path = CATALOG_PATH) -> ModelCatalog:
             raise ValueError(f"Unknown catalog status domain for {code}")
         required = row.get("required_payload")
         if not isinstance(required, dict) or set(required) != set(domains):
-            raise ValueError(f"Catalog status {code} must declare payloads for every domain")
+            raise ValueError(
+                f"Catalog status {code} must declare payloads for every domain"
+            )
         payloads = {
             domain: _strings(fields, "required_payload", nonempty=False)
             for domain, fields in required.items()
@@ -140,9 +142,17 @@ def model_roles(hemizygote: bool) -> tuple[str, ...]:
     return tuple(role for role in CATALOG.roles if role in used)
 
 
-def models_for_chromosome(chromosome: str, hemizygote: bool) -> tuple[DiseaseModel, ...]:
+def models_for_chromosome(
+    chromosome: str, hemizygote: bool
+) -> tuple[DiseaseModel, ...]:
     chromosome = canonical_chromosome(chromosome)
-    scope = "autosomal" if chromosome in AUTOSOMES else "non_PAR_chrX" if chromosome == "X" else None
+    scope = (
+        "autosomal"
+        if chromosome in AUTOSOMES
+        else "non_PAR_chrX"
+        if chromosome == "X"
+        else None
+    )
     return tuple(model for model in enabled_models(hemizygote) if model.scope == scope)
 
 

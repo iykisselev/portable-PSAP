@@ -17,7 +17,9 @@ PARTITION_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 
 def require_partition_id(partition_id: str) -> str:
     """Return a safe partition ID for a flat public component filename."""
-    if not isinstance(partition_id, str) or not PARTITION_ID_PATTERN.fullmatch(partition_id):
+    if not isinstance(partition_id, str) or not PARTITION_ID_PATTERN.fullmatch(
+        partition_id
+    ):
         raise ValueError("Partition ID must match ^[A-Za-z0-9][A-Za-z0-9_-]*$")
     return partition_id
 
@@ -53,5 +55,8 @@ def bundle_component_paths(
     """Join the public lookup layout to a generated bundle directory."""
     root = Path(directory)
     return MappingProxyType(
-        {key: str(root / filename) for key, filename in lookup_components(partition_ids, hemizygote).items()}
+        {
+            key: str(root / filename)
+            for key, filename in lookup_components(partition_ids, hemizygote).items()
+        }
     )
