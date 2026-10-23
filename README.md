@@ -9,12 +9,11 @@ controls carry the same allele.
 
 A PSAP value answers: *under this inheritance model, how likely is an event at
 least this deleterious (by CADD-PHRED [2,5]) in this gene, given population
-allele frequencies?* Smaller is more surprising. It is a ranking statistic, not
-a pathogenicity call.
+allele frequencies?*
 
-The workflow can also build the null-distribution lookup tables that PSAP
-needs, from a population VCF (for example gnomAD [4,6]) and CADD scores, and
-package them as a checksummed, self-describing "bundle".
+It can also build the null-distribution lookup tables that PSAP needs from a
+population VCF (for example gnomAD [4,6]) and CADD scores, then package them
+as a checksummed, self-describing bundle.
 
 - [What you need to know first](#what-you-need-to-know-first)
 - [Quick start with the bundled demo](#quick-start-with-the-bundled-demo)
@@ -38,7 +37,7 @@ Every run manifest sets `workflow.mode`. The target is always the default
 | `generate` | Population VCF, CADD tables, testing-unit BED, exclusion BEDs, FASTA | A certified bundle under `<outdir>/generate/<generation_prefix>/bundle/` |
 | `full` | Everything above in one manifest | The bundle, then the cohort scored against it, in one DAG |
 
-Most users start with `apply`. Use `generate` once per reference/model
+For an existing cohort, use `apply`. Run `generate` once per reference/model
 combination and reuse the bundle across cohorts.
 
 ### Two configuration layers
@@ -58,17 +57,17 @@ root, and prefer absolute paths for production and cluster runs.
 
 ### Key terms
 
-- **Testing unit**: the region a PSAP value is computed for. The default is a
+- Testing unit: the region a PSAP value is computed for. The default is a
   gene, identified by column 4 of the testing-unit BED. The same IDs must
   appear in the lookup tables.
-- **Lookup table**: one row per testing unit, one column per CADD-PHRED bin,
+- Lookup table: one row per testing unit, one column per CADD-PHRED bin,
   holding the null probability for that role (`het`, `hom`, or `hem_chrX`).
-- **Bundle**: the lookup tables plus the eligible units, calibration mask,
+- Bundle: the lookup tables plus the eligible units, calibration mask,
   excluded alleles, metadata and checksums that were used to build them. A
   bundle is usable only after its `validation.ok` marker exists. When applying
   a bundle, the workflow restricts cohort variants to the bundle's calibrated
   regions, so scores are never read outside the scope they were built for.
-- **Disease models**: `DOM-het`, `REC-hom`, `X-linked-het`, `X-linked-hom` and
+- Disease models: `DOM-het`, `REC-hom`, `X-linked-het`, `X-linked-hom` and
   `X-linked-hem`. Hemizygous scoring is controlled by `model.hemizygote`; indel
   scoring by `model.include_indels`.
 
@@ -122,7 +121,7 @@ snakemake --configfile runs/apply.example.yaml -n                # show planned 
 snakemake --configfile runs/apply.example.yaml --cores 2 --use-conda
 ```
 
-The other demos work the same way:
+Run the other demos with:
 
 ```bash
 snakemake --configfile runs/generate.example.yaml --cores 2 --use-conda
@@ -188,7 +187,7 @@ snakemake --profile profiles/default --configfile runs/my_cohort.yaml --cores 16
 `--rerun-incomplete` and failed-log printing. `--cores` on the command line
 overrides the profile's 8.
 
-### What happens
+### Apply stages
 
 1. **Validate.** The workflow checks the cohort, resources and model
    (sample IDs, normalization, FASTA agreement, CADD columns, unit IDs
@@ -231,21 +230,21 @@ In `full` mode, the FASTA, CADD, BED and exclusion resources are given once
 under `bindings.reference` and shared by both halves of the DAG. The generated
 bundle is bound to the apply step automatically.
 
-Practical notes for real-scale generation:
+For real-scale generation:
 
-- **Indexes are mandatory.** The population VCF, CADD tables and mutation-rate
+- Indexes are mandatory. The population VCF, CADD tables and mutation-rate
   tables must be bgzipped and have explicit `.tbi`/`.csi` `index:` bindings.
   An index sitting next to the file is not picked up automatically. The demos
   get around this with `allow_unindexed_fixture_inputs: true`; never set it
   for real data.
-- **Generation covers autosomes 1–22 and chrX.** PAR is removed, and chrY is
+- Generation covers autosomes 1 through 22 and chrX. PAR is removed, and chrY is
   not calibrated.
-- **Work is split into genomic partitions × unit buckets.** Tune
+- Work is split into genomic partitions × unit buckets. Tune
   `generation.execution.partition_size_bp` (default 5 Mb) and
   `unit_bucket_size` (default 250) to trade memory per job against job count.
   Neither changes the result.
 - SNV-only runs write a `generated_bundle_v2` bundle; combined SNV+indel runs
-  write `generated_bundle_v3`. Readers accept v1–v3, but bundles are never
+  write `generated_bundle_v3`. Readers accept v1 through v3, but bundles are never
   upgraded in place. Regenerate under a new prefix if you change the model or
   resources.
 - Intermediate Parquet shards under `<outdir>/generate/<prefix>/scalable/` are
@@ -354,7 +353,7 @@ tested route.
 - Per-rule memory and runtime come from the rules and the profile's
   `default-resources`. Raise `mem_mb`/`runtime` in your overlay if your site
   needs it. Measured usage is written under `benchmarks/`.
-- **Recovery:** fix the cause and rerun the same command. `rerun-incomplete` is
+- Recovery: fix the cause and rerun the same command. `rerun-incomplete` is
   on, and finished shards are reused. Never create `validation.ok` by hand or
   edit generated manifests to get past a failed check.
 
@@ -365,8 +364,8 @@ tested route.
 All three files are gzip-compressed TSVs. `variant_key` is
 `CHROM:POS-POS_REF>ALT`.
 
-**`cohort_candidates.tsv.gz`**: one row per affected sample × unit × model ×
-top-scoring variant. This is the main result.
+`cohort_candidates.tsv.gz`: one row per affected sample × unit × model ×
+top-scoring variant.
 
 | Column | Meaning |
 | --- | --- |
@@ -380,11 +379,11 @@ top-scoring variant. This is the main result.
 A `DOM-het` candidate matches control carriers under any model. Other models
 match only controls carrying the allele under the same model.
 
-**`cohort_summary.tsv.gz`**: candidates grouped by unit × model × variant
+`cohort_summary.tsv.gz`: candidates grouped by unit × model × variant
 across affected samples (`affected_count`, `affected_pids`, `minimum_PSAP`, and
 aggregated control fields). Use it for spotting recurrent hits.
 
-**`control_variants.tsv.gz`**: the control evidence used above, one row per
+`control_variants.tsv.gz`: the control evidence used above, one row per
 unaffected sample × unit × model × variant, with the lowest available `PSAP`.
 
 ### Supporting files: `<outdir>/apply/<apply_prefix>/`
@@ -473,19 +472,19 @@ flat-module library that rule scripts import through
 ## References
 
 1. Köster, J. & Rahmann, S. Snakemake - a scalable bioinformatics workflow
-   engine. *Bioinformatics* **28**, 2520–2522 (2012).
+   engine. *Bioinformatics* **28**, 2520-2522 (2012).
 2. Kircher, M. *et al.* A general framework for estimating the relative
    pathogenicity of human genetic variants. *Nature Genetics* **46**,
-   310–315 (2014).
+   310-315 (2014).
 3. Wilfert, A. B. *et al.* Genomewide significance testing of variation from
-   single case exomes. *Nature Genetics* **48**, 1455–1461 (2016).
+   single case exomes. *Nature Genetics* **48**, 1455-1461 (2016).
 4. Karczewski, K. J. *et al.* The mutational constraint spectrum quantified
-   from variation in 141,456 humans. *Nature* **581**, 434–443 (2020).
+   from variation in 141,456 humans. *Nature* **581**, 434-443 (2020).
 5. Rentzsch, P., Schubach, M., Shendure, J. & Kircher, M. CADD-Splice - improving
    genome-wide variant effect prediction using deep learning-derived splice
    scores. *Genome Medicine* **13**, 31 (2021).
 6. Chen, S. *et al.* A genomic mutational constraint map using variation in
-   76,156 human genomes. *Nature* **625**, 92–100 (2024).
+   76,156 human genomes. *Nature* **625**, 92-100 (2024).
 7. Ogloblinsky, M.-S.C., *et al.* PSAP-Genomic-Regions: A method
    leveraging population data to prioritize coding and non-coding variants in
    whole-genome sequencing for rare disease diagnosis. *Genetic Epidemiology*
