@@ -494,17 +494,19 @@ when copying or archiving the bundle. It records structural indel rejections
 (for example, a candidate whose REF span crosses a calibration-mask boundary)
 that are intentionally distinct from population FILTER exclusions.
 
-See [docs/null_distribution_contract.md](docs/null_distribution_contract.md)
-for the generated-bundle interface and
-[docs/workflow_architecture.md](docs/workflow_architecture.md) for module and
-binding ownership.
+See the [pipeline guide](docs/pipeline.md#generated-bundle) for the generated
+bundle interface, the [generate architecture](docs/generate_workflow_architecture.md)
+for generation ownership, and the [apply architecture](docs/apply_workflow_architecture.md)
+for application ownership.
 
 ## Testing and contributing
 
-Test tiers, local commands, and CI coverage are documented in
-[docs/testing.md](docs/testing.md). Module boundaries, how to add resources or
-roles, and the schema/contract deprecation policy are in
-[docs/contributing.md](docs/contributing.md).
+Run a documented test tier from the repository root with, for example,
+`python tests/run_tier.py workflow`. The null-distribution fixtures are
+described in [tests/null_distribution/README.md](tests/null_distribution/README.md).
+Module boundaries and contract ownership are documented in the
+[generate architecture](docs/generate_workflow_architecture.md) and
+[apply architecture](docs/apply_workflow_architecture.md).
 
 ## References
 
