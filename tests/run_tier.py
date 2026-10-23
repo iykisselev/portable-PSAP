@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TIERS: dict[str, tuple[str, ...]] = {
     "unit": (
         "test_annotate_cohort_summary.py",
+        "test_cadd_partition_constraint.py",
         "test_annotation_qc.py",
         "test_apply_resources.py",
         "test_bgzf.py",
