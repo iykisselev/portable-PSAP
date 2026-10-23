@@ -80,8 +80,12 @@ rule validate_model:
         ),
         resolved_partitions=list(LOOKUP_SOURCE.resolved_partitions.values()),
         eligible_partitions=list(LOOKUP_SOURCE.eligible_partitions.values()),
-        partition_statuses=str(Path(LOOKUP_SOURCE.metadata).parent / "unit_partition_status.tsv.gz"),
-        testing_unit_id_overlap=str(Path(LOOKUP_SOURCE.metadata).parent / "testing_unit_id_overlap.tsv.gz"),
+        partition_statuses=str(
+            Path(LOOKUP_SOURCE.metadata).parent / "unit_partition_status.tsv.gz"
+        ),
+        testing_unit_id_overlap=str(
+            Path(LOOKUP_SOURCE.metadata).parent / "testing_unit_id_overlap.tsv.gz"
+        ),
         libraries=VALIDATION_LIBRARIES,
         schema=VALIDATION_REPORT_SCHEMA,
     output:
@@ -106,7 +110,10 @@ rule validate_model:
         include_indels=WORKFLOW_PLAN.model.include_indels,
         lookup_contract=LOOKUP_SOURCE.contract,
         lookup_bin_width=LOOKUP_SOURCE.bin_width,
-        lookup_component_keys=tuple(f"lookup.{partition_id}.{model_id}" for partition_id, model_id in LOOKUP_SOURCE.tables),
+        lookup_component_keys=tuple(
+            f"lookup.{partition_id}.{model_id}"
+            for partition_id, model_id in LOOKUP_SOURCE.tables
+        ),
         partition_ids=LOOKUP_SOURCE.partition_ids,
     script:
         str(APPLY_SCRIPT_DIR / "validate_model.py")

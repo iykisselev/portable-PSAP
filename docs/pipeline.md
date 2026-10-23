@@ -847,6 +847,7 @@ would create empty or misleading scores.
 The test runner exposes increasingly broad tiers:
 
 ```bash
+python tests/run_tier.py lint
 python tests/run_tier.py unit
 python tests/run_tier.py schema
 python tests/run_tier.py workflow
@@ -854,7 +855,14 @@ python tests/run_tier.py e2e
 python tests/run_tier.py resilience
 ```
 
-Use `python tests/run_tier.py all` for the complete suite. At minimum:
+Run `python tests/run_tier.py lint` before committing. It checks Python lint
+and formatting with Ruff, Snakemake formatting with snakefmt, and R lint.
+Use the environment in `workflow/envs/ci.yaml`, which includes these tools.
+These checks run locally; GitHub Actions runs the functional test tiers.
+
+Use `python tests/run_tier.py all` to run these checks followed by the complete
+test suite. If a formatting or lint check fails, `all` stops before running the
+tests. At minimum:
 
 - library changes should pass `unit`;
 - configuration and planning changes should pass `schema` and `workflow`;

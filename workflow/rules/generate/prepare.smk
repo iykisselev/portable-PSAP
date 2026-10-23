@@ -9,9 +9,13 @@ checkpoint prepare_generation_scope:
         windows=GENERATION_CONTEXT.scope_paths["windows"],
         buckets=GENERATION_CONTEXT.scope_paths["buckets"],
         effective_mask=GENERATION_CONTEXT.scope_paths["effective_mask"],
-        resolved_partition_intervals=GENERATION_CONTEXT.scope_paths["resolved_partition_intervals"],
+        resolved_partition_intervals=GENERATION_CONTEXT.scope_paths[
+            "resolved_partition_intervals"
+        ],
         partition_statuses=GENERATION_CONTEXT.scope_paths["partition_statuses"],
-        testing_unit_id_overlap=GENERATION_CONTEXT.scope_paths["testing_unit_id_overlap"],
+        testing_unit_id_overlap=GENERATION_CONTEXT.scope_paths[
+            "testing_unit_id_overlap"
+        ],
     log:
         str(GENERATION_CONTEXT.plan.log_dir / "prepare_scope.log"),
     conda:
@@ -32,7 +36,10 @@ checkpoint prepare_generation_scope:
         compression=GENERATION_CONTEXT.plan.parquet_compression,
         include_indels=WORKFLOW_PLAN.model.include_indels,
         indel_max_reference_length=WORKFLOW_PLAN.generation_settings.indel_max_reference_length,
-        partition_ids=tuple(partition.identifier for partition in GENERATION_CONTEXT.plan.testing_unit_partitions),
+        partition_ids=tuple(
+            partition.identifier
+            for partition in GENERATION_CONTEXT.plan.testing_unit_partitions
+        ),
     script:
         str(GENERATION_SCRIPT_DIR / "prepare_generation_scope.py")
 
@@ -42,8 +49,12 @@ rule prepare_generation_window:
     input:
         **GENERATION_CONTEXT.raw_inputs("window"),
         windows=lambda wc: generation_scope_artifact(wc, "windows"),
-        resolved_partition_intervals=lambda wc: generation_scope_artifact(wc, "resolved_partition_intervals"),
-        partition_statuses=lambda wc: generation_scope_artifact(wc, "partition_statuses"),
+        resolved_partition_intervals=lambda wc: generation_scope_artifact(
+            wc, "resolved_partition_intervals"
+        ),
+        partition_statuses=lambda wc: generation_scope_artifact(
+            wc, "partition_statuses"
+        ),
         effective_mask=lambda wc: generation_scope_artifact(wc, "effective_mask"),
     output:
         allele_states=str(

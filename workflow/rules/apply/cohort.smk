@@ -94,7 +94,9 @@ rule build_cohort_report:
         ),
         report_metadata=ensure(REPORT_METADATA, non_empty=True),
         aggregation_diagnostics=ensure(AGGREGATION_DIAGNOSTICS, non_empty=True),
-        partition_summaries=[ensure(path, non_empty=True) for path in PARTITION_SUMMARIES.values()],
+        partition_summaries=[
+            ensure(path, non_empty=True) for path in PARTITION_SUMMARIES.values()
+        ],
     log:
         str(APPLY_LOG_DIR / "cohort" / "build_cohort_report.log"),
     benchmark:
@@ -137,7 +139,10 @@ rule build_endpoint_diagnostics:
         mem_mb=policy_resources("build_endpoint_diagnostics").mem_mb,
         runtime=policy_resources("build_endpoint_diagnostics").runtime,
     params:
-        lookup_keys=tuple(f"{partition_id}\t{model_id}" for partition_id, model_id in LOOKUP_SOURCE.tables),
+        lookup_keys=tuple(
+            f"{partition_id}\t{model_id}"
+            for partition_id, model_id in LOOKUP_SOURCE.tables
+        ),
         near_one_thresholds=(0.999, 0.999999, 0.999999999),
     script:
         str(APPLY_SCRIPT_DIR / "build_endpoint_diagnostics.py")

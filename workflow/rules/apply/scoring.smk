@@ -33,6 +33,9 @@ rule apply_psap:
         lookup_contract=LOOKUP_SOURCE.contract,
         lookup_bin_width=LOOKUP_SOURCE.bin_width or "",
         partition_ids=LOOKUP_SOURCE.partition_ids,
-        lookup_keys=tuple(f"{partition_id}\t{model_id}" for partition_id, model_id in LOOKUP_SOURCE.tables),
+        lookup_keys=tuple(
+            f"{partition_id}\t{model_id}"
+            for partition_id, model_id in LOOKUP_SOURCE.tables
+        ),
     script:
         str(APPLY_SCRIPT_DIR / "apply_psap.R")

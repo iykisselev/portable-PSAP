@@ -46,7 +46,9 @@ def generation_bucket_artifacts(wildcards, artifact_name):
 
 def generation_bucket_partition_model_artifacts(wildcards):
     return [
-        GENERATION_CONTEXT.bucket_partition_model_artifact(bucket_id, partition_id, model_id)
+        GENERATION_CONTEXT.bucket_partition_model_artifact(
+            bucket_id, partition_id, model_id
+        )
         for bucket_id in generation_bucket_ids(wildcards)
         for partition_id, model_id in GENERATION_CONTEXT.execution_layout.partition_lookup_paths
     ]
@@ -86,6 +88,8 @@ def generation_outputs(wildcards):
     ):
         outputs.extend(generation_window_artifacts(wildcards, artifact_name))
     outputs.extend(generation_statistics_artifacts(wildcards))
-    outputs.extend(generation_bucket_artifacts(wildcards, "partition_model_diagnostics"))
+    outputs.extend(
+        generation_bucket_artifacts(wildcards, "partition_model_diagnostics")
+    )
     outputs.extend(generation_bucket_partition_model_artifacts(wildcards))
     return outputs

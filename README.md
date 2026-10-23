@@ -300,13 +300,17 @@ as restart points and can be deleted once the bundle is certified.
 ## Tests
 
 ```bash
+python tests/run_tier.py lint        # Ruff, snakefmt, and R lint; run before committing
 python tests/run_tier.py unit        # fast, no Snakemake
 python tests/run_tier.py workflow    # DAG construction and lint
 python tests/run_tier.py e2e         # end-to-end runs of all modes on fixtures
 python tests/run_tier.py all
 ```
 
-CI (`.github/workflows/test.yaml`) runs this suite in `workflow/envs/ci.yaml`.
+Use the environment in `workflow/envs/ci.yaml` for these commands. The `all`
+command runs formatting and lint checks before the full test suite.
+GitHub Actions runs the functional test tiers; formatting and lint checks run
+locally through the `lint` or `all` command.
 
 ## Further documentation
 

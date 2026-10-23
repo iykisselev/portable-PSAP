@@ -11,6 +11,13 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
+LINT_COMMANDS = (
+    ("ruff", "check", "."),
+    ("ruff", "format", "--check", "."),
+    ("snakefmt", "--check", "workflow"),
+    ("Rscript", "tests/lint_r.R"),
+)
+
 # Keep the fast loop free of Snakemake subprocesses.  The workflow, E2E, and
 # resilience tiers deliberately grow in cost and are selected explicitly.
 TIERS: dict[str, tuple[str, ...]] = {
@@ -78,10 +85,33 @@ def run_pattern(pattern: str) -> int:
     return result.returncode
 
 
+def run_lint() -> int:
+    """Run the local formatting and lint checks without modifying files."""
+    failed = False
+    for command in LINT_COMMANDS:
+        print("Running: " + " ".join(command), flush=True)
+        try:
+            result = subprocess.run(command, cwd=ROOT, check=False)
+        except FileNotFoundError:
+            print(
+                f"Missing {command[0]}; activate the environment from "
+                "workflow/envs/ci.yaml.",
+                file=sys.stderr,
+            )
+            failed = True
+        else:
+            failed |= result.returncode != 0
+    return int(failed)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("tier", choices=(*TIERS, "all"))
+    parser.add_argument("tier", choices=(*TIERS, "lint", "all"))
     args = parser.parse_args()
+    if args.tier in ("lint", "all"):
+        result = run_lint()
+        if result or args.tier == "lint":
+            return result
     if args.tier == "all":
         return run_pattern("test_*.py")
     for pattern in TIERS[args.tier]:

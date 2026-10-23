@@ -52,14 +52,20 @@ rule reduce_null_distribution_bucket:
     """Produce direct lookup rows for one bounded range of unit identifiers."""
     input:
         buckets=lambda wc: generation_scope_artifact(wc, "buckets"),
-        partition_statuses=lambda wc: generation_scope_artifact(wc, "partition_statuses"),
+        partition_statuses=lambda wc: generation_scope_artifact(
+            wc, "partition_statuses"
+        ),
         window_statistics=generation_statistics_shards,
     output:
         partition_model_diagnostics=str(
-            GENERATION_CONTEXT.lookup_bucket_dir / "{bucket}.partition-model-diagnostics.tsv"
+            GENERATION_CONTEXT.lookup_bucket_dir
+            / "{bucket}.partition-model-diagnostics.tsv"
         ),
         partition_model_lookups=[
-            str(GENERATION_CONTEXT.lookup_bucket_dir / f"{{bucket}}.{partition_id}.{model_id}.tsv")
+            str(
+                GENERATION_CONTEXT.lookup_bucket_dir
+                / f"{{bucket}}.{partition_id}.{model_id}.tsv"
+            )
             for partition_id, model_id in GENERATION_CONTEXT.execution_layout.partition_lookup_paths
         ],
     log:
