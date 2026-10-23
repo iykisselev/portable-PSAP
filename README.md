@@ -3,7 +3,7 @@
 Portable PSAP is a Snakemake workflow [1] for prioritizing rare variants in a
 cohort. It uses the PSAP (Population Sampling Probability) framework [3] and
 its genomic-regions extension [7]. For each affected individual, it estimates
-how surprising it is to observe a variant this deleterious (by CADD-PHRED
+how unusually it is to observe a variant this deleterious (by CADD-PHRED
 [2,5]) in a gene under the selected inheritance model.
 
 The workflow has two stages:
@@ -179,8 +179,7 @@ exclusions, and the reason is recorded in `unit_partition_status.tsv.gz`.
 
 Generation is split into genomic windows × gene buckets, so it parallelizes
 well on a cluster. You can tune the split under `generation.execution`
-(`partition_size_bp`, `unit_bucket_size`). These settings change how work is
-divided, not the results.
+(`partition_size_bp`, `unit_bucket_size`).
 
 ### Full mode
 
@@ -287,23 +286,6 @@ metadata.json, validation.json, validation.ok
 Copy or archive the **whole directory**. Apply verifies every component
 against `metadata.json`. Generation intermediates under `scalable/` are kept
 as restart points and can be deleted once the bundle is certified.
-
-## Optional: annotate candidates for review
-
-`scripts/annotate_cohort_summary.py` writes a copy of `cohort_candidates`. The
-copy has `gene_name` (from a GTF), `cadd_phred` and `population_af` columns
-added. It requires `pysam`, BGZF-compressed and indexed CADD tables and an
-indexed population VCF. It assumes the testing units are Ensembl gene IDs.
-
-```bash
-python scripts/annotate_cohort_summary.py \
-  results/apply/my_cohort/cohort/cohort_candidates.tsv.gz \
-  results/apply/my_cohort/cohort/cohort_candidates.review.tsv.gz \
-  --unit-column unit \
-  --cadd-snv ref/cadd_snv.tsv.gz --cadd-indel ref/cadd_indel.tsv.gz \
-  --population-vcf ref/gnomad.vcf.gz --af-field AF \
-  --gtf ref/gencode.gtf.gz
-```
 
 ## Troubleshooting
 
