@@ -330,7 +330,7 @@ def finalize_partitioned_bundle(
     model_outputs = dict(zip(expected_keys, outputs.partition_lookups, strict=True))
     for key, path in model_outputs.items():
         partition_id, model_id = key.split("\t", 1)
-        model = next(model for model in enabled_models(params.hemizygote) if model.identifier == model_id)
+        _model = next(model for model in enabled_models(params.hemizygote) if model.identifier == model_id)
         allowed = {
             unit for unit, partition in eligible_pairs
             if partition == partition_id

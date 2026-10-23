@@ -90,7 +90,7 @@ def _validate_resolved_ownership(
         all_rows.extend((*row, identifier) for row in rows)
     for (chromosome, unit), rows in _group_intervals(all_rows).items():
         previous_end = -1
-        for start, end, partition in rows:
+        for start, end, _partition in rows:
             if start < previous_end:
                 raise ValueError(
                     "Resolved partition intervals overlap for "

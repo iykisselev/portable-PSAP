@@ -23,9 +23,6 @@ from io_contracts import is_missing_token
 from workflow_bindings import as_inputs
 from bundle_contract import (
     BUNDLE_ARTIFACT_FILENAMES,
-    CURRENT_GENERATED_BUNDLE_CONTRACT as GENERATED_BUNDLE_CONTRACT,
-    INDEL_GENERATED_BUNDLE_CONTRACT,
-    require_supported_contract,
     fixed_width_bin_count,
 )
 from partitioned_bundle_contract import (
