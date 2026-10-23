@@ -1,512 +1,474 @@
 # Portable PSAP
 
-Portable PSAP is a Snakemake workflow [1] that can generate certified PSAP
-null-distribution lookup bundles, apply an external or certified bundle to a
-cohort VCF, or perform both steps in one full workflow. It prioritizes variants
-under the selected disease models using the single-case PSAP framework and its
-genomic-regions extension [3,7].
-
-## Workflow modes
-
-Every manifest explicitly selects one mode with `workflow.mode`:
-
-| Mode | Inputs | Default target | Result |
-| --- | --- | --- | --- |
-| `apply` | Cohort, reference/annotation resources, external or certified bundle | `all` | Cohort candidate, summary, and control reports |
-| `generate` | Population AF, score, scope, and reference resources | `all` | Certified generated lookup bundle |
-| `full` | Cohort plus one shared generation/application binding set | `all` | Generated bundle followed by cohort reports |
-
-These are the only supported explicit Snakemake targets. The workflow does not
-maintain compatibility aliases for result targets.
-
-`workflow/lib/python` is an internal flat-module library, not a public Python
-package. Workflow scripts add that directory through `workflow/shared/_library.py`
-and import modules such as `generation_scope`; package-qualified imports are
-unsupported.
-
-## Combined SNV/indel null generation
-
-Generated null distributions can include SNVs alone or the combined SNV/indel
-candidate universe. A combined run sets `model.include_indels: true`, declares
-`generation_settings.variant_classes: [snv, indel]`, and supplies an indexed
-indel CADD resource (`generation.score_indel` in standalone `generate` mode,
-or `bindings.reference.cadd.indel` in `full` mode). Candidate indels are
-normalized, left-aligned, reference-validated alleles from that score resource;
-their complete REF spans must remain inside the calibration mask.
-
-Combined runs write `generated_bundle_v3`. Its certificate records the SNV and
-indel score identities, the candidate-universe and span conventions,
-class-specific retained/rejected/observed/absent counts, and a certified indel
-candidate audit. SNV-only runs continue to write `generated_bundle_v2`.
-Consumers can read v1–v3, but bundles are never silently upgraded: regenerate
-the lookup when moving to combined indel semantics.
-
-For `unobserved_policy: mutation_rate`, `generation.mutation_rate_indel` is an
-optional indexed allele-specific indel rate source. If it is not supplied,
-unobserved indels contribute AF 0; SNV mutation-rate requirements are
-unchanged. Per-bucket generation diagnostics report `snv_event_count` and
-`indel_event_count` for each unit/role, making the two contributions auditable
-without changing lookup semantics.
-
-Use the executable small demonstrations in
-[`runs/apply.example.yaml`](runs/apply.example.yaml),
-[`runs/generate.example.yaml`](runs/generate.example.yaml), and
-[`runs/full.example.yaml`](runs/full.example.yaml) to exercise each mode. For a
-production apply run, copy [`runs/run.example.yaml`](runs/run.example.yaml) and
-replace its physical resource paths.
-
-To apply an existing generated bundle, copy
-[`runs/apply.bundle.example.yaml`](runs/apply.bundle.example.yaml). Supply its
-directory under `bindings.reference.lookup_source`:
-
-```yaml
-lookup_source:
-  type: bundle
-  directory: results/generate/my-model/bundle
-```
-
-The workflow discovers its lookup tables, eligibility, calibration mask,
-exclusions, contract and score grid from bundle declarations. No original
-testing-unit BED or repeated component paths are needed. Paths are relative to
-the directory where you invoke Snakemake. The bundle must already exist for
-this apply form; `full` mode generates and binds its own bundle automatically.
-Model choices (`include_indels`, `hemizygote`, testing-unit type) and assembly
-must match the bundle. Certificate and checksum checks run before annotation.
-For directory bundles, the bundle's score maximum and bin width govern scoring;
-configuration grid defaults do not change them.
-
-The existing explicit-component form remains supported for advanced use and
-retains its configured-grid checks. See
-[bundle configuration and deployment](docs/pipeline.md#applying-an-existing-bundle)
-for migration and verification details.
-
-## Workflow overview
-
-### 1. Validation
-
-Before processing variants, the workflow runs three validation stages:
-
-- Cohort validation checks the VCF, sample metadata, reference FASTA and
-  indexes, sample-ID agreement, VCF normalization/splitting, and sex-chromosome
-  requirements.
-- Resource validation checks resource formats, chromosome compatibility, 
-  CADD columns, testing-unit BED columns, and configured exclusion files.
-- Model validation checks model settings and verifies that testing-unit IDs
-  overlap the enabled PSAP lookup tables.
-
-Each stage writes a JSON report; the reports are merged when validation
-finishes. Errors stop the run before the computationally expensive rules begin.
-Warnings do not stop the run, but remain recorded in `validation.json`.
-
-### 2. Resource staging and variant filtering
-
-The workflow creates indexed working copies of inputs below the run output 
-directory. When necessary, it sorts and BGZF-compresses the VCF and
-tabular genomic resources, then creates indexes for the staged files. It then:
-
-1. retains variants in the generated bundle's calibration regions, when a
-   bundle is provided;
-2. removes variants matching the combined exclusion set.
-
-Exclusions may be intervals or exact alleles. For interval exclusions, the
-workflow considers the complete VCF span of a variant, including the `REF`
-length and any `INFO/END` value. A deletion is therefore removed if any part of
-its span overlaps an excluded region.
-
-### 3. VCF annotation with CADD and testing units
-
-The filtered VCF receives CADD-PHRED scores and every overlapping testing-unit
-ID. SNVs always use the configured SNV CADD table. Indels use the configured
-indel table only when `model.include_indels` is `true`. CADD scores and their
-splice-focused extension are described in [2,5].
-
-Annotation QC stops the run if an expected resource annotates no relevant
-records:
-
-- CADD annotates no SNVs;
-- enabled CADD indel annotation annotates no indels; or
-- the testing-unit BED annotates no cohort variants.
-
-The testing-unit table is normalized to one row for each `variant_key` and
-testing-unit pair. A variant that overlaps several units appears once per unit.
-
-### 4. Genotype extraction and classification
-
-For each processed sample, the workflow extracts `GT` calls, normalizes phased
-and unphased diploid notation to `a/b`, then assigns a genotype class:
-
-- `het` for heterozygous diploid calls;
-- `hom` for homozygous alternate diploid calls; and
-- `haploid` for haploid X/Y calls when the hemizygote model is enabled.
-
-Reference homozygous, missing, and duplicate calls are excluded or rejected. Haploid
-calls outside X/Y are rejected. The sex model uses PED-coded sex values (`1` for
-male, `2` for female):
-
-- male X/Y homozygous or haploid alternate calls become `hem` when
-  hemizygote scoring is enabled;
-- male X/Y heterozygous calls are removed when the hemizygote model is
-  enabled;
-- female X heterozygous and homozygous calls become `het_female` and
-  `hom_female`, respectively; and
-- haploid calls are not accepted for samples with unknown sex.
-
-### 5. Variant scoring with PSAP
-
-Each classified genotype is inner-joined with its CADD and testing-unit
-annotations. For every enabled disease model and testing unit, the workflow:
-
-1. retains variants in the model's compatible genotype class;
-2. keeps every variant tied for the highest CADD-PHRED value in that unit;
-3. clips CADD-PHRED values to the resolved lookup interval `[0, score_max]`;
-4. maps each value to an evenly spaced column in the corresponding PSAP lookup
-   grid; and
-5. records the lookup value as `PSAP`.
-
-Ties are retained and sorted by variant key. Every co-best variant proceeds to
-candidate generation and comparison with controls.
-
-### 6. Variant prioritization and aggregation
-
-For every affected sample, the workflow creates one candidate for each scored
-variant. Candidate IDs are deterministic and use the configured separator and
-ordinal width, for example `case_001:DOM:001`.
-
-For every unaffected sample, the workflow retains evidence for each carried
-variant under compatible disease models. It attaches the lowest available PSAP
-value for every exact `unit`/`model`/`variant_key` combination.
-
-The final cohort report compares each affected candidate with controls that
-carry the same exact variant key in the same testing unit. A
-dominant-heterozygous candidate may use evidence from any configured control
-model; all other models require a matching model.
-
-## Inputs
-
-Create a production apply manifest by copying
-[`runs/run.example.yaml`](runs/run.example.yaml):
-
-```bash
-cp runs/run.example.yaml runs/my_analysis.yaml
-```
-
-Paths in the run manifest are resolved relative to the directory from which
-you invoke Snakemake. Together, `outdir` and `run.apply_prefix` determine all
-output paths.
-
-### Cohort VCF
-
-`inputs.vcf.data` is a standard VCF or BGZF-compressed VCF containing the
-cohort samples. It needs a valid header and sample columns whose IDs match the
-selected metadata file. Variant records must be normalized and split against
-the reference FASTA. The workflow uses `CHROM`, `POS`, `REF`, `ALT`, and `GT`.
-
-`inputs.vcf.index` may point to a `.tbi` or `.csi` index, or be `null`. If the
-source index is missing, the workflow issues a warning and creates an indexed
-staged VCF internally.
-
-### Cohort metadata
-
-Set one of `inputs.ped` and `inputs.samples`.
-
-#### PED
-
-The PED file is tab-delimited and must provide at least the first six
-conventional columns. The workflow reads:
-
-| PED column | Required meaning |
-| --- | --- |
-| 1 | Family ID |
-| 2 | Sample ID (`pid`) matching a VCF sample |
-| 5 | Sex: `1` male, `2` female, another value unknown |
-| 6 | Phenotype: `1` unaffected, `2` affected, another value excluded |
-
-#### Sample sheet
-
-The sample sheet is a headered, tab-delimited TSV with these required columns:
-
-```tsv
-family_id	pid	sex	phenotype
-FAM001	case_001	1	2
-FAM001	control_001	2	1
-```
-
-`pid` cannot contain a slash or backslash. Each processed `pid` must appear
-exactly once in both the VCF and the metadata.
-
-### Reference FASTA
-
-`bindings.reference.fasta` requires:
-
-```yaml
-fasta:
-  data: resources/reference.fa.gz
-  fai: resources/reference.fa.gz.fai
-  gzi: resources/reference.fa.gz.gzi
-```
-
-An uncompressed FASTA still requires `fai`, but may set `gzi: null`. A
-compressed FASTA must be BGZF-compressed and has both `.fai` and `.gzi`.
-
-### Genomic interval and annotation resources
-
-The workflow can stage these resources without source indexes and create the
-needed `.tbi` indexes itself. Providing an existing `.tbi` or `.csi` index can
-avoid some staging work.
-
-| Binding | Required structure |
-| --- | --- |
-| `exclusion` (optional) | Genomic intervals to remove, independent of source. Generation uses zero-based, half-open BED intervals. Set `data: null` and `index: null` when absent. |
-| `testing_unit_bed` | BED with at least four columns: `CHROM`, a zero-based start, an end, and a non-empty testing-unit ID. |
-| `exclusions` | An ordered list of BED, TSV, or VCF resources. BED rows are zero-based, half-open intervals. TSV rows are either `CHROM, start, end` with 1-based inclusive coordinates or `CHROM, POS, REF, ALT` exact variants. VCF exclusions match exact alleles. |
-| `cadd.snv` | Tab-delimited CADD SNV table with `Chrom`, `Pos`, `Ref`, `Alt`, `RawScore`, and `PHRED` as the first six data columns. |
-| `cadd.indel` | Same required CADD layout for indels when `model.include_indels: true`; otherwise it may be `null`. |
-
-The exclusion identity is source-neutral; lookup identities name their
-resource releases. When substituting a resource, reflect assembly and release 
-changes in the run documentation; gnomAD constraint resources are described
-in [4,6].
-
-### PSAP lookup tables
-
-Each lookup table is a tab-delimited file. Its first column is a testing-unit
-ID; the remaining columns are numeric PSAP values across the CADD score grid.
-The usual format is headerless, although the scorer accepts one optional header
-row. Required tables are:
-
-| Binding | Used by |
-| --- | --- |
-| `lookup_tables.het` | `DOM-het` and `X-linked-het` |
-| `lookup_tables.hom` | `REC-hom` and `X-linked-hom` |
-| `lookup_tables.hem_chrX` | `X-linked-hem` when hemizygote scoring is enabled |
-
-## Outputs
-
-The main reports are gzip-compressed TSVs located in:
+Portable PSAP is a Snakemake workflow [1] for rare-variant prioritization with
+the PSAP (Population Sampling Probability) method [3] and its genomic-regions
+extension [7]. Given a joint-called cohort VCF and a pedigree, it scores each
+affected sample's most damaging variant per gene (or other testing unit) under
+dominant, recessive and X-linked models, and reports whether unaffected
+controls carry the same allele.
+
+A PSAP value answers: *under this inheritance model, how likely is an event at
+least this deleterious (by CADD-PHRED [2,5]) in this gene, given population
+allele frequencies?* Smaller is more surprising. It is a ranking statistic, not
+a pathogenicity call.
+
+The workflow can also build the null-distribution lookup tables that PSAP
+needs, from a population VCF (for example gnomAD [4,6]) and CADD scores, and
+package them as a checksummed, self-describing "bundle".
+
+- [What you need to know first](#what-you-need-to-know-first)
+- [Quick start with the bundled demo](#quick-start-with-the-bundled-demo)
+- [Scoring your own cohort (`apply`)](#scoring-your-own-cohort-apply)
+- [Building lookup tables (`generate` and `full`)](#building-lookup-tables-generate-and-full)
+- [Running on a Slurm cluster](#running-on-a-slurm-cluster)
+- [Outputs](#outputs)
+- [Troubleshooting](#troubleshooting)
+- [Further documentation](#further-documentation)
+
+## What you need to know first
+
+### Three modes
+
+Every run manifest sets `workflow.mode`. The target is always the default
+`all`; there are no other supported targets.
+
+| Mode | You supply | You get |
+| --- | --- | --- |
+| `apply` | Cohort VCF + sample metadata, reference resources, and lookup tables (third-party tables or a bundle from an earlier `generate`) | Cohort reports under `<outdir>/apply/<apply_prefix>/cohort/` |
+| `generate` | Population VCF, CADD tables, testing-unit BED, exclusion BEDs, FASTA | A certified bundle under `<outdir>/generate/<generation_prefix>/bundle/` |
+| `full` | Everything above in one manifest | The bundle, then the cohort scored against it, in one DAG |
+
+Most users start with `apply`. Use `generate` once per reference/model
+combination and reuse the bundle across cohorts.
+
+### Two configuration layers
+
+| File | Contains | Edit when |
+| --- | --- | --- |
+| `config/config.yaml` | The scientific model: assembly, testing-unit type, score grid, which models are on, resource *identities* (for example `CADD-v1.7-SNV`) | Rarely; only to change the science or record a new resource release |
+| `runs/<name>.yaml` (passed with `--configfile`) | Mode, output location, file *paths*, and run-specific overrides | Every run |
+
+Snakemake loads `config/config.yaml` first and merges the run manifest over
+it. The merged result is schema-validated before any job is scheduled, so most
+mistakes fail immediately with a message naming the offending key.
+
+All relative paths in a manifest are resolved against the directory where you
+run `snakemake`, not the location of the YAML file. Run from the repository
+root, and prefer absolute paths for production and cluster runs.
+
+### Key terms
+
+- **Testing unit**: the region a PSAP value is computed for. The default is a
+  gene, identified by column 4 of the testing-unit BED. The same IDs must
+  appear in the lookup tables.
+- **Lookup table**: one row per testing unit, one column per CADD-PHRED bin,
+  holding the null probability for that role (`het`, `hom`, or `hem_chrX`).
+- **Bundle**: the lookup tables plus the eligible units, calibration mask,
+  excluded alleles, metadata and checksums that were used to build them. A
+  bundle is usable only after its `validation.ok` marker exists. When applying
+  a bundle, the workflow restricts cohort variants to the bundle's calibrated
+  regions, so scores are never read outside the scope they were built for.
+- **Disease models**: `DOM-het`, `REC-hom`, `X-linked-het`, `X-linked-hom` and
+  `X-linked-hem`. Hemizygous scoring is controlled by `model.hemizygote`; indel
+  scoring by `model.include_indels`.
+
+### Repository layout
 
 ```text
-<outdir>/apply/<apply_prefix>/cohort/
+config/config.yaml      scientific defaults and resource identities
+runs/*.example.yaml     run manifests: small demos and production templates
+profiles/               Snakemake profiles: default (local), slurm, grex (site overlay)
+workflow/Snakefile      entry point; selects rules by workflow.mode
+workflow/rules/         apply/ and generate/ rule files
+workflow/scripts/       thin per-rule Python/R adapters
+workflow/lib/           Python and R implementation (internal, not an installable package)
+workflow/envs/          pinned Conda environments; envmodules.yaml and containers.yaml for other routes
+workflow/schemas/       JSON schemas for config, manifests and bundles
+scripts/                standalone post-analysis utilities
+tests/                  fixtures and the tiered test runner
+docs/                   pipeline guide, concepts, architecture notes
 ```
 
-### `cohort_candidates.tsv.gz`
+## Quick start with the bundled demo
 
-One row per affected candidate variant after control comparison.
+The demo manifests use tiny fixtures from `tests/` and finish in a minute or
+two on a laptop.
 
-| Column | Meaning |
-| --- | --- |
-| `candidate_id` | Deterministic sample/model/ordinal identifier. |
-| `pid`, `phenotype`, `sex` | Candidate sample metadata. `phenotype` is `affected`. |
-| `unit` | Configured testing-unit ID, such as a gene ID. |
-| `model` | `DOM-het`, `REC-hom`, `X-linked-hom`, `X-linked-het`, or `X-linked-hem`. |
-| `variant_key` | `CHROM:POS-POS_REF>ALT`. |
-| `PSAP` | Numeric value retrieved from the model-specific lookup table. |
-| `validation` | `ok`, `control_match`, or `no_controls`. |
-| `control_count` | Number of unaffected participants carrying the matching variant. |
-| `control_pids` | Comma-separated IDs of matching unaffected participants, or empty when none exist. |
+### 1. Install the controller environment
 
-### `cohort_summary.tsv.gz`
-
-One row per `unit`/`model`/candidate-variant signature observed across affected
-samples.
-
-| Column | Meaning |
-| --- | --- |
-| `unit`, `model` | Testing unit and disease model. |
-| `candidate_signature` | Pipe-separated variant key(s); currently each candidate contains one distinct variant. |
-| `affected_count`, `affected_pids` | Number and sorted IDs of affected samples supporting the signature. |
-| `minimum_PSAP` | Lowest non-missing PSAP value among the grouped affected candidates. |
-| `validation`, `control_count`, `control_pids` | Aggregated control-evidence fields. A `control_match` takes priority over `ok`, which takes priority over `no_controls`. |
-
-### Optional cohort-summary review annotations
-
-`scripts/annotate_cohort_summary.py` is a standalone post-analysis utility. It
-does not modify workflow outputs: it appends CADD PHRED, a selected population
-AF INFO field, and `gene_name` from a GTF to a copy of `cohort_summary.tsv.gz`.
-It treats `unit` as an Ensembl gene ID (and ignores an optional version suffix).
-All CADD tables and the population VCF must be BGZF-compressed and indexed.
+You need a Conda-compatible manager (`conda`, `mamba` or `micromamba`). The
+controller environment provides Snakemake 9.23.1 and the Slurm executor plugin:
 
 ```bash
-python scripts/annotate_cohort_summary.py \
-  results/apply/my-run/cohort/cohort_summary.tsv.gz \
-  results/apply/my-run/cohort/cohort_summary.review.tsv.gz \
-  --cadd-snv reference/cadd_snv.tsv.gz \
-  --cadd-indel reference/cadd_indel.tsv.gz \
-  --population-vcf reference/population.vcf.gz \
-  --af-field AF \
-  --gtf reference/gencode.gtf.gz
-```
-
-The output preserves every input row and adds `gene_name`, `cadd_phred`, and
-`population_af`. A pipe-separated multi-allele candidate signature receives
-comma-separated CADD and AF values in the same order.
-
-### `control_variants.tsv.gz`
-
-One row for each carried variant/model evidence record from an unaffected
-control.
-
-| Column | Meaning |
-| --- | --- |
-| `pid`, `phenotype`, `sex` | Control sample metadata. `phenotype` is `unaffected`. |
-| `unit`, `model`, `variant_key` | The testing unit, compatible disease model, and carried variant. |
-| `PSAP` | Lowest available PSAP value for the exact evidence record; may be missing when no score is available. |
-
-### Supporting outputs
-
-The same `<outdir>/apply/<apply_prefix>/` directory contains supporting files:
-
-- `validation.json` and `validation.ok`: input/resource/model validation;
-- `sample_manifest.tsv`: processed sample metadata;
-- `prepared/`: staged VCFs, tables, and indexes;
-- `variants/`: calibration-scope-filtered and exclusion-filtered variants;
-- `annotations/`: annotated VCF, flat annotation table, and annotation QC;
-- `raw/`, `standardized/`, `sex_classified/`, and `annotated/`: per-sample
-  genotype intermediates;
-- `scored/`: per-sample PSAP tables; and
-- `benchmarks/` and `<outdir>/logs/`: rule runtime/memory reports and logs.
-
-## Setup and run
-
-Run the commands below from the repository root. Paths in a run manifest are
-interpreted relative to the directory where Snakemake is started, so running
-from another directory changes the meaning of relative paths.
-
-### 1. Install the workflow runner
-
-Install a Conda-compatible package manager (`mamba`, `micromamba`, or Conda)
-and use the supplied environment to install Snakemake and its compatible 
-executor plugin. `mamba` is used below; substitute your preferred manager 
-if needed.
-
-```bash
+git clone https://github.com/iykisselev/portable-PSAP.git
+cd portable-PSAP
 mamba env create --file workflow/envs/snakemake.yaml
 conda activate portable-psap-snakemake
-snakemake --version
+snakemake --version   # 9.23.1
 ```
 
-The default profile creates the per-rule software environments automatically
-from `workflow/envs/` on the first run. It therefore needs internet or a local
-Conda channel mirror on that first run, as well as write access to
-`.snakemake/conda` in the repository. The supplied environments contain the
-required Python, R, bcftools, bgzip, and tabix tools. No manual installation
-of those individual programs is needed for the local Conda route.
+You do not need to install bcftools, htslib, R or the Python libraries
+yourself. On the first run Snakemake builds the per-rule environments from
+`workflow/envs/` into `.snakemake/conda/`. That needs internet access (or a
+channel mirror) and a few GB of disk space in the repository directory.
 
-### 2. Create and configure a run manifest
+### 2. Dry-run, then run
 
-Copy the template and give the invocation a unique output prefix:
+Snakemake picks up `workflow/Snakefile` and `profiles/default` automatically
+when invoked from the repository root.
 
 ```bash
-cp runs/run.example.yaml runs/my_analysis.yaml
+snakemake --configfile runs/apply.example.yaml -n                # show planned jobs
+snakemake --configfile runs/apply.example.yaml --cores 2 --use-conda
 ```
 
-Edit `runs/my_analysis.yaml` and replace every example path. At a minimum,
-configure the following:
-
-| Manifest setting | What to provide |
-| --- | --- |
-| `outdir` and `run.apply_prefix` | A writable results directory and a unique name for this cohort/run. The pipeline writes to `<outdir>/apply/<apply_prefix>/`. |
-| `inputs.vcf` | The cohort VCF and, when available, its `.tbi` or `.csi` index. |
-| `inputs.ped` or `inputs.samples` | Exactly one metadata source. The selected sample IDs must match the VCF header exactly. |
-| `bindings.reference.fasta` | The reference FASTA plus its required `.fai`; a BGZF-compressed FASTA also needs its `.gzi`. |
-| `exclusion`, testing-unit, CADD, and lookup bindings | Resources compatible with the same assembly and testing-unit identifiers as the scientific configuration. |
-
-Source indexes for the VCF and tabular genomic resources are optional: when an
-index is omitted, the workflow can and index a working copy below the run
-output directory. The source FASTA indexes are not optional. Keep input
-resources outside the output directory and treat them as read-only.
-
-The scientific settings are located in `config/config.yaml`, separately from the
-run manifest. Change them only when deliberately changing the PSAP model or the
-referenced resource release. In particular, if `model.include_indels` is enabled,
-provide the indel CADD table; if `model.hemizygote` is enabled, provide the chromosome-X
-hemizygous lookup table.
-
-### 3. Local run
-
-The default profile is intended for a workstation and enables Conda deployment,
-8 cores, 32 GB of total memory, and automatic reruns of incomplete jobs. Change
-`--cores` to the number of cores that may be used on the machine; command-line
-values override the profile default.
-
-```bash
-snakemake \
-  --profile profiles/default \
-  --configfile runs/my_analysis.yaml \
-  --cores 8
-```
-
-To execute a bundled demonstration, select its manifest directly. `generate`
-publishes `<outdir>/generate/<generation_prefix>/bundle/`; `full` additionally
-publishes `<outdir>/apply/<apply_prefix>/cohort/` after certifying and consuming
-that bundle.
+The other demos work the same way:
 
 ```bash
 snakemake --configfile runs/generate.example.yaml --cores 2 --use-conda
 snakemake --configfile runs/full.example.yaml --cores 2 --use-conda
 ```
 
-### 4. Run on Slurm with environment modules
+Results appear under `results/`, for example
+`results/apply/apply-demo/cohort/cohort_candidates.tsv.gz` and
+`results/generate/generate-demo/bundle/`.
 
-For the GREX Slurm configuration, edit
-`profiles/grex/config.yaml` to set your account, partition, and node-local
-temporary directory. Confirm that the module names in `workflow/envmodules.yaml`
-are available at the site; adjust that mapping when the site provides different
-module names. The Snakemake controller environment from step 1 is still needed
-on the submission host.
+`generate` and `full` start with a checkpoint, so a dry-run shows only the
+first few jobs. The rest of the DAG (one job per genomic partition and unit
+bucket) is added once scope discovery finishes.
 
-Dry-run the scheduler configuration first:
+## Scoring your own cohort (`apply`)
+
+### 1. Make a manifest
+
+```bash
+cp runs/run.example.yaml runs/my_cohort.yaml           # third-party lookup tables
+# or
+cp runs/apply.bundle.example.yaml runs/my_cohort.yaml  # a bundle you generated
+```
+
+Edit every path, and give the run a unique `run.apply_prefix`. Outputs go to
+`<outdir>/apply/<apply_prefix>/`, so reusing a prefix reuses (and may
+overwrite) earlier results.
+
+### 2. Prepare the inputs
+
+Every resource must use the assembly in `config/config.yaml` (GRCh38 by
+default). `chr`-prefixed and bare contig names are reconciled where possible,
+but mixed builds are never valid.
+
+| Manifest key | Requirement |
+| --- | --- |
+| `inputs.vcf` | VCF or bgzipped VCF with `GT`. It **must already be normalized and multiallelic-split** against the same FASTA (for example `bcftools norm -m -any -f ref.fa`). The index may be `null`; the workflow will sort and index a staged copy. |
+| `inputs.samples` *or* `inputs.ped` | Exactly one; set the other to `null`. Sample sheet: headered TSV with `family_id pid sex phenotype`. PED: standard first six columns. Sex `1`=male, `2`=female; phenotype `1`=unaffected, `2`=affected. Each sample ID must appear exactly once in both the VCF and metadata, and IDs may not contain `/` or `\`. Samples with other phenotype codes are skipped. |
+| `bindings.reference.fasta` | `data` plus `fai`. A bgzipped FASTA also needs `gzi`; for plain FASTA set `gzi: null`. These indexes are not created for you. |
+| `bindings.reference.cadd.snv` | CADD SNV table. The first six columns must be `Chrom Pos Ref Alt RawScore PHRED`, as in the official CADD downloads. |
+| `bindings.reference.cadd.indel` | Same layout for indels. Required when `model.include_indels: true` (the default); otherwise `null`. |
+| `bindings.reference.lookup_source` | Either third-party tables (`type: external`, see `runs/run.example.yaml`) or a bundle: `{type: bundle, directory: <outdir>/generate/<prefix>/bundle}`. |
+| `bindings.reference.testing_unit_bed` | BED with a unit ID in column 4. Needed for external tables; not needed for a bundle, which carries its own. |
+| `bindings.reference.exclusion`, `bindings.reference.exclusions` | Regions or alleles to drop (blacklists, PAR, low-mappability regions). BED, coordinate or allele TSV, or VCF. A variant is dropped if any part of its REF span overlaps an excluded interval. Needed for external tables; a bundle carries its own. |
+
+External lookup tables are tab-delimited: a unit ID followed by one numeric
+column per CADD bin, with an optional header row. You need `het` and `hom`, and
+`hem_chrX` when `model.hemizygote: true`.
+
+When you apply a bundle, its model settings (`include_indels`, `hemizygote`,
+unit type) and assembly must match the run. The bundle's own score grid is used
+instead of the one in `config/config.yaml`. The certificate and component
+checksums are verified before any annotation work starts.
+
+### 3. Run
+
+```bash
+snakemake --profile profiles/default --configfile runs/my_cohort.yaml -n
+snakemake --profile profiles/default --configfile runs/my_cohort.yaml --cores 16
+```
+
+`profiles/default` runs locally with Conda, a 32 GB total memory budget,
+`--rerun-incomplete` and failed-log printing. `--cores` on the command line
+overrides the profile's 8.
+
+### What happens
+
+1. **Validate.** The workflow checks the cohort, resources and model
+   (sample IDs, normalization, FASTA agreement, CADD columns, unit IDs
+   matching lookup rows). Errors stop the run here and are written to
+   `validation.json`; warnings are recorded and the run continues.
+2. **Stage.** Inputs are sorted, bgzipped and indexed into `prepared/` where
+   needed. Source files are never modified.
+3. **Filter.** Variants are restricted to bundle calibration regions (bundle
+   mode only), then excluded records are removed.
+4. **Annotate** with CADD-PHRED and every overlapping testing unit. The run
+   stops if CADD or the BED annotates nothing, since that almost always means a
+   build or contig-name mismatch.
+5. **Classify genotypes per sample.** Calls are classified as `het`, `hom`,
+   `hem` (male non-PAR X/Y, when hemizygote scoring is on), or female X
+   `het`/`hom`. Hom-ref and missing calls are dropped.
+6. **Score.** For each sample, unit and model, the workflow keeps the
+   highest-CADD variant (all of them if tied), clips the score to the grid, and
+   looks up its PSAP value.
+7. **Report.** Affected samples produce candidates and unaffected samples
+   produce control evidence. Each candidate is compared with controls that
+   carry the identical allele in the same unit.
+
+## Building lookup tables (`generate` and `full`)
+
+Start from `runs/generate.example.yaml` (or `runs/full.example.yaml`) and the
+production-shaped example in [docs/pipeline.md](docs/pipeline.md#generate-mode).
+The main inputs are:
+
+| Key (`generate` mode) | Content |
+| --- | --- |
+| `generation.population_vcf` | Sites VCF with AF INFO fields, for example gnomAD genomes. Name the fields in `generation.af_source` (`overall`, plus `female`/`male` for X). |
+| `generation.score_snv` | CADD SNV table covering the calibration space. |
+| `generation.score_indel` | CADD indel table; defines the indel candidate set when `generation_settings.variant_classes: [snv, indel]`. |
+| `generation.testing_unit_bed` | Unit intervals (BED, ID in column 4). |
+| `generation.exclusion`, `generation.par_regions`, `generation.exclusions` | Intervals to remove: low coverage or mappability, blacklists, PAR. Units keeping less than `minimum_retained_fraction` (default 0.5) of their bases are dropped. |
+| `generation.fasta` | Reference FASTA and indexes. |
+| `generation.unobserved_policy` | `zero` (alleles missing from the population VCF get AF 0) or `mutation_rate` (substitute a per-allele μ from `generation.mutation_rate`, and optionally `generation.mutation_rate_indel`). |
+
+In `full` mode, the FASTA, CADD, BED and exclusion resources are given once
+under `bindings.reference` and shared by both halves of the DAG. The generated
+bundle is bound to the apply step automatically.
+
+Practical notes for real-scale generation:
+
+- **Indexes are mandatory.** The population VCF, CADD tables and mutation-rate
+  tables must be bgzipped and have explicit `.tbi`/`.csi` `index:` bindings.
+  An index sitting next to the file is not picked up automatically. The demos
+  get around this with `allow_unindexed_fixture_inputs: true`; never set it
+  for real data.
+- **Generation covers autosomes 1–22 and chrX.** PAR is removed, and chrY is
+  not calibrated.
+- **Work is split into genomic partitions × unit buckets.** Tune
+  `generation.execution.partition_size_bp` (default 5 Mb) and
+  `unit_bucket_size` (default 250) to trade memory per job against job count.
+  Neither changes the result.
+- SNV-only runs write a `generated_bundle_v2` bundle; combined SNV+indel runs
+  write `generated_bundle_v3`. Readers accept v1–v3, but bundles are never
+  upgraded in place. Regenerate under a new prefix if you change the model or
+  resources.
+- Intermediate Parquet shards under `<outdir>/generate/<prefix>/scalable/` are
+  kept on purpose as restart points. Delete them only after the bundle is
+  certified and archived.
+
+The scientific assumptions (`unobserved_policy`, X-chromosome AF and
+mutation-rate policies, `score_bin_width`) live in `generation_settings` and
+`generation` and are recorded in the bundle's `metadata.json`.
+
+## Running on a Slurm cluster
+
+Three profiles are provided and are meant to be layered:
+
+| Profile | Purpose |
+| --- | --- |
+| `profiles/default` | Local executor, Conda environments. Snakemake loads it automatically as the workflow profile. |
+| `profiles/slurm` | Slurm executor, up to 50 concurrent jobs, Conda environments, 2 GB / 60 min default resources. |
+| `profiles/grex` | Example site overlay (University of Manitoba GREX): account, partition, node-local `tmpdir`, and environment modules instead of Conda. Copy and adapt it for your site. |
+
+Pass `--workflow-profile none` with the Slurm profiles so that
+`profiles/default` is not merged in as well.
+
+### Option A: Slurm with Conda environments
+
+This works wherever compute nodes can see the repository's `.snakemake/conda`
+directory. Create a small site overlay with your scheduler identity, for
+example `profiles/mysite/config.yaml`:
+
+```yaml
+default-resources:
+  slurm_account: <account>
+  slurm_partition: <partition>
+  mem_mb: 2048
+  runtime: 60
+```
+
+Activate the controller environment on the login node and run:
 
 ```bash
 snakemake \
   --profile profiles/slurm \
-  --profile profiles/grex \
+  --profile profiles/mysite \
   --workflow-profile none \
-  --configfile runs/my_analysis.yaml \
-  -n
+  --configfile runs/my_cohort.yaml \
+  -n                        # remove -n to submit
 ```
 
-Submit the workflow by removing `-n`:
+Build the Conda environments once on a node with internet access, for example
+with `--conda-create-envs-only`, before submitting.
+
+### Option B: Slurm with environment modules and a virtualenv (GREX-style)
+
+Use this when your site provides modules and discourages Conda. External tools
+come from `module load` (mapped in `workflow/envmodules.yaml`). Python
+dependencies come from a shared virtualenv:
 
 ```bash
-snakemake \
-  --profile profiles/slurm \
-  --profile profiles/grex \
-  --workflow-profile none \
-  --configfile runs/my_analysis.yaml
+module purge
+module load python/3.11.8 samtools/1.20
+
+python -m venv .venv-grex
+. .venv-grex/bin/activate
+python -m pip install --upgrade pip wheel
+python -m pip install "snakemake==9.23.1" snakemake-executor-plugin-slurm \
+  "pandas>=2.0" "polars==1.44.1" pyarrow pysam "jsonschema==4.22.0" "PyYAML==6.0.1"
 ```
 
-Tune `jobs`, `default-resources.mem_mb`, and `default-resources.runtime` in
-the profile if they do not match the site or project allocation.
+Then, in your copy of `profiles/grex/config.yaml`:
 
-## Generated bundles and supporting outputs
+```yaml
+software-deployment-method:
+  - env-modules
+precommand: ". /absolute/path/to/portable-PSAP/.venv-grex/bin/activate"
+default-resources:
+  slurm_account: <account>
+  slurm_partition: <partition>
+  tmpdir: /scratch            # node-local scratch
+```
 
-`generate` and `full` publish a versioned bundle under
-`<outdir>/generate/<generation_prefix>/bundle/`. The bundle contains HET/HOM
-lookups, an HEM lookup when enabled, eligible testing units, calibration and
-exclusion artifacts, `metadata.json`, `validation.json`, and `validation.ok`.
-The marker is written only after component size/checksum and semantic
-validation succeeds. `full` is the only mode that automatically binds this
-bundle to application; an `apply` manifest may also name a previously certified
-bundle explicitly.
+Check `module spider` for each name in `workflow/envmodules.yaml` and edit the
+mapping to match your site. Then run:
 
-For a combined v3 bundle, retain `candidate_audit.tsv.gz` with the certificate
-when copying or archiving the bundle. It records structural indel rejections
-(for example, a candidate whose REF span crosses a calibration-mask boundary)
-that are intentionally distinct from population FILTER exclusions.
+```bash
+snakemake --profile profiles/slurm --profile profiles/grex --workflow-profile none \
+  --configfile runs/my_cohort.yaml -n          # remove -n to submit
+```
 
-See the [pipeline guide](docs/pipeline.md#generated-bundle) for the generated
-bundle interface, the [generate architecture](docs/generate_workflow_architecture.md)
-for generation ownership, and the [apply architecture](docs/apply_workflow_architecture.md)
-for application ownership.
+Module and virtualenv setups often fail because a different `python` is
+picked up on the compute node. Export `PYTHONNOUSERSITE=1`, clear stray
+`PYTHONPATH` entries, and in a short interactive allocation confirm that
+`python -c 'import snakemake, polars, pysam'` works after the modules load.
 
-## Testing and contributing
+### Containers
 
-Run a documented test tier from the repository root with, for example,
-`python tests/run_tier.py workflow`. The null-distribution fixtures are
-described in [tests/null_distribution/README.md](tests/null_distribution/README.md).
-Module boundaries and contract ownership are documented in the
-[generate architecture](docs/generate_workflow_architecture.md) and
-[apply architecture](docs/apply_workflow_architecture.md).
+`workflow/containers.yaml` maps each tool family to an Apptainer image path,
+but no images are shipped and this route is not tested in CI. Conda is the
+tested route.
+
+### Operating notes
+
+- Run the controller in `tmux` or `screen`, or as a small long-running batch
+  job; it must stay alive for the whole run.
+- Small validation and QC rules run on the controller host as `localrules`.
+  Everything else goes to Slurm.
+- Per-rule memory and runtime come from the rules and the profile's
+  `default-resources`. Raise `mem_mb`/`runtime` in your overlay if your site
+  needs it. Measured usage is written under `benchmarks/`.
+- **Recovery:** fix the cause and rerun the same command. `rerun-incomplete` is
+  on, and finished shards are reused. Never create `validation.ok` by hand or
+  edit generated manifests to get past a failed check.
+
+## Outputs
+
+### Cohort reports: `<outdir>/apply/<apply_prefix>/cohort/`
+
+All three files are gzip-compressed TSVs. `variant_key` is
+`CHROM:POS-POS_REF>ALT`.
+
+**`cohort_candidates.tsv.gz`**: one row per affected sample × unit × model ×
+top-scoring variant. This is the main result.
+
+| Column | Meaning |
+| --- | --- |
+| `candidate_id` | Stable ID such as `case_001:DOM:001` |
+| `pid`, `phenotype`, `sex` | Sample metadata |
+| `unit`, `model`, `variant_key` | Testing unit, disease model, variant |
+| `PSAP` | Lookup value; lower is more surprising |
+| `validation` | `control_match`: at least one unaffected sample carries the allele. `ok`: controls exist and none carry it. `no_controls`: the cohort has no control evidence. |
+| `control_count`, `control_pids` | Matching unaffected carriers |
+
+A `DOM-het` candidate matches control carriers under any model. Other models
+match only controls carrying the allele under the same model.
+
+**`cohort_summary.tsv.gz`**: candidates grouped by unit × model × variant
+across affected samples (`affected_count`, `affected_pids`, `minimum_PSAP`, and
+aggregated control fields). Use it for spotting recurrent hits.
+
+**`control_variants.tsv.gz`**: the control evidence used above, one row per
+unaffected sample × unit × model × variant, with the lowest available `PSAP`.
+
+### Supporting files: `<outdir>/apply/<apply_prefix>/`
+
+| Path | Content |
+| --- | --- |
+| `validation.json` | All validation errors and warnings; check this first |
+| `sample_manifest.tsv` | Samples actually processed, with sex and phenotype |
+| `prepared/`, `variants/`, `annotations/` | Staged inputs, filtered variants, annotated VCF and annotation QC |
+| `raw/`, `standardized/`, `sex_classified/`, `annotated/`, `scored/` | Per-sample intermediates |
+| `benchmarks/` | Per-rule runtime and memory |
+
+Rule logs are in `<outdir>/logs/apply/<apply_prefix>/` and
+`<outdir>/logs/generate/<generation_prefix>/`.
+
+### Bundle: `<outdir>/generate/<generation_prefix>/bundle/`
+
+```text
+lookup_het.tsv.gz, lookup_hom.tsv.gz, lookup_hem_chrX.tsv.gz   lookup tables
+eligible_testing_units.bed.gz, calibration_regions.bed.gz      calibrated scope
+excluded_alleles.tsv.gz, excluded_units.tsv.gz                 what was removed, and why
+candidate_audit.tsv.gz                                         v3 only: rejected indel candidates
+metadata.json                                                  contract, policies, inputs, checksums
+validation.json, validation.ok                                 certificate; ok is written last
+```
+
+Copy or archive the whole directory, since the checksums in `metadata.json`
+cover every component.
+
+### Optional review annotation
+
+`scripts/annotate_cohort_summary.py` writes a copy of `cohort_summary.tsv.gz`
+with added `gene_name` (from a GTF, treating `unit` as an Ensembl gene ID),
+`cadd_phred` and `population_af` columns. It runs outside Snakemake and does
+not touch workflow outputs. Its inputs must be bgzipped and indexed.
+
+```bash
+python scripts/annotate_cohort_summary.py \
+  results/apply/my_cohort/cohort/cohort_summary.tsv.gz \
+  results/apply/my_cohort/cohort/cohort_summary.review.tsv.gz \
+  --cadd-snv cadd_snv.tsv.gz --cadd-indel cadd_indel.tsv.gz \
+  --population-vcf gnomad.sites.vcf.gz --af-field AF \
+  --gtf gencode.gtf.gz
+```
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+| --- | --- |
+| Error before any job runs | Schema or plan check failed. Typical causes: both or neither of `ped`/`samples` set, missing run prefix, or a generation resource without an `index:`. |
+| Stops at `require_valid_inputs` | Read `validation.json`. Typical causes: sample IDs differing between VCF and metadata, an unnormalized VCF, or a FASTA/VCF contig mismatch. |
+| Stops at `require_valid_annotations` | CADD or the testing-unit BED annotated nothing. Check the build, contig naming, and CADD column order. |
+| `No executor named slurm` | `snakemake-executor-plugin-slurm` is not installed in the active controller environment. |
+| Import or module errors on compute nodes | Wrong interpreter after `module load`; see the Option B notes above. |
+| A gene is missing from the lookup | Look it up in the bundle's `excluded_units.tsv.gz`. It had low retained fraction or zero event mass. |
+| Mutation-rate fallback fails on chrX | `x_chromosome.mutation_rate_policy` defaults to `reject`. Set `sex_averaged_proxy` if that assumption is acceptable. |
+
+More cases are covered in
+[docs/pipeline.md](docs/pipeline.md#validation-and-troubleshooting).
+
+## Further documentation
+
+- [docs/project_concepts.md](docs/project_concepts.md): the statistics and
+  their interpretation limits, in plain language.
+- [docs/pipeline.md](docs/pipeline.md): full operational reference, covering
+  every input contract, configuration key, stage and output.
+- [docs/apply_workflow_architecture.md](docs/apply_workflow_architecture.md),
+  [docs/generate_workflow_architecture.md](docs/generate_workflow_architecture.md):
+  code layout and rules for changing each half of the workflow.
+- [tests/null_distribution/README.md](tests/null_distribution/README.md):
+  generation test fixtures.
+
+### Tests and contributing
+
+```bash
+python tests/run_tier.py unit        # fast library tests
+python tests/run_tier.py workflow    # DAG construction and example manifests
+python tests/run_tier.py all         # unit, schema, workflow, e2e, resilience
+```
+
+CI runs these tiers in the environment from `workflow/envs/ci.yaml`, and also
+runs `ruff`, `snakefmt` and the R linter. `workflow/lib/python` is an internal
+flat-module library that rule scripts import through
+`workflow/shared/_library.py`; it is not a public package.
 
 ## References
 
@@ -528,3 +490,7 @@ Module boundaries and contract ownership are documented in the
    leveraging population data to prioritize coding and non-coding variants in
    whole-genome sequencing for rare disease diagnosis. *Genetic Epidemiology*
    **49**, e22593 (2025).
+
+## License
+
+MIT; see [LICENSE](LICENSE).
