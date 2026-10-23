@@ -507,6 +507,14 @@ component size/checksum and semantic validation succeeds. `full` automatically
 binds this bundle to application; an `apply` manifest may name another
 previously certified partitioned bundle explicitly.
 
+<<<<<<< HEAD
+=======
+For a combined v3 bundle, retain `candidate_audit.tsv.gz` with the certificate
+when copying or archiving the bundle. It records structural indel rejections
+(for example, a candidate whose REF span crosses a calibration-mask boundary)
+that are intentionally distinct from population FILTER exclusions.
+
+>>>>>>> main
 See the [pipeline guide](docs/pipeline.md#generated-bundle) for the generated
 bundle interface, the [generate architecture](docs/generate_workflow_architecture.md)
 for generation ownership, and the [apply architecture](docs/apply_workflow_architecture.md)
